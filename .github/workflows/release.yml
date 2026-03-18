@@ -13,12 +13,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: ubuntu-latest
             target: linux-x64
             artifact_name: gc-linux-x64
             asset_name: gc-linux-x64.tar.gz
+          - os: ubuntu-latest
+            target: linux-arm64
+            artifact_name: gc-linux-arm64
+            asset_name: gc-linux-arm64.tar.gz
           - os: windows-latest
             target: win-x64
             artifact_name: gc-windows-x64
@@ -40,6 +43,12 @@ jobs:
       with:
         dotnet-version: '10.0.x'
 
+    - name: Install ARM64 cross-compilation toolchain
+      if: matrix.target == 'linux-arm64'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y g++-aarch64-linux-gnu gcc-aarch64-linux-gnu
+
     - name: Restore dependencies
       run: dotnet restore GC/GC.csproj
 
@@ -51,6 +60,10 @@ jobs:
 
     - name: Publish ${{ matrix.target }}
       run: dotnet publish GC/GC.csproj -c Release -r ${{ matrix.target }} --self-contained -p:PublishAot=true -o ./publish/${{ matrix.target }}
+      env:
+        # Use ARM64 GCC for cross-compilation
+        CC: ${{ matrix.target == 'linux-arm64' && 'aarch64-linux-gnu-gcc' || '' }}
+        CXX: ${{ matrix.target == 'linux-arm64' && 'aarch64-linux-gnu-g++' || '' }}
 
     - name: Create Archive (Unix)
       if: runner.os != 'Windows'

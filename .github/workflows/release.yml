@@ -61,14 +61,14 @@ jobs:
     - name: Publish linux-arm64 using Docker
       if: matrix.target == 'linux-arm64'
       run: |
-        docker run --rm -v $PWD:/work -w /work ${{ matrix.docker_image }} bash -c "
+        docker run --rm -v $PWD:/work -w /work ${{ matrix.docker_image }} bash -c '
           apt-get update &&
-          apt-get install -y curl zip &&
+          apt-get install -y curl zip libicu-dev libssl-dev libcurl4-openssl-dev &&
           curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0 --install-dir /usr/share/dotnet &&
           export DOTNET_ROOT=/usr/share/dotnet &&
-          export PATH=\$DOTNET_ROOT:\$PATH &&
+          export PATH=$DOTNET_ROOT:$PATH &&
           dotnet publish GC/GC.csproj -c Release -r linux-arm64 --self-contained -p:PublishAot=true -o ./publish/linux-arm64
-        "
+        '
 
     - name: Create Archive (Unix)
       if: runner.os != 'Windows'

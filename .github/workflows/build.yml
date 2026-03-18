@@ -23,25 +23,25 @@ jobs:
         dotnet-version: ${{ matrix.dotnet }}
 
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore GC/GC.csproj
 
     - name: Build
-      run: dotnet build --configuration Release --no-restore
+      run: dotnet build GC/GC.csproj --configuration Release --no-restore
 
     - name: Test
       run: dotnet test --no-restore --verbosity normal
 
     - name: Publish Win-x64
       if: matrix.os == 'windows-latest'
-      run: dotnet publish -c Release -r win-x64 --self-contained -p:PublishAot=true -o ./artifacts/win-x64
+      run: dotnet publish GC/GC.csproj -c Release -r win-x64 --self-contained -p:PublishAot=true -o ./artifacts/win-x64
 
     - name: Publish Linux-x64
       if: matrix.os == 'ubuntu-latest'
-      run: dotnet publish -c Release -r linux-x64 --self-contained -p:PublishAot=true -o ./artifacts/linux-x64
+      run: dotnet publish GC/GC.csproj -c Release -r linux-x64 --self-contained -p:PublishAot=true -o ./artifacts/linux-x64
 
     - name: Publish Osx-x64
       if: matrix.os == 'macos-latest'
-      run: dotnet publish -c Release -r osx-x64 --self-contained -p:PublishAot=true -o ./artifacts/osx-x64
+      run: dotnet publish GC/GC.csproj -c Release -r osx-x64 --self-contained -p:PublishAot=true -o ./artifacts/osx-x64
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4

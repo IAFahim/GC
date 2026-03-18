@@ -45,16 +45,16 @@ jobs:
         dotnet-version: '10.0.x'
 
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore GC/GC.csproj
 
     - name: Build
-      run: dotnet build --configuration Release --no-restore
+      run: dotnet build GC/GC.csproj --configuration Release --no-restore
 
     - name: Test
       run: dotnet test --no-restore --verbosity normal
 
     - name: Publish ${{ matrix.target }}
-      run: dotnet publish -c Release -r ${{ matrix.target }} --self-contained -p:PublishAot=true -o ./publish/${{ matrix.target }}
+      run: dotnet publish GC/GC.csproj -c Release -r ${{ matrix.target }} --self-contained -p:PublishAot=true -o ./publish/${{ matrix.target }}
 
     - name: Create Archive (Unix)
       if: runner.os != 'Windows'

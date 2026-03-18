@@ -40,6 +40,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Set up QEMU for multi-architecture Docker builds
+      if: matrix.target == 'linux-arm64'
+      uses: docker/setup-qemu-action@v3
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
@@ -61,7 +65,7 @@ jobs:
     - name: Publish linux-arm64 using Docker
       if: matrix.target == 'linux-arm64'
       run: |
-        docker run --rm -v $PWD:/work -w /work ${{ matrix.docker_image }} bash -c '
+        docker run --rm --platform linux/arm64 -v $PWD:/work -w /work ${{ matrix.docker_image }} bash -c '
           apt-get update &&
           apt-get install -y curl zip build-essential clang libicu-dev libssl-dev libcurl4-openssl-dev &&
           curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0 --install-dir /usr/share/dotnet &&

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using GC.Data;
 using GC.Utilities;
 
@@ -47,19 +48,14 @@ public static class Program
             return;
         }
 
-        var fileContents = filteredFiles.ReadContents(cliArgs);
-
         // Use streaming for file output to reduce memory usage
         if (!string.IsNullOrEmpty(cliArgs.OutputFile))
         {
             // Stream directly to file without holding everything in memory
-            fileContents.GenerateMarkdownToFile(cliArgs.OutputFile);
-            // Print stats directly
-            long totalBytes = 0;
-            for (var i = 0; i < fileContents.Length; i++)
-            {
-                totalBytes += fileContents[i].Size;
-            }
+            using var outputStream = File.Create(cliArgs.OutputFile);
+            var (fileCount, totalBytes) = filteredFiles.ReadContentsLazy(cliArgs).GenerateMarkdownStreaming(outputStream);
+
+            // Print stats
             var tokens = totalBytes / 4;
             var sizeStr = totalBytes < 1024 ? $"{totalBytes} B" :
                 totalBytes < 1048576 ? $"{totalBytes / 1024.0:F2} KB" :
@@ -67,11 +63,12 @@ public static class Program
             Console.ForegroundColor = ConsoleColor.Green;
             Console.Write("[OK] ");
             Console.ResetColor();
-            Console.WriteLine($"Exported to {cliArgs.OutputFile}: {fileContents.Length} files | Size: {sizeStr} | Tokens: ~{tokens}");
+            Console.WriteLine($"Exported to {cliArgs.OutputFile}: {fileCount} files | Size: {sizeStr} | Tokens: ~{tokens}");
         }
         else
         {
-            // For clipboard, we still need the string, but can optimize
+            // For clipboard, we still need the string
+            var fileContents = filteredFiles.ReadContents(cliArgs);
             var markdown = fileContents.GenerateMarkdown();
             markdown.HandleOutput(cliArgs, fileContents);
         }

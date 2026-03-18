@@ -100,23 +100,51 @@ public static class GitDiscoveryExtensions
 
         var files = new List<string>(1024);
         var buffer = new byte[4096];
-        var currentFile = new List<byte>(256);
 
         using var stream = process.StandardOutput.BaseStream;
         int bytesRead;
+        int start = 0;
+        int position = 0;
+
         while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
         {
             for (var i = 0; i < bytesRead; i++)
             {
-                if (buffer[i] == 0)
+                if (buffer[i] == 0)  // Null terminator found
                 {
-                    files.Add(Encoding.UTF8.GetString(currentFile.ToArray()));
-                    currentFile.Clear();
+                    // Calculate the length of the filename
+                    var fileNameLength = position - start;
+
+                    // Create a span from the buffer for this filename
+                    var fileNameSpan = buffer.AsSpan(start, fileNameLength);
+
+                    // Convert directly from span - no intermediate allocation
+                    var fileName = Encoding.UTF8.GetString(fileNameSpan);
+                    files.Add(fileName);
+
+                    // Move to next filename
+                    start = i + 1;
+                    position = start;
                 }
                 else
                 {
-                    currentFile.Add(buffer[i]);
+                    position++;
                 }
+            }
+
+            // Reset position for next buffer read, keep overflow data
+            if (start < bytesRead)
+            {
+                // Copy remaining data to start of buffer
+                var remaining = bytesRead - start;
+                Array.Copy(buffer, start, buffer, 0, remaining);
+                start = 0;
+                position = remaining;
+            }
+            else
+            {
+                start = 0;
+                position = 0;
             }
         }
 

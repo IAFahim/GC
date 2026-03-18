@@ -61,11 +61,26 @@ public static class CliParserExtensions
 
             if (arg.TryGetNewState(out var newState))
             {
+                // Check if we have a dangling argument from previous state
+                if (state != ParseState.None && i + 1 >= args.Length)
+                {
+                    Console.Error.WriteLine($"Error: Missing value for argument: {args[args.Length - 1]}");
+                    Environment.Exit(1);
+                }
+
                 state = newState;
                 continue;
             }
 
             arg.ProcessArg(state, paths, extensions, excludes, presets, ref output, ref maxMemoryBytes);
+            state = ParseState.None; // Reset state after processing
+        }
+
+        // Check for dangling state at the end
+        if (state != ParseState.None)
+        {
+            Console.Error.WriteLine($"Error: Missing value for last argument");
+            Environment.Exit(1);
         }
 
         return new CliArguments(

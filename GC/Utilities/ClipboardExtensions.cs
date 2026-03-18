@@ -102,7 +102,8 @@ public static class ClipboardExtensions
                 psi.ArgumentList.Add("-ExecutionPolicy");
                 psi.ArgumentList.Add("Bypass");
                 psi.ArgumentList.Add("-Command");
-                psi.ArgumentList.Add($"Set-Clipboard -Value (Get-Content '{tempFile}' -Raw)");
+                var escapedPath = tempFile.Replace("'", "''");
+                psi.ArgumentList.Add($"Set-Clipboard -Value (Get-Content '{escapedPath}' -Raw)");
 
                 using var process = Process.Start(psi);
                 if (process == null)

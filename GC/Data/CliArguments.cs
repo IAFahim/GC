@@ -1,3 +1,5 @@
+using GC.Utilities;
+
 namespace GC.Data;
 
 public readonly struct CliArguments
@@ -9,15 +11,21 @@ public readonly struct CliArguments
     public readonly string OutputFile;
     public readonly bool ShowHelp;
     public readonly bool RunTests;
+    public readonly long MaxMemoryBytes;
+    public readonly bool Verbose;
+    public readonly bool Debug;
 
     public CliArguments(
-        string[] paths, 
-        string[] extensions, 
-        string[] excludes, 
-        string[] presets, 
-        string outputFile, 
+        string[] paths,
+        string[] extensions,
+        string[] excludes,
+        string[] presets,
+        string outputFile,
         bool showHelp,
-        bool runTests)
+        bool runTests,
+        long maxMemoryBytes,
+        bool verbose,
+        bool debug)
     {
         Paths = paths;
         Extensions = extensions;
@@ -26,5 +34,22 @@ public readonly struct CliArguments
         OutputFile = outputFile;
         ShowHelp = showHelp;
         RunTests = runTests;
+        MaxMemoryBytes = maxMemoryBytes;
+        Verbose = verbose;
+        Debug = debug;
+
+        // Set log level based on flags
+        if (debug)
+        {
+            Logger.SetLevel(LogLevel.Debug);
+        }
+        else if (verbose)
+        {
+            Logger.SetLevel(LogLevel.Verbose);
+        }
+        else
+        {
+            Logger.SetLevel(LogLevel.Normal);
+        }
     }
 }

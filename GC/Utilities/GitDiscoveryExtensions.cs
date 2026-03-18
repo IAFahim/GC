@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
@@ -9,11 +10,17 @@ public static class GitDiscoveryExtensions
 {
     public static string[] DiscoverFiles(this CliArguments args)
     {
+        using var _ = Logger.TimeOperation("Git file discovery");
+
+        var gitArgs = "ls-files -z --cached --others --exclude-standard";
+        Logger.LogDebug($"Executing: git {gitArgs}");
+
         var psi = new ProcessStartInfo
         {
             FileName = "git",
-            Arguments = "ls-files -z --cached --others --exclude-standard",
+            Arguments = gitArgs,
             RedirectStandardOutput = true,
+            RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -21,6 +28,7 @@ public static class GitDiscoveryExtensions
         using var process = Process.Start(psi);
         if (process == null)
         {
+            Logger.LogError("Failed to start git process");
             return[];
         }
 
@@ -47,6 +55,17 @@ public static class GitDiscoveryExtensions
         }
 
         process.WaitForExit();
+
+        if (process.ExitCode != 0)
+        {
+            var error = process.StandardError.ReadToEnd();
+            Logger.LogError($"Git command failed with exit code {process.ExitCode}", new Exception(error));
+            return[];
+        }
+
+        Logger.LogVerbose($"Discovered {files.Count} files from git");
+        Logger.LogDebug($"Git discovery completed. Exit code: {process.ExitCode}");
+
         return files.ToArray();
     }
 }

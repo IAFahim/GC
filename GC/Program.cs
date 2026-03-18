@@ -8,6 +8,8 @@ public static class Program
 {
     public static void Main(string[] args)
     {
+        if (args == null) throw new ArgumentNullException(nameof(args));
+
         var cliArgs = args.ParseCli();
 
         if (cliArgs.ShowHelp)
@@ -22,6 +24,8 @@ public static class Program
             return;
         }
 
+        Logger.LogDebug($"GC started with verbose logging. Arguments: {string.Join(" ", args)}");
+
         var rawFiles = cliArgs.DiscoverFiles();
         if (rawFiles.Length == 0)
         {
@@ -32,9 +36,9 @@ public static class Program
         }
 
         var filteredFiles = rawFiles.FilterFiles(cliArgs);
-        var fileContents = filteredFiles.ReadContents();
+        var fileContents = filteredFiles.ReadContents(cliArgs);
         var markdown = fileContents.GenerateMarkdown();
-        
+
         markdown.HandleOutput(cliArgs, fileContents);
     }
 
@@ -51,6 +55,9 @@ OPTIONS:
     -x, --exclude <path>       Exclude folder, path or pattern (e.g. -x node_modules *.md)
     --preset <name>            Use predefined preset (web, backend, dotnet, unity, etc)
     -o, --output <file>        Save output to file instead of clipboard
+    --max-memory <size>        Maximum memory limit (default: 100MB, e.g., 500MB, 1GB)
+    -v, --verbose              Enable verbose logging (show file-by-file progress)
+    --debug                    Enable debug logging (show git commands, timing, errors)
     --test                     Run built-in test suite
     -h, --help                 Show this help message");
     }

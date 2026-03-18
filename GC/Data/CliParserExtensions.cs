@@ -12,7 +12,8 @@ public static class CliParserExtensions
         Extensions,
         Excludes,
         Presets,
-        Output
+        Output,
+        MaxMemory
     }
 
     public static CliArguments ParseCli(this string[] args)
@@ -24,6 +25,9 @@ public static class CliParserExtensions
         var output = string.Empty;
         var showHelp = false;
         var runTests = false;
+        var maxMemoryBytes = ParseMemorySize("100MB");
+        var verbose = false;
+        var debug = false;
 
         var state = ParseState.None;
 
@@ -43,13 +47,25 @@ public static class CliParserExtensions
                 continue;
             }
 
+            if (arg.IsVerboseFlag())
+            {
+                verbose = true;
+                continue;
+            }
+
+            if (arg.IsDebugFlag())
+            {
+                debug = true;
+                continue;
+            }
+
             if (arg.TryGetNewState(out var newState))
             {
                 state = newState;
                 continue;
             }
 
-            arg.ProcessArg(state, paths, extensions, excludes, presets, ref output);
+            arg.ProcessArg(state, paths, extensions, excludes, presets, ref output, ref maxMemoryBytes);
         }
 
         return new CliArguments(
@@ -59,7 +75,10 @@ public static class CliParserExtensions
             presets.ToArray(),
             output,
             showHelp,
-            runTests);
+            runTests,
+            maxMemoryBytes,
+            verbose,
+            debug);
     }
 
     private static bool IsHelpFlag(this string arg)
@@ -71,6 +90,17 @@ public static class CliParserExtensions
     private static bool IsTestFlag(this string arg)
     {
         return string.Equals(arg, "--test", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsVerboseFlag(this string arg)
+    {
+        return string.Equals(arg, "--verbose", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(arg, "-v", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDebugFlag(this string arg)
+    {
+        return string.Equals(arg, "--debug", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryGetNewState(this string arg, out ParseState state)
@@ -107,10 +137,16 @@ public static class CliParserExtensions
             return true;
         }
 
+        if (string.Equals(arg, "--max-memory", StringComparison.OrdinalIgnoreCase))
+        {
+            state = ParseState.MaxMemory;
+            return true;
+        }
+
         return false;
     }
 
-    private static void ProcessArg(this string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output)
+    private static void ProcessArg(this string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref long maxMemoryBytes)
     {
         switch (state)
         {
@@ -129,8 +165,47 @@ public static class CliParserExtensions
             case ParseState.Output:
                 output = arg;
                 break;
+            case ParseState.MaxMemory:
+                maxMemoryBytes = ParseMemorySize(arg);
+                break;
             case ParseState.None:
                 break;
         }
+    }
+
+    private static long ParseMemorySize(string size)
+    {
+        if (string.IsNullOrWhiteSpace(size))
+            return 104857600; // 100MB default
+
+        size = size.Trim().ToUpperInvariant();
+        long multiplier = 1;
+
+        if (size.EndsWith("KB", StringComparison.Ordinal))
+        {
+            multiplier = 1024;
+            size = size.Substring(0, size.Length - 2);
+        }
+        else if (size.EndsWith("MB", StringComparison.Ordinal))
+        {
+            multiplier = 1048576;
+            size = size.Substring(0, size.Length - 2);
+        }
+        else if (size.EndsWith("GB", StringComparison.Ordinal))
+        {
+            multiplier = 1073741824;
+            size = size.Substring(0, size.Length - 2);
+        }
+        else if (size.EndsWith("B", StringComparison.Ordinal))
+        {
+            size = size.Substring(0, size.Length - 1);
+        }
+
+        if (double.TryParse(size, out var value))
+        {
+            return (long)(value * multiplier);
+        }
+
+        return 104857600; // 100MB default if parsing fails
     }
 }

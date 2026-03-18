@@ -10,9 +10,19 @@ public static class FileFilterExtensions
 {
     public static FileEntry[] FilterFiles(this string[] rawFiles, CliArguments args)
     {
+        if (rawFiles == null) throw new ArgumentNullException(nameof(rawFiles));
+
+        using var _ = Logger.TimeOperation("File filtering");
+
+        Logger.LogVerbose($"Filtering {rawFiles.Length} raw files...");
+
         var activeExtensions = args.ResolveActiveExtensions();
 
-        return rawFiles
+        Logger.LogDebug($"Active extensions: [{string.Join(", ", activeExtensions)}]");
+        Logger.LogDebug($"Path filters: [{string.Join(", ", args.Paths)}]");
+        Logger.LogDebug($"Exclude patterns: [{string.Join(", ", args.Excludes)}]");
+
+        var filtered = rawFiles
             .AsParallel()
             .Where(path => path.IsValidPath(args, activeExtensions))
             .Select(path =>
@@ -24,6 +34,11 @@ public static class FileFilterExtensions
                 return new FileEntry(path, extension, language);
             })
             .ToArray();
+
+        Logger.LogVerbose($"Filtered to {filtered.Length} files");
+        Logger.LogDebug($"Rejected {rawFiles.Length - filtered.Length} files");
+
+        return filtered;
     }
 
     private static HashSet<string> ResolveActiveExtensions(this CliArguments args)

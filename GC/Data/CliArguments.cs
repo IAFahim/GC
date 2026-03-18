@@ -11,6 +11,8 @@ public readonly struct CliArguments
     public readonly string OutputFile;
     public readonly bool ShowHelp;
     public readonly bool RunTests;
+    public readonly bool RunBenchmarks;
+    public readonly bool RunRealBenchmark;
     public readonly long MaxMemoryBytes;
     public readonly bool Verbose;
     public readonly bool Debug;
@@ -23,6 +25,8 @@ public readonly struct CliArguments
         string outputFile,
         bool showHelp,
         bool runTests,
+        bool runBenchmarks,
+        bool runRealBenchmark,
         long maxMemoryBytes,
         bool verbose,
         bool debug)
@@ -34,6 +38,8 @@ public readonly struct CliArguments
         OutputFile = outputFile;
         ShowHelp = showHelp;
         RunTests = runTests;
+        RunBenchmarks = runBenchmarks;
+        RunRealBenchmark = runRealBenchmark;
         MaxMemoryBytes = maxMemoryBytes;
         Verbose = verbose;
         Debug = debug;

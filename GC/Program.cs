@@ -25,6 +25,18 @@ public static class Program
             return;
         }
 
+        if (cliArgs.RunBenchmarks)
+        {
+            Benchmarks.RunBenchmarks();
+            return;
+        }
+
+        if (cliArgs.RunRealBenchmark)
+        {
+            RealBenchmark.RunRealBenchmark();
+            return;
+        }
+
         Logger.LogDebug($"GC started with verbose logging. Arguments: {string.Join(" ", args)}");
 
         var rawFiles = cliArgs.DiscoverFiles();
@@ -91,6 +103,8 @@ OPTIONS:
     -v, --verbose              Enable verbose logging (show file-by-file progress)
     --debug                    Enable debug logging (show git commands, timing, errors)
     --test                     Run built-in test suite
+    --benchmark                Run simulated performance benchmarks
+    --real-benchmark           Run real repository benchmarks (current repo)
     -h, --help                 Show this help message");
     }
 }

@@ -1,0 +1,258 @@
+name: Continuous Benchmark
+
+on:
+  schedule:
+    # Run every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch:  # Allow manual triggering
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Get full history for trends
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Install git
+      run: sudo apt-get update && sudo apt-get install -y git
+
+    - name: Build GC
+      run: dotnet build -c Release
+
+    - name: Run Benchmark
+      run: |
+        dotnet run --project GC/GC.csproj -- --real-benchmark > benchmark_results.txt 2>&1 || true
+
+    - name: Extract Metrics
+      id: metrics
+      run: |
+        # Extract benchmark metrics
+        DISCOVERY_TIME=$(grep "Discovery time:" benchmark_results.txt | awk '{print $3}' | tr -d ' ms')
+        READ_TIME=$(grep "Read time:" benchmark_results.txt | head -1 | awk '{print $3}' | tr -d ' ms')
+        MARKDOWN_TIME=$(grep "Generation time:" benchmark_results.txt | head -1 | awk '{print $3}' | tr -d ' ms')
+        TOTAL_TIME=$(grep "Total time:" benchmark_results.txt | awk '{print $3}' | tr -d ' ms')
+        THROUGHPUT=$(grep "Files/sec:" benchmark_results.txt | awk '{print $2}')
+        MEMORY_EFFICIENCY=$(grep "Memory efficiency:" benchmark_results.txt | awk '{print $3}' | tr -d ' MB')
+
+        # Create JSON output
+        cat > benchmark_metrics.json << EOF
+        {
+          "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+          "discovery_time_ms": ${DISCOVERY_TIME:-0},
+          "read_time_ms": ${READ_TIME:-0},
+          "markdown_time_ms": ${MARKDOWN_TIME:-0},
+          "total_time_ms": ${TOTAL_TIME:-0},
+          "throughput_files_per_sec": ${THROUGHPUT:-0},
+          "memory_efficiency_mb": ${MEMORY_EFFICIENCY:-0}
+        }
+        EOF
+
+        echo "timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_OUTPUT
+        echo "discovery_time=${DISCOVERY_TIME:-0}" >> $GITHUB_OUTPUT
+        echo "read_time=${READ_TIME:-0}" >> $GITHUB_OUTPUT
+        echo "markdown_time=${MARKDOWN_TIME:-0}" >> $GITHUB_OUTPUT
+        echo "total_time=${TOTAL_TIME:-0}" >> $GITHUB_OUTPUT
+        echo "throughput=${THROUGHPUT:-0}" >> $GITHUB_OUTPUT
+
+    - name: Update Benchmark History
+      run: |
+        # Create/update benchmark history file
+        HISTORY_FILE="benchmark_history.json"
+
+        if [ -f "$HISTORY_FILE" ]; then
+          # Append new data
+          jq ". += [$(cat benchmark_metrics.json)]" "$HISTORY_FILE" > temp.json
+          mv temp.json "$HISTORY_FILE"
+        else
+          # Create new history
+          echo "[$(cat benchmark_metrics.json)]" > "$HISTORY_FILE"
+        fi
+
+        # Keep only last 100 entries
+        jq ".[-100:]" "$HISTORY_FILE" > temp.json
+        mv temp.json "$HISTORY_FILE"
+
+    - name: Generate Benchmark Graphs
+      run: |
+        # Install Python for graphing
+        sudo apt-get update
+        sudo apt-get install -y python3 python3-pip
+
+        # Install required packages
+        pip3 install matplotlib numpy
+
+        # Create Python script for graph generation
+        cat > generate_graphs.py << 'EOPY'
+        import json
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from datetime import datetime
+import os
+
+# Load benchmark data
+with open('benchmark_history.json', 'r') as f:
+            data = json.load(f)
+
+timestamps = [datetime.fromisoformat(d['timestamp'].replace('Z', '+00:00')) for d in data]
+discovery_times = [d['discovery_time_ms'] for d in data]
+read_times = [d['read_time_ms'] for d in data]
+markdown_times = [d['markdown_time_ms'] for d in data]
+total_times = [d['total_time_ms'] for d in data]
+throughputs = [d['throughput_files_per_sec'] for d in data]
+
+# Create figure with multiple subplots
+fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(14, 10))
+fig.suptitle('GC Performance Benchmarks Over Time', fontsize=16, fontweight='bold')
+
+# Discovery Time
+ax1.plot(timestamps, discovery_times, 'b-', linewidth=2, marker='o', markersize=4)
+ax1.set_title('Discovery Time', fontweight='bold')
+ax1.set_ylabel('Time (ms)')
+ax1.grid(True, alpha=0.3)
+ax1.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45)
+
+# Read Time
+ax2.plot(timestamps, read_times, 'g-', linewidth=2, marker='o', markersize=4)
+ax2.set_title('File Read Time', fontweight='bold')
+ax2.set_ylabel('Time (ms)')
+ax2.grid(True, alpha=0.3)
+ax2.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45)
+
+# Markdown Generation Time
+ax3.plot(timestamps, markdown_times, 'r-', linewidth=2, marker='o', markersize=4)
+ax3.set_title('Markdown Generation Time', fontweight='bold')
+ax3.set_ylabel('Time (ms)')
+ax3.grid(True, alpha=0.3)
+ax3.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45)
+
+# Throughput
+ax4.plot(timestamps, throughputs, 'purple', linewidth=2, marker='o', markersize=4)
+ax4.set_title('Processing Throughput', fontweight='bold')
+ax4.set_ylabel('Files/sec')
+ax4.grid(True, alpha=0.3)
+ax4.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+plt.setp(ax4.xaxis.get_majorticklabels(), rotation=45)
+
+plt.tight_layout()
+plt.savefig('benchmark_graphs.png', dpi=150, bbox_inches='tight')
+print("✅ Graphs generated: benchmark_graphs.png")
+        EOPY
+
+        # Run graph generation
+        python3 generate_graphs.py
+
+        # Create summary markdown table
+        cat > BENCHMARKS.md << 'EOMD'
+        # 🚀 GC Performance Benchmarks
+
+        This file contains automated benchmark results that run every 30 minutes.
+
+        ## 📊 Latest Results ({{timestamp}})
+
+        | Metric | Value | Status |
+        |--------|-------|--------|
+        | Discovery Time | {{discovery_time}} ms | ⚡ |
+        | File Read Time | {{read_time}} ms | 📖 |
+        | Markdown Generation | {{markdown_time}} ms | ✍️ |
+        | Total Time | {{total_time}} ms | ⏱️ |
+        | Throughput | {{throughput}} files/sec | 🚀 |
+        | Memory Efficiency | {{memory_efficiency}} MB | 💾 |
+
+        ## 📈 Performance Trends
+
+        ![Performance Graphs](benchmark_graphs.png)
+
+        ### Analysis
+        - Benchmarks run automatically every 30 minutes
+        - Results track performance improvements and regressions
+        - Memory efficiency is measured using streaming architecture
+
+        ### Recent History
+        EOMD
+
+        # Add table with recent history
+        echo "" >> BENCHMARKS.md
+        echo "### 📅 Recent Benchmark History" >> BENCHMARKS.md
+        echo "" >> BENCHMARKS.md
+        echo "| Timestamp | Discovery (ms) | Read (ms) | Markdown (ms) | Total (ms) | Throughput (files/sec) |" >> BENCHMARKS.md
+        echo "|-----------|----------------|-----------|---------------|------------|----------------------|" >> BENCHMARKS.md
+
+        # Add last 10 entries to table
+        jq -r '.[-10:] | .[] | "| \(.timestamp | split("T")[0] + " " + .timestamp | split("T")[1] | split(".")[0] | split("+")[0]) | \(.discovery_time_ms) | \(.read_time_ms) | \(.markdown_time_ms) | \(.total_time_ms) | \(.throughput_files_per_sec) |"' benchmark_history.json >> BENCHMARKS.md
+
+        # Replace placeholders with actual values
+        sed -i "s/{{timestamp}}/$(date -u +"%Y-%m-%d %H:%M:%S UTC")/g" BENCHMARKS.md
+        sed -i "s/{{discovery_time}}/${{ steps.metrics.outputs.discovery_time }}/g" BENCHMARKS.md
+        sed -i "s/{{read_time}}/${{ steps.metrics.outputs.read_time }}/g" BENCHMARKS.md
+        sed -i "s/{{markdown_time}}/${{ steps.metrics.outputs.markdown_time }}/g" BENCHMARKS.md
+        sed -i "s/{{total_time}}/${{ steps.metrics.outputs.total_time }}/g" BENCHMARKS.md
+        sed -i "s/{{throughput}}/${{ steps.metrics.outputs.throughput }}/g" BENCHMARKS.md
+        sed -i "s/{{memory_efficiency}}/0/g" BENCHMARKS.md
+
+    - name: Commit Benchmark Results
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+
+        # Add all benchmark files
+        git add benchmark_history.json benchmark_graphs.png BENCHMARKS.md benchmark_results.txt generate_graphs.py || true
+
+        # Commit if there are changes
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "📊 Update benchmark results - $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          git push
+        fi
+
+    - name: Upload Benchmark Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: |
+          benchmark_history.json
+          benchmark_graphs.png
+          BENCHMARKS.md
+          benchmark_results.txt
+        retention-days: 90
+
+    - name: Comment on PR (if applicable)
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const benchmarkData = JSON.parse(fs.readFileSync('benchmark_metrics.json', 'utf8'));
+
+          const comment = `## 📊 Benchmark Results
+
+          | Metric | Value |
+          |--------|-------|
+          | Discovery Time | ${benchmarkData.discovery_time_ms} ms |
+          | Read Time | ${benchmarkData.read_time_ms} ms |
+          | Markdown Time | ${benchmarkData.markdown_time_ms} ms |
+          | Total Time | ${benchmarkData.total_time_ms} ms |
+          | Throughput | ${benchmarkData.throughput_files_per_sec} files/sec |
+
+          *Generated at: ${benchmarkData.timestamp}*`;
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });

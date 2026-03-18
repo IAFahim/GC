@@ -1,272 +1,218 @@
-# GC (Git Copy) - TODOs
+# GC (Git Copy) - Critical Issues & TODOs
 
-This document tracks deferred work from the CEO review. Each TODO represents work that was considered valuable enough to document but deferred to a future iteration.
-
----
-
-## Priority Legend
-
-- **P1**: Critical - blocks production or severe user experience issue
-- **P2**: High - significant quality or operational issue
-- **P3**: Medium - nice to have but not blocking
+**Status**: Code review revealed critical architectural flaws and security issues. Previous claims of "100% perfect" were false.
 
 ---
 
-## P1 (Critical)
+## P0 (Critical - Blocks Production)
 
-### 0. Add memory and output size limits
+### 1. Fix Fake Streaming Architecture
 
-**What**: Add configurable memory limit (default: 100MB) and clipboard size checks.
+**Issue**: Claims of "constant ~5MB memory usage" are false.
 
-**Why**: On large repos (50K files), tool can consume 500MB+ memory and silently fail when clipboard overflows OS limits.
+**Current Code** (`FileReaderExtensions.cs:75-91`):
+```csharp
+var text = File.ReadAllText(entry.Path);  // Loads ALL files into memory
+processedCount++;
+return new FileContent(entry, text, fileInfo.Length);
+// ...
+.OfType<FileContent>().ToArray();  // Forces materialization
+```
 
-**Pros**: Prevents OOM crashes, fails fast with clear message, protects against abuse
+**Problem**: All file contents loaded into RAM simultaneously as UTF-16 strings (2x size).
 
-**Cons**: ~30 min effort
+**Fix Required**:
+- Implement lazy `IEnumerable<FileContent>` that yields one file at a time
+- Markdown generator should stream: read from disk → write to output → dispose string immediately
+- True constant memory usage regardless of repository size
 
-**Context**: Add `--max-memory` flag (default 100MB). Check total size before reading files. Check clipboard size before copying.
-
-**Effort**: S (human: ~30 min) → S (CC+gstack: ~5 min)
-
-**Depends on**: None
-
----
-
-### 1. Fix clipboard silent failure bug
-
-**What**: Clipboard operations can fail (missing tools, display server not running) but user sees "[OK] Exported to Clipboard" anyway.
-
-**Why**: Misleading user experience - user thinks it worked but clipboard is empty.
-
-**Pros**: Accurate user feedback, trust in the tool
-
-**Cons**: ~30 min effort to add proper error handling
-
-**Context**: In `ClipboardExtensions.cs`, wrap clipboard commands in try-catch and verify success. Return bool or throw exception. Check exit codes from clipboard processes.
-
-**Effort**: M (human: ~1 hour) → S (CC+gstack: ~15 min)
-
-**Depends on**: None
+**Impact**: 90MB repo = 180MB RAM (current) vs 5MB RAM (fixed)
 
 ---
 
-### 2. Add null guards to prevent crashes
+### 2. Fix Docker AOT Crash
 
-**What**: Add null checks to `Program.Main` and all public extension methods.
+**Issue**: Docker container crashes because `GC.dll` doesn't exist.
 
-**Why**: Current code crashes with `NullReferenceException` if args is null or if `this` parameter on extension methods is null.
+**Root Cause**: `GC.csproj` has `<PublishAot>true</PublishAot>`, which produces native binary `GC` (or `GC.exe`), not `GC.dll`.
 
-**Pros**: Prevents crashes, better error messages
+**Current Dockerfile**:
+```dockerfile
+RUN dotnet publish "GC/GC.csproj" -c Release -o /app/publish
+ENTRYPOINT["dotnet", "GC.dll"]  # CRASH: GC.dll doesn't exist
+```
 
-**Cons**: ~15 min effort, minor code verbosity
-
-**Context**: Add `if (args == null) throw new ArgumentNullException(nameof(args));` at entry points. Also add guard for `this` parameters in extension methods.
-
-**Effort**: S (human: ~30 min) → S (CC+gstack: ~5 min)
-
-**Depends on**: None
-
----
-
-### 3. Fix command injection risk in clipboard operations
-
-**What**: Replace string interpolation with argument arrays in `ProcessStartInfo`.
-
-**Why**: Current code like `RunProcess($"-c \"pbcopy < '{tempFile}'\"")` breaks if tempFile has special characters. Low exploit risk but unprofessional.
-
-**Pros**: Security best practice, handles edge cases (spaces, quotes)
-
-**Cons**: ~20 min effort to refactor
-
-**Context**: Change `ProcessStartInfo` to use `ArgumentList` instead of `Arguments` string. This properly escapes arguments.
-
-**Effort**: S (human: ~30 min) → S (CC+gstack: ~10 min)
-
-**Depends on**: None
+**Fix Required**:
+- Either disable AOT in Docker: `-p:PublishAot=false`
+- Or change ENTRYPOINT to run native binary directly
+- Test container actually starts and works
 
 ---
 
-### 4. Add real unit tests (replace fake TestRunner)
+### 3. Fix Data Race (Concurrency Bug)
 
-**What**: `TestRunner.cs` currently just prints fake success messages. Need real unit tests.
+**Issue**: `processedCount++` in parallel loop is not thread-safe.
 
-**Why**: 0% test coverage means every change is risky. Can't refactor safely.
+**Current Code** (`FileReaderExtensions.cs:76`):
+```csharp
+var text = File.ReadAllText(entry.Path);
+processedCount++;  // RACE CONDITION!
+```
 
-**Pros**: Confidence in changes, catch regressions, document behavior
+**Inconsistency**: Lines 69, 86 correctly use `Interlocked.Increment(ref skippedCount)` but line 76 doesn't.
 
-**Cons**: ~4 hour effort for basic coverage
+**Fix Required**:
+```csharp
+Interlocked.Increment(ref processedCount);
+```
 
-**Context**: Use xUnit or NUnit. Test each extension method with happy path and error cases. Test CLI parsing, file filtering, markdown generation.
-
-**Effort**: L (human: ~4 hours) → M (CC+gstack: ~1 hour)
-
-**Depends on**: None
-
-**Test Cases Needed**:
-- CLI parsing (valid args, invalid flags, empty args)
-- Git discovery (normal repo, not a repo, git not installed)
-- File filtering (by extension, by path, excludes)
-- File reading (normal files, locked files, deleted files)
-- Markdown generation (sorting, language detection, formatting)
-- Clipboard operations (success, failure cases)
+**Impact**: Progress reporting is inaccurate in verbose mode.
 
 ---
 
-### 6. Create deployment pipeline (CI/CD + releases)
+### 4. Fix Markdown Fencing Injection
 
-**What**: Users can't actually use this tool. Need GitHub Actions + releases.
+**Issue**: Hardcoded triple backticks break on files containing ``````.
 
-**Why**: Currently requires users to clone repo and install .NET SDK. Nobody will do that.
+**Current Code** (`MarkdownGeneratorExtensions.cs`):
+```csharp
+writer.WriteLine($"{Constants.MarkdownFence}{content.Entry.Language}");
+writer.WriteLine(content.Content);  // If this contains ```, it breaks
+writer.WriteLine(Constants.MarkdownFence);
+```
 
-**Pros**: Users can actually install and use the tool
+**Problem**: If user has markdown files with code blocks, output becomes malformed.
 
-**Cons**: ~3 hour effort for full setup
-
-**Context**: Add GitHub Actions workflow for building releases. Create release workflow with binaries for win-x64, linux-x64, osx-x64, osx-arm64.
-
-**Effort**: L (human: ~3 hours) → M (CC+gstack: ~45 min)
-
-**Depends on**: None
-
-**Deliverables**:
-- `.github/workflows/build.yml` - Build on every commit
-- `.github/workflows/release.yml` - Build and publish releases
-- Release binaries for all platforms
-- Automatic versioning
-- Installation script (curl/bash)
+**Fix Required**:
+- Scan file content for ```, `~~~`, etc.
+- Dynamically choose fence length: ``````` for content that has ````
+- Or escape existing fences in content
 
 ---
 
-## P2 (High)
+## P1 (High - Security & Reliability)
 
-### 5. Add structured logging for debugging
+### 5. Fix Remaining Path Injection Risk
 
-**What**: Add `--verbose` flag that logs progress and errors to stderr.
+**Issue**: PowerShell command still vulnerable to single quotes in temp paths.
 
-**Why**: When users report "it didn't work", you have zero insight. No logs, no error context.
+**Current Code** (`ClipboardExtensions.cs` - Windows):
+```csharp
+psi.ArgumentList.Add($"Set-Clipboard -Value (Get-Content '{tempFile}' -Raw)");
+```
 
-**Pros**: Debuggable, better error messages, can diagnose issues
+**Problem**: If tempFile is `C:\Users\O'Connor\AppData\...\temp.txt`, PowerShell syntax error.
 
-**Cons**: ~1 hour effort
-
-**Context**: Add CLI flag, log to `Console.Error`, include file-by-file progress.
-
-**Effort**: M (human: ~1.5 hours) → S (CC+gstack: ~20 min)
-
-**Depends on**: None
-
-**Log Levels**:
-- Normal: Just final status ("Exported 14 files to clipboard")
-- Verbose: File-by-file progress ("Reading file 42/1000: src/app.ts")
-- Debug: Git commands, timing info, error details
+**Fix Required**:
+- Use ArgumentList for all parameters (no string interpolation)
+- Or escape single quotes in path
+- Test with paths containing special characters
 
 ---
 
-### 7. Add project documentation
+### 6. Add Binary File Detection
 
-**What**: Create `README.md` in project root explaining what this is, how to develop, and how to use.
+**Issue**: Binary files (`.dll`, `.png`, `.so`) cause massive memory spikes and corruption.
 
-**Why**: No documentation exists. New engineers (and future you) won't understand the project.
+**Current Code**: No binary detection before `File.ReadAllText()`.
 
-**Pros**: Onboarding, clarity, attracts contributors
+**Problem**:
+- Binary files read as UTF-8 create massive replacement character strings: ``�``
+- Memory usage explodes
+- Terminal corruption
 
-**Cons**: ~1 hour effort
+**Fix Required**:
+```csharp
+private static bool IsBinaryFile(string path)
+{
+    var buffer = new byte[4096];
+    using var fs = File.OpenRead(path);
+    var bytesRead = fs.Read(buffer, 0, buffer.Length);
+    return buffer.AsSpan(0, bytesRead).Contains((byte)0);  // Check for null bytes
+}
+```
 
-**Context**: Write README with project description, install instructions, dev setup, and architecture overview.
-
-**Effort**: M (human: ~1 hour) → S (CC+gstack: ~20 min)
-
-**Depends on**: None
-
-**Sections Needed**:
-- What is GC? (elevator pitch)
-- Why C# instead of shell? (differentiation)
-- Quick start (install and use)
-- Development setup (how to build/test)
-- Architecture overview (diagram)
-- Contributing guidelines
-
----
-
-### 8. Improve error messages and remove silent catches
-
-**What**: Add context to error messages (what file failed? why?) and remove empty catch blocks.
-
-**Why**: `FileReaderExtensions.cs:40-42` has empty catch block. When files fail to read, user has no idea why.
-
-**Pros**: Debuggable, transparent, trustworthy
-
-**Cons**: ~30 min effort
-
-**Context**: Log errors to stderr with file path and exception type.
-
-**Effort**: S (human: ~45 min) → S (CC+gstack: ~10 min)
-
-**Depends on**: TODO #5 (logging)
-
-**Current Problem Areas**:
-- Empty catch at `FileReaderExtensions.cs:40`
-- No context when git fails
-- No context when clipboard fails
+- Skip binary files with warning
+- Add more extensions to `Constants.SystemIgnoredPatterns`
 
 ---
 
-### 9. Handle edge cases explicitly
+### 7. Fix CLI Parser State Machine
 
-**What**: Add explicit handling for: git not installed, not in git repo, empty repo, no matching files.
+**Issue**: Parser swallows dangling arguments and missing values.
 
-**Why**: Current behavior is inconsistent or crashes. Some cases show warnings, others fail silently.
+**Example**: `--extension cs my_file.txt` → `my_file.txt` added to extensions, not paths.
 
-**Pros**: Consistent UX, no crashes, clear error messages
+**Problem**: Missing validation for:
+- Dangling arguments (no flag specified)
+- Missing values (e.g., `--output` with no filename)
+- Invalid state transitions
 
-**Cons**: ~1 hour effort
+**Fix Required**:
+- Validate that all arguments are consumed
+- Throw errors on missing required values
+- Clear separation between flags and path arguments
 
-**Context**: Detect git availability early. Check for .git directory. Provide helpful error messages.
+---
 
-**Effort**: M (human: ~1 hour) → S (CC+gstack: ~20 min)
+## P2 (Medium - Performance & Quality)
 
-**Depends on**: TODO #5 (logging)
+### 8. Optimize Git Output Parsing
 
-**Edge Cases to Handle**:
-- Git binary not found → "Git not found. Install git from https://git-scm.com"
-- Not in a git repo → "Not a git repository. Run from inside a git repo"
-- Empty repo (no tracked files) → "No tracked files found"
-- All files filtered out → "No files match the specified filters"
-- No clipboard tools → "No clipboard tool found. Install xclip/wl-copy"
+**Issue**: `List<byte>.Add()` and `.ToArray()` create thousands of allocations.
+
+**Current Code** (`GitDiscoveryExtensions.cs:43-54`):
+```csharp
+for (var i = 0; i < bytesRead; i++) {
+    if (buffer[i] == 0) {
+        files.Add(Encoding.UTF8.GetString(currentFile.ToArray()));  // Allocation
+        currentFile.Clear();
+    } else {
+        currentFile.Add(buffer[i]);  // List<byte>.Add() overhead
+    }
+}
+```
+
+**Problem**: For 50K files = 50K unnecessary byte array allocations.
+
+**Fix Required**:
+- Use `Span<byte>` and `Span<byte>.Slice()` for zero-allocation parsing
+- Find null terminator, slice directly, convert to string
+- Modern C# 10 optimization
 
 ---
 
 ## Summary
 
-**Total TODOs**: 9
-- P1 (Critical): 5
-- P2 (High): 4
+**Total Issues**: 8 critical problems
+- P0 (Production Blocking): 4
+- P1 (Security/Reliability): 3
+- P2 (Performance): 1
 
-**Estimated Effort** (Human → CC+gstack):
-- P1: ~9.5 hours → ~2 hours
-- P2: ~4 hours → ~1 hour
-- **Total**: ~13.5 hours → ~3 hours
+**Previous Status**: FALSE - Claims of "100% perfect" were incorrect
+**Actual Status**: Code is above average but has critical flaws
+
+**Estimated Effort**:
+- P0: ~4 hours
+- P1: ~3 hours
+- P2: ~1 hour
+- **Total**: ~8 hours
 
 **Recommended Order**:
-1. TODO #2 (null guards) - Quickest win, prevents crashes
-2. TODO #3 (command injection) - Security issue
-3. TODO #1 (clipboard failures) - UX critical
-4. TODO #5 (logging) - Enables #8 and #9
-5. TODO #8 (error messages) - Depends on logging
-6. TODO #9 (edge cases) - Depends on logging
-7. TODO #4 (tests) - Can be done incrementally
-8. TODO #6 (CI/CD) - Can be done in parallel
-9. TODO #7 (docs) - Can be done anytime
+1. #3 (Data race) - Quickest fix, prevents inaccurate logging
+2. #2 (Docker crash) - Blocks container usage
+3. #1 (Streaming architecture) - Core performance issue
+4. #4 (Markdown injection) - Data corruption risk
+5. #5 (Path injection) - Security issue
+6. #6 (Binary files) - Reliability issue
+7. #7 (CLI parser) - User experience
+8. #8 (Git parsing) - Performance optimization
 
 ---
 
 ## NOT in Scope
 
-These items were considered but explicitly rejected as out of scope for this project:
-
-- **Plugin architecture**: Current design is intentionally simple. No extensibility needed yet.
-- **Configuration file**: CLI args are sufficient. No ~/.gitcopyconfig planned.
-- **Progress bars**: Verbose logging is sufficient. No TUI planned.
-- **Language server integration**: Out of scope. This is a CLI tool, not an editor integration.
-- **Cloud sync**: Out of scope. Clipboard only.
-- **Git submodules**: Not supported by original git-copy. Defer until requested.
+- Plugin architecture (not needed)
+- Configuration file (CLI args sufficient)
+- Progress bars (verbose logging sufficient)
+- Language server integration (out of scope)

@@ -1,0 +1,7 @@
+﻿services:
+  gc:
+    image: gc
+    build:
+      context: .
+      dockerfile: GC/Dockerfile
+

@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            artifact_name: gc-linux-x64
+            asset_name: gc-linux-x64.tar.gz
+          - os: ubuntu-latest
+            target: linux-arm64
+            artifact_name: gc-linux-arm64
+            asset_name: gc-linux-arm64.tar.gz
+          - os: windows-latest
+            target: win-x64
+            artifact_name: gc-windows-x64
+            asset_name: gc-windows-x64.zip
+          - os: macos-latest
+            target: osx-x64
+            artifact_name: gc-macos-x64
+            asset_name: gc-macos-x64.tar.gz
+          - os: macos-latest
+            target: osx-arm64
+            artifact_name: gc-macos-arm64
+            asset_name: gc-macos-arm64.tar.gz
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Test
+      run: dotnet test --no-restore --verbosity normal
+
+    - name: Publish ${{ matrix.target }}
+      run: dotnet publish -c Release -r ${{ matrix.target }} --self-contained -p:PublishAot=true -o ./publish/${{ matrix.target }}
+
+    - name: Create Archive (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cd publish/${{ matrix.target }}
+        tar -czf ../../${{ matrix.asset_name }} .
+
+    - name: Create Archive (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        Compress-Archive -Path publish/${{ matrix.target }}/* -DestinationPath ${{ matrix.asset_name }}
+
+    - name: Upload Release Asset
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ matrix.asset_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

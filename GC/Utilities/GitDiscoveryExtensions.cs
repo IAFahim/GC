@@ -12,6 +12,72 @@ public static class GitDiscoveryExtensions
     {
         using var _ = Logger.TimeOperation("Git file discovery");
 
+        // First check if git is available
+        Logger.LogDebug("Checking if git is installed...");
+        var checkGitPsi = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = "--version",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using (var checkGitProcess = Process.Start(checkGitPsi))
+        {
+            if (checkGitProcess == null)
+            {
+                Logger.LogError("Failed to start git process");
+                Environment.Exit(1);
+                return[];
+            }
+
+            checkGitProcess.WaitForExit();
+
+            if (checkGitProcess.ExitCode != 0)
+            {
+                Logger.LogError("Git not found. Please install git from https://git-scm.com");
+                Console.Error.WriteLine("Git is required to use this tool.");
+                Console.Error.WriteLine("Install from: https://git-scm.com/downloads");
+                Environment.Exit(1);
+                return[];
+            }
+        }
+
+        // Check if we're in a git repository
+        Logger.LogDebug("Checking if current directory is a git repository...");
+        var checkRepoPsi = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = "rev-parse --git-dir",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using (var checkRepoProcess = Process.Start(checkRepoPsi))
+        {
+            if (checkRepoProcess == null)
+            {
+                Logger.LogError("Failed to start git process");
+                Environment.Exit(1);
+                return[];
+            }
+
+            checkRepoProcess.WaitForExit();
+
+            if (checkRepoProcess.ExitCode != 0)
+            {
+                Logger.LogError("Not a git repository");
+                Console.Error.WriteLine("This tool must be run from inside a git repository.");
+                Console.Error.WriteLine("Current directory is not a git repository.");
+                Environment.Exit(1);
+                return[];
+            }
+        }
+
         var gitArgs = "ls-files -z --cached --others --exclude-standard";
         Logger.LogDebug($"Executing: git {gitArgs}");
 

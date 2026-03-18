@@ -30,16 +30,51 @@ public static class Program
         if (rawFiles.Length == 0)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("Warning: Not a git repository or no tracked files found.");
+            Console.Error.WriteLine("No tracked files found in this repository.");
             Console.ResetColor();
+            Console.Error.WriteLine("The repository appears to be empty (no files have been committed).");
             return;
         }
 
         var filteredFiles = rawFiles.FilterFiles(cliArgs);
-        var fileContents = filteredFiles.ReadContents(cliArgs);
-        var markdown = fileContents.GenerateMarkdown();
+        if (filteredFiles.Length == 0)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.Error.WriteLine($"No files match the specified filters.");
+            Console.ResetColor();
+            Console.Error.WriteLine($"Found {rawFiles.Length} total files, but all were filtered out.");
+            Console.Error.WriteLine("Try adjusting your --paths, --extension, or --exclude options.");
+            return;
+        }
 
-        markdown.HandleOutput(cliArgs, fileContents);
+        var fileContents = filteredFiles.ReadContents(cliArgs);
+
+        // Use streaming for file output to reduce memory usage
+        if (!string.IsNullOrEmpty(cliArgs.OutputFile))
+        {
+            // Stream directly to file without holding everything in memory
+            fileContents.GenerateMarkdownToFile(cliArgs.OutputFile);
+            // Print stats directly
+            long totalBytes = 0;
+            for (var i = 0; i < fileContents.Length; i++)
+            {
+                totalBytes += fileContents[i].Size;
+            }
+            var tokens = totalBytes / 4;
+            var sizeStr = totalBytes < 1024 ? $"{totalBytes} B" :
+                totalBytes < 1048576 ? $"{totalBytes / 1024.0:F2} KB" :
+                $"{totalBytes / 1048576.0:F2} MB";
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write("[OK] ");
+            Console.ResetColor();
+            Console.WriteLine($"Exported to {cliArgs.OutputFile}: {fileContents.Length} files | Size: {sizeStr} | Tokens: ~{tokens}");
+        }
+        else
+        {
+            // For clipboard, we still need the string, but can optimize
+            var markdown = fileContents.GenerateMarkdown();
+            markdown.HandleOutput(cliArgs, fileContents);
+        }
     }
 
     private static void PrintHelp()

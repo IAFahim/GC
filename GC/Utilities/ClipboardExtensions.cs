@@ -64,69 +64,157 @@ public static class ClipboardExtensions
 
     private static bool CopyToClipboard(this string markdown)
     {
-        var tempFile = Path.GetTempFileName();
-        File.WriteAllText(tempFile, markdown);
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return CopyToClipboardWindows(markdown);
+        }
 
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return CopyToClipboardMac(markdown);
+        }
+
+        // Linux: try wl-copy first (Wayland), then xclip (X11)
+        return CopyToClipboardLinux(markdown);
+    }
+
+    private static bool CopyToClipboardWindows(string markdown)
+    {
         try
         {
-            int exitCode;
-            string command;
+            Logger.LogDebug("Copying to clipboard via PowerShell");
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                command = "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Clipboard -Value (Get-Content '{tempFile}' -Raw -Encoding UTF8)\"";
-                Logger.LogDebug($"Executing: {command}");
-                exitCode = "powershell".RunProcess(
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-Command",
-                    $"Set-Clipboard -Value (Get-Content '{tempFile}' -Raw -Encoding UTF8)"
-                );
-                return exitCode == 0;
-            }
+            var tempFile = Path.GetTempFileName();
+            File.WriteAllText(tempFile, markdown);
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            try
             {
-                command = $"pbcopy < '{tempFile}'";
-                Logger.LogDebug($"Executing: {command}");
-                exitCode = "bash".RunProcess(
-                    "-c",
-                    command
-                );
-                return exitCode == 0;
-            }
-
-            // Linux: try wl-copy first (Wayland), then xclip (X11)
-            if ("bash".RunProcess("-c", "command -v wl-copy") == 0)
-            {
-                command = $"wl-copy < '{tempFile}'";
-                Logger.LogDebug($"Trying Wayland clipboard: {command}");
-                exitCode = "bash".RunProcess(
-                    "-c",
-                    command
-                );
-                if (exitCode == 0)
+                var psi = new ProcessStartInfo
                 {
-                    return true;
+                    FileName = "powershell",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                psi.ArgumentList.Add("-NoProfile");
+                psi.ArgumentList.Add("-ExecutionPolicy");
+                psi.ArgumentList.Add("Bypass");
+                psi.ArgumentList.Add("-Command");
+                psi.ArgumentList.Add($"Set-Clipboard -Value (Get-Content '{tempFile}' -Raw)");
+
+                using var process = Process.Start(psi);
+                if (process == null)
+                {
+                    return false;
                 }
-                Logger.LogDebug("Wayland clipboard failed, falling back to X11");
+
+                process.WaitForExit();
+                return process.ExitCode == 0;
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                {
+                    File.Delete(tempFile);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("PowerShell clipboard copy failed", ex);
+            return false;
+        }
+    }
+
+    private static bool CopyToClipboardMac(string markdown)
+    {
+        try
+        {
+            Logger.LogDebug("Copying to clipboard via pbcopy");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "pbcopy",
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                return false;
             }
 
-            command = $"xclip -selection clipboard < '{tempFile}'";
-            Logger.LogDebug($"Trying X11 clipboard: {command}");
-            exitCode = "bash".RunProcess(
-                "-c",
-                command
-            );
-            return exitCode == 0;
+            using var writer = process.StandardInput;
+            writer.Write(markdown);
+            writer.Close();
+
+            process.WaitForExit();
+            return process.ExitCode == 0;
         }
-        finally
+        catch (Exception ex)
         {
-            if (File.Exists(tempFile))
+            Logger.LogError("pbcopy clipboard copy failed", ex);
+            return false;
+        }
+    }
+
+    private static bool CopyToClipboardLinux(string markdown)
+    {
+        // Try wl-copy first (Wayland), then xclip (X11)
+        var result = TryCopyToClipboardLinux(markdown, "wl-copy", "Wayland");
+        if (result)
+        {
+            return true;
+        }
+
+        Logger.LogDebug("Wayland clipboard not available, trying X11");
+        return TryCopyToClipboardLinux(markdown, "xclip", "X11", "-selection", "clipboard");
+    }
+
+    private static bool TryCopyToClipboardLinux(string markdown, string tool, string toolName, params string[] extraArgs)
+    {
+        try
+        {
+            Logger.LogDebug($"Copying to clipboard via {toolName}");
+
+            var psi = new ProcessStartInfo
             {
-                File.Delete(tempFile);
+                FileName = tool,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            foreach (var arg in extraArgs)
+            {
+                psi.ArgumentList.Add(arg);
             }
+
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                return false;
+            }
+
+            using var writer = process.StandardInput;
+            writer.Write(markdown);
+            writer.Close();
+
+            process.WaitForExit();
+            return process.ExitCode == 0;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError($"{toolName} clipboard copy failed", ex);
+            return false;
         }
     }
 

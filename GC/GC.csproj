@@ -13,4 +13,8 @@
         <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     </PropertyGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="GC.Tests" />
+    </ItemGroup>
+
 </Project>

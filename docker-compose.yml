@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  gc:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    volumes:
+      # Mount current directory as a git repository
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      - DOTNET_ENVIRONMENT=Production
+    # Default command - export to clipboard simulation
+    command: ["dotnet", "run", "--project", "GC/GC.csproj", "--", "--help"]
+
+  gc-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: ["dotnet", "test", "GC.Tests/GC.Tests.csproj"]
+
+  gc-bash:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      - DOTNET_ENVIRONMENT=Development
+    # Start bash for interactive use
+    command: ["/bin/bash"]
+    tty: true
+    stdin_open: true

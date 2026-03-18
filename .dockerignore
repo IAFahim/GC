@@ -1,25 +1,39 @@
-﻿**/.dockerignore
-**/.env
-**/.git
-**/.gitignore
-**/.project
-**/.settings
-**/.toolstarget
-**/.vs
-**/.vscode
-**/.idea
-**/*.*proj.user
-**/*.dbmdl
-**/*.jfm
-**/azds.yaml
-**/bin
-**/charts
-**/docker-compose*
-**/Dockerfile*
-**/node_modules
-**/npm-debug.log
-**/obj
-**/secrets.dev.yaml
-**/values.dev.yaml
-LICENSE
+# .NET
+bin/
+obj/
+out/
+
+# Tests
+GC.Tests/
+TestResults/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Docs
 README.md
+TODOS.md
+*.md
+
+# Installation scripts
+install.sh
+install.ps1
+
+# GitHub
+.github/
+
+# OS
+.DS_Store
+Thumbs.db

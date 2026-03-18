@@ -1,0 +1,51 @@
+name: Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        dotnet: ['10.0.x']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ matrix.dotnet }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Test
+      run: dotnet test --no-restore --verbosity normal
+
+    - name: Publish Win-x64
+      if: matrix.os == 'windows-latest'
+      run: dotnet publish -c Release -r win-x64 --self-contained -p:PublishAot=true -o ./artifacts/win-x64
+
+    - name: Publish Linux-x64
+      if: matrix.os == 'ubuntu-latest'
+      run: dotnet publish -c Release -r linux-x64 --self-contained -p:PublishAot=true -o ./artifacts/linux-x64
+
+    - name: Publish Osx-x64
+      if: matrix.os == 'macos-latest'
+      run: dotnet publish -c Release -r osx-x64 --self-contained -p:PublishAot=true -o ./artifacts/osx-x64
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gc-${{ matrix.os }}
+        path: ./artifacts/*
+        if-no-files-found: warn

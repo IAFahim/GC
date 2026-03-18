@@ -8,14 +8,14 @@ public static class MarkdownGeneratorExtensions
 {
     public static string GenerateMarkdown(this FileContent[] contents)
     {
+        var sortedContents = new FileContent[contents.Length];
+        Array.Copy(contents, sortedContents, contents.Length);
+        Array.Sort(sortedContents, (a, b) => string.Compare(a.Entry.Path, b.Entry.Path, StringComparison.OrdinalIgnoreCase));
+
         var builder = new StringBuilder(contents.Length * 4096);
-        var paths = new string[contents.Length];
 
-        for (var i = 0; i < contents.Length; i++)
+        foreach (var content in sortedContents)
         {
-            var content = contents[i];
-            paths[i] = content.Entry.Path;
-
             builder.AppendLine($"## File: {content.Entry.Path}");
             builder.AppendLine($"{Constants.MarkdownFence}{content.Entry.Language}");
             builder.AppendLine(content.Content);
@@ -23,16 +23,14 @@ public static class MarkdownGeneratorExtensions
             builder.AppendLine();
         }
 
-        Array.Sort(paths, StringComparer.OrdinalIgnoreCase);
-
         builder.AppendLine(Constants.ProjectStructureHeader);
         builder.AppendLine($"{Constants.MarkdownFence}{Constants.TextLang}");
-        
-        for (var i = 0; i < paths.Length; i++)
+
+        foreach (var content in sortedContents)
         {
-            builder.AppendLine(paths[i]);
+            builder.AppendLine(content.Entry.Path);
         }
-        
+
         builder.AppendLine(Constants.MarkdownFence);
 
         return builder.ToString();

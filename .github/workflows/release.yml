@@ -19,10 +19,6 @@ jobs:
             target: linux-x64
             artifact_name: gc-linux-x64
             asset_name: gc-linux-x64.tar.gz
-          - os: ubuntu-latest
-            target: linux-arm64
-            artifact_name: gc-linux-arm64
-            asset_name: gc-linux-arm64.tar.gz
           - os: windows-latest
             target: win-x64
             artifact_name: gc-windows-x64

@@ -413,3 +413,16 @@ Latest benchmark results from automated testing:
 
 *Last updated: 2026-03-19 07:50:08 UTC*
 <!-- BENCHMARK_END -->
+<!-- BENCHMARK_START -->
+## 📊 Real Performance Data
+
+Latest benchmark results from automated testing:
+
+| Metric | Value |
+|--------|-------|
+| Discovery Time | 18 ms |
+| File Read Time | 22 ms |
+| Total Time | 43 ms |
+
+*Last updated: 2026-03-19 08:50:18 UTC*
+<!-- BENCHMARK_END -->

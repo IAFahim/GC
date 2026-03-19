@@ -35,8 +35,20 @@ for path in "${SELECTED_PATHS[@]}"; do
     echo "Target path: $path" >> "$LOG_FILE"
 done
 
+# Set working directory to the parent of the first selected item
+# This helps 'gc' find the git root if it exists
+FIRST_PATH="${TARGET_PATHS[0]}"
+if [ -d "$FIRST_PATH" ]; then
+    WORKING_DIR="$FIRST_PATH"
+else
+    WORKING_DIR=$(dirname "$FIRST_PATH")
+fi
+
+echo "Working directory: $WORKING_DIR" >> "$LOG_FILE"
+cd "$WORKING_DIR" || exit 1
+
 # Run gc
-echo "Running: gc --paths ${TARGET_PATHS[@]}" >> "$LOG_FILE"
+echo "Running: gc --paths \"${TARGET_PATHS[@]}\"" >> "$LOG_FILE"
 
 # Capture output and exit code
 # Pass the array to the command to preserve quoting
@@ -48,13 +60,18 @@ echo "Output: $OUTPUT" >> "$LOG_FILE"
 
 if [ $EXIT_CODE -eq 0 ]; then
     # Extract stats from output if possible
-    STATS=$(echo "$OUTPUT" | grep "Exported to")
+    # Remove [OK] prefix and ANSI color codes if any
+    STATS=$(echo "$OUTPUT" | grep "Exported to" | sed 's/\[OK\] //g' | sed 's/\x1b\[[0-9;]*m//g')
     if [ -z "$STATS" ]; then
         STATS="Contents copied to clipboard successfully."
     fi
-    notify-send "gc - Success" "$STATS" -i checkbox-checked-symbolic
+    notify-send "gc" "$STATS" -i checkbox-checked-symbolic
 else
     # Show error message
-    ERROR_MSG=$(echo "$OUTPUT" | head -n 3)
-    notify-send "gc - Error" "Failed to copy: $ERROR_MSG" -i error
+    # Remove [ERROR] prefix and ANSI color codes
+    ERROR_MSG=$(echo "$OUTPUT" | grep "\[ERROR\]" | head -n 1 | sed 's/\[ERROR\] //g' | sed 's/\x1b\[[0-9;]*m//g')
+    if [ -z "$ERROR_MSG" ]; then
+        ERROR_MSG=$(echo "$OUTPUT" | head -n 1)
+    fi
+    notify-send "gc" "Error: $ERROR_MSG" -i error
 fi

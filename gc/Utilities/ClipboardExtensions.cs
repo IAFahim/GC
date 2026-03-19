@@ -124,7 +124,7 @@ public static class ClipboardExtensions
         }
         catch (Exception ex)
         {
-            Logger.LogError("PowerShell clipboard copy failed", ex);
+            Logger.LogDebug($"PowerShell clipboard copy failed: {ex.Message}");
             return false;
         }
     }
@@ -160,7 +160,7 @@ public static class ClipboardExtensions
         }
         catch (Exception ex)
         {
-            Logger.LogError("pbcopy clipboard copy failed", ex);
+            Logger.LogDebug($"pbcopy clipboard copy failed: {ex.Message}");
             return false;
         }
     }
@@ -174,7 +174,7 @@ public static class ClipboardExtensions
             return true;
         }
 
-        Logger.LogDebug("Wayland clipboard not available, trying X11");
+        Logger.LogDebug("Wayland clipboard not available, trying xclip");
         return TryCopyToClipboardLinux(markdown, "xclip", "X11", "-selection", "clipboard");
     }
 
@@ -214,7 +214,7 @@ public static class ClipboardExtensions
         }
         catch (Exception ex)
         {
-            Logger.LogError($"{toolName} clipboard copy failed", ex);
+            Logger.LogDebug($"{toolName} clipboard copy failed: {ex.Message}");
             return false;
         }
     }

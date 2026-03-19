@@ -3,6 +3,13 @@ using System.Collections.Generic;
 
 namespace GC.Data;
 
+public enum DiscoveryMode
+{
+    Auto,
+    Git,
+    FileSystem
+}
+
 public static class CliParserExtensions
 {
     private enum ParseState
@@ -13,7 +20,8 @@ public static class CliParserExtensions
         Excludes,
         Presets,
         Output,
-        MaxMemory
+        MaxMemory,
+        Discovery
     }
 
     public static CliArguments ParseCli(this string[] args)
@@ -26,6 +34,7 @@ public static class CliParserExtensions
         var showHelp = false;
         var runTests = false;
         var runRealBenchmark = false;
+        var discoveryMode = DiscoveryMode.Auto;
         var maxMemoryBytes = ParseMemorySize("100MB");
         var verbose = false;
         var debug = false;
@@ -54,6 +63,12 @@ public static class CliParserExtensions
                 continue;
             }
 
+            if (arg.TryGetNewDiscoveryState(out var discoveryState))
+            {
+                state = discoveryState;
+                continue;
+            }
+
             if (arg.IsVerboseFlag())
             {
                 verbose = true;
@@ -79,7 +94,7 @@ public static class CliParserExtensions
                 continue;
             }
 
-            arg.ProcessArg(state, paths, extensions, excludes, presets, ref output, ref maxMemoryBytes);
+            arg.ProcessArg(state, paths, extensions, excludes, presets, ref output, ref discoveryMode, ref maxMemoryBytes);
             state = ParseState.None; // Reset state after processing
         }
 
@@ -99,6 +114,7 @@ public static class CliParserExtensions
             showHelp,
             runTests,
             runRealBenchmark,
+            discoveryMode,
             maxMemoryBytes,
             verbose,
             debug);
@@ -174,7 +190,7 @@ public static class CliParserExtensions
         return false;
     }
 
-    private static void ProcessArg(this string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref long maxMemoryBytes)
+    private static void ProcessArg(this string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref DiscoveryMode discoveryMode, ref long maxMemoryBytes)
     {
         switch (state)
         {
@@ -195,6 +211,9 @@ public static class CliParserExtensions
                 break;
             case ParseState.MaxMemory:
                 maxMemoryBytes = ParseMemorySize(arg);
+                break;
+            case ParseState.Discovery:
+                discoveryMode = ParseDiscoveryMode(arg);
                 break;
             case ParseState.None:
                 break;
@@ -235,5 +254,30 @@ public static class CliParserExtensions
         }
 
         return 104857600; // 100MB default if parsing fails
+    }
+
+    private static DiscoveryMode ParseDiscoveryMode(string mode)
+    {
+        return mode.ToLowerInvariant() switch
+        {
+            "auto" => DiscoveryMode.Auto,
+            "git" => DiscoveryMode.Git,
+            "filesystem" => DiscoveryMode.FileSystem,
+            _ => DiscoveryMode.Auto
+        };
+    }
+
+    private static bool TryGetNewDiscoveryState(this string arg, out ParseState state)
+    {
+        state = ParseState.None;
+
+        if (string.Equals(arg, "--discovery", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "-d", StringComparison.OrdinalIgnoreCase))
+        {
+            state = ParseState.Discovery;
+            return true;
+        }
+
+        return false;
     }
 }

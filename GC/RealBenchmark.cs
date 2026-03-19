@@ -68,6 +68,7 @@ public static class RealBenchmark
                 false,
                 false,
                 false,
+                GC.Data.DiscoveryMode.Auto,
                 long.MaxValue,
                 false,
                 true  // Enable debug for timing info

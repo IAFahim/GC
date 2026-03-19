@@ -93,6 +93,7 @@ OPTIONS:
     -x, --exclude <path>       Exclude folder, path or pattern (e.g. -x node_modules *.md)
     --preset <name>            Use predefined preset (web, backend, dotnet, unity, etc)
     -o, --output <file>        Save output to file instead of clipboard
+    --discovery <mode>        File discovery mode: auto, git, filesystem (default: auto)
     --max-memory <size>        Maximum memory limit (default: 100MB, e.g., 500MB, 1GB)
     -v, --verbose              Enable verbose logging (show file-by-file progress)
     --debug                    Enable debug logging (show git commands, timing, errors)

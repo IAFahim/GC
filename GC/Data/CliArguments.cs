@@ -12,6 +12,7 @@ public readonly struct CliArguments
     public readonly bool ShowHelp;
     public readonly bool RunTests;
     public readonly bool RunRealBenchmark;
+    public readonly DiscoveryMode DiscoveryMode;
     public readonly long MaxMemoryBytes;
     public readonly bool Verbose;
     public readonly bool Debug;
@@ -25,6 +26,7 @@ public readonly struct CliArguments
         bool showHelp,
         bool runTests,
         bool runRealBenchmark,
+        DiscoveryMode discoveryMode,
         long maxMemoryBytes,
         bool verbose,
         bool debug)
@@ -37,6 +39,7 @@ public readonly struct CliArguments
         ShowHelp = showHelp;
         RunTests = runTests;
         RunRealBenchmark = runRealBenchmark;
+        DiscoveryMode = discoveryMode;
         MaxMemoryBytes = maxMemoryBytes;
         Verbose = verbose;
         Debug = debug;

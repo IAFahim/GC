@@ -12,7 +12,7 @@ public class PerformanceTests : IDisposable
     private readonly ITestOutputHelper _output;
     private readonly string _testDir;
     private readonly string _repoDir;
-    private readonly string _projectPath;
+    private readonly string _binaryPath;
 
     public PerformanceTests(ITestOutputHelper output)
     {
@@ -26,7 +26,15 @@ public class PerformanceTests : IDisposable
         }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
-        _projectPath = Path.Combine(projectRoot, "gc", "gc.csproj");
+        
+        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var binaryName = isWindows ? "gc.exe" : "gc";
+        _binaryPath = Path.Combine(projectRoot, "gc", "bin", "Debug", "net10.0", binaryName);
+
+        if (!File.Exists(_binaryPath))
+        {
+            throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
+        }
 
         _testDir = Path.Combine(Path.GetTempPath(), $"gc_perf_test_{Guid.NewGuid()}");
         _repoDir = Path.Combine(_testDir, "repo");
@@ -45,11 +53,13 @@ public class PerformanceTests : IDisposable
             AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
         }
 
+        var outputFile = Path.Combine(_testDir, "perf_small.md");
         var stopwatch = Stopwatch.StartNew();
-        var result = RunGC("");
+        var result = RunGC($"--output {outputFile}");
         stopwatch.Stop();
 
         Assert.Equal(0, result.ExitCode);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
         Assert.True(stopwatch.ElapsedMilliseconds < 2000, $"Small repository took {stopwatch.ElapsedMilliseconds}ms (expected < 2000ms)");
 
         _output.WriteLine($"✅ Small repository processed in {stopwatch.ElapsedMilliseconds}ms");
@@ -66,11 +76,13 @@ public class PerformanceTests : IDisposable
             AddTestFile($"test{i}.cs", $"public class Test{i} {{ public void Method{i}() {{ }} }}");
         }
 
+        var outputFile = Path.Combine(_testDir, "perf_medium.md");
         var stopwatch = Stopwatch.StartNew();
-        var result = RunGC("");
+        var result = RunGC($"--output {outputFile}");
         stopwatch.Stop();
 
         Assert.Equal(0, result.ExitCode);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
         Assert.True(stopwatch.ElapsedMilliseconds < 5000, $"Medium repository took {stopwatch.ElapsedMilliseconds}ms (expected < 5000ms)");
 
         var throughput = 50.0 / stopwatch.ElapsedMilliseconds * 1000;
@@ -88,11 +100,13 @@ public class PerformanceTests : IDisposable
             AddTestFile($"test{i}.cs", $"public class Test{i} {{ public void Method{i}() {{ }} }}");
         }
 
+        var outputFile = Path.Combine(_testDir, "perf_large.md");
         var stopwatch = Stopwatch.StartNew();
-        var result = RunGC("");
+        var result = RunGC($"--output {outputFile}");
         stopwatch.Stop();
 
         Assert.Equal(0, result.ExitCode);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
         Assert.True(stopwatch.ElapsedMilliseconds < 10000, $"Large repository took {stopwatch.ElapsedMilliseconds}ms (expected < 10000ms)");
 
         _output.WriteLine($"✅ Large repository processed in {stopwatch.ElapsedMilliseconds}ms");
@@ -140,11 +154,13 @@ public class PerformanceTests : IDisposable
             AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
         }
 
+        var outputFile = Path.Combine(_testDir, "perf_parallel.md");
         var stopwatch = Stopwatch.StartNew();
-        var result = RunGC("");
+        var result = RunGC($"--output {outputFile}");
         stopwatch.Stop();
 
         Assert.Equal(0, result.ExitCode);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
 
         var avgTimePerFile = stopwatch.ElapsedMilliseconds / 30.0;
         _output.WriteLine($"Average time per file: {avgTimePerFile:F2}ms");
@@ -165,18 +181,23 @@ public class PerformanceTests : IDisposable
             AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
         }
 
+        var outputFile1 = Path.Combine(_testDir, "perf_cold.md");
+        var outputFile2 = Path.Combine(_testDir, "perf_warm.md");
+
         // Cold start
         var coldStopwatch = Stopwatch.StartNew();
-        var coldResult = RunGC("");
+        var coldResult = RunGC($"--output {outputFile1}");
         coldStopwatch.Stop();
 
         // Warm start (immediately after)
         var warmStopwatch = Stopwatch.StartNew();
-        var warmResult = RunGC("");
+        var warmResult = RunGC($"--output {outputFile2}");
         warmStopwatch.Stop();
 
         Assert.Equal(0, coldResult.ExitCode);
         Assert.Equal(0, warmResult.ExitCode);
+        Assert.Contains("[OK] Exported to", coldResult.StandardOutput);
+        Assert.Contains("[OK] Exported to", warmResult.StandardOutput);
 
         _output.WriteLine($"Cold start: {coldStopwatch.ElapsedMilliseconds}ms");
         _output.WriteLine($"Warm start: {warmStopwatch.ElapsedMilliseconds}ms");
@@ -201,13 +222,17 @@ public class PerformanceTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
 
-        // Parse discovery time from output
-        var lines = result.StandardOutput.Split('\n');
-        var discoveryLine = lines.FirstOrDefault(l => l.Contains("Discovery time"));
+        // Parse discovery time from standard error
+        var lines = result.StandardError.Split('\n');
+        var discoveryLine = lines.FirstOrDefault(l => l.Contains("File discovery"));
 
         if (discoveryLine != null)
         {
             _output.WriteLine($"Discovery performance: {discoveryLine.Trim()}");
+        }
+        else
+        {
+            _output.WriteLine("Could not find File discovery timing in debug output.");
         }
 
         _output.WriteLine($"✅ File discovery is efficient");
@@ -268,9 +293,8 @@ public class PerformanceTests : IDisposable
     {
         var processInfo = new ProcessStartInfo
         {
-            FileName = "dotnet",
-            Arguments = $"run --project {_projectPath} -- {args}",
-            WorkingDirectory = _repoDir,
+            FileName = _binaryPath,
+            Arguments = args,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false

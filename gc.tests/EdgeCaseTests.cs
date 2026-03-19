@@ -12,7 +12,7 @@ public class EdgeCaseTests : IDisposable
     private readonly ITestOutputHelper _output;
     private readonly string _testDir;
     private readonly string _repoDir;
-    private readonly string _projectPath;
+    private readonly string _binaryPath;
 
     public EdgeCaseTests(ITestOutputHelper output)
     {
@@ -26,7 +26,15 @@ public class EdgeCaseTests : IDisposable
         }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
-        _projectPath = Path.Combine(projectRoot, "gc", "gc.csproj");
+        
+        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var binaryName = isWindows ? "gc.exe" : "gc";
+        _binaryPath = Path.Combine(projectRoot, "gc", "bin", "Debug", "net10.0", binaryName);
+
+        if (!File.Exists(_binaryPath))
+        {
+            throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
+        }
 
         _testDir = Path.Combine(Path.GetTempPath(), $"gc_edge_test_{Guid.NewGuid()}");
         _repoDir = Path.Combine(_testDir, "repo");
@@ -80,10 +88,14 @@ public class EdgeCaseTests : IDisposable
         RunGitCommand("add", fileName);
         RunGitCommand("commit", "-m", "Add nested file");
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_deep.md");
+        var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("test.cs", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var outputContent = File.ReadAllText(outputFile);
+        Assert.Contains("test.cs", outputContent);
 
         _output.WriteLine($"✅ Deeply nested files handled correctly");
     }
@@ -97,9 +109,11 @@ public class EdgeCaseTests : IDisposable
         AddTestFile("测试.cs", "public class 测试 { }");   // Chinese
         AddTestFile("テスト.cs", "public class テスト { }"); // Japanese
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_unicode.md");
+        var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
 
         _output.WriteLine($"✅ Unicode characters handled correctly");
     }
@@ -119,10 +133,14 @@ public class Test
 
         AddTestFile("special.cs", specialContent);
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_special_content.md");
+        var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("special.cs", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.Contains("special.cs", content);
 
         _output.WriteLine($"✅ Special characters in content handled correctly");
     }
@@ -135,10 +153,14 @@ public class Test
         var mixedContent = "line1\r\nline2\nline3\rline4";
         AddTestFile("mixed.cs", mixedContent);
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_mixed.md");
+        var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("mixed.cs", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.Contains("mixed.cs", content);
 
         _output.WriteLine($"✅ Mixed line endings handled correctly");
     }
@@ -150,10 +172,11 @@ public class Test
 
         AddTestFile("whitespace.cs", "   \n\n\t\n   ");
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_whitespace.md");
+        var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        // Whitespace-only files should be handled appropriately
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
 
         _output.WriteLine($"✅ Whitespace-only files handled");
     }
@@ -166,10 +189,14 @@ public class Test
         var longLine = $"// {new string('x', 10000)}";
         AddTestFile("longline.cs", longLine);
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_longline.md");
+        var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("longline.cs", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.Contains("longline.cs", content);
 
         _output.WriteLine($"✅ Very long lines handled correctly");
     }
@@ -253,10 +280,14 @@ public class Test
             RunGitCommand("add", "readonly.cs");
             RunGitCommand("commit", "-m", "Add readonly file");
 
-            var result = RunGC("");
+            var outputFile = Path.Combine(_testDir, "output_readonly.md");
+            var result = RunGC($"--output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("readonly.cs", result.StandardOutput);
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            
+            var content = File.ReadAllText(outputFile);
+            Assert.Contains("readonly.cs", content);
 
             _output.WriteLine($"✅ Read-only files handled correctly");
         }
@@ -278,10 +309,12 @@ public class Test
 
         AddBinaryTestFile("empty.bin", Array.Empty<byte>());
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_zero.md");
+        var result = RunGC($"--output {outputFile}");
 
+        // For non-git discovery, it should show no files found
         Assert.Equal(0, result.ExitCode);
-        // Zero-byte files should be handled appropriately
+        Assert.Contains("No tracked files found", result.StandardError);
 
         _output.WriteLine($"✅ Zero-byte files handled");
     }
@@ -304,13 +337,17 @@ public class Test
         RunGitCommand("add", "maxsize.txt");
         RunGitCommand("commit", "-m", "Add max size file");
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_maxsize.md");
+        var result = RunGC($"--output {outputFile}");
 
-        // Should skip file at exactly max size
+        // Should include file at exactly max size
         Assert.Equal(0, result.ExitCode);
-        Assert.DoesNotContain("maxsize.txt", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var outputContent = File.ReadAllText(outputFile);
+        Assert.Contains("maxsize.txt", outputContent);
 
-        _output.WriteLine($"✅ Files at max size are skipped");
+        _output.WriteLine($"✅ Files at max size are included");
     }
 
     [Fact]
@@ -321,11 +358,15 @@ public class Test
         AddTestFile("dir1/test.cs", "public class Test1 { }");
         AddTestFile("dir2/test.cs", "public class Test2 { }");
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_dup.md");
+        var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("dir1/test.cs", result.StandardOutput);
-        Assert.Contains("dir2/test.cs", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.Contains("dir1/test.cs", content);
+        Assert.Contains("dir2/test.cs", content);
 
         _output.WriteLine($"✅ Duplicate file names in different directories handled");
     }
@@ -372,8 +413,8 @@ public class Test
     {
         var processInfo = new ProcessStartInfo
         {
-            FileName = "dotnet",
-            Arguments = $"run --project {_projectPath} -- {args}",
+            FileName = _binaryPath,
+            Arguments = args,
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

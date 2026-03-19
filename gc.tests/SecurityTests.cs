@@ -13,7 +13,7 @@ public class SecurityTests : IDisposable
     private readonly ITestOutputHelper _output;
     private readonly string _testDir;
     private readonly string _repoDir;
-    private readonly string _projectPath;
+    private readonly string _binaryPath;
 
     public SecurityTests(ITestOutputHelper output)
     {
@@ -27,7 +27,15 @@ public class SecurityTests : IDisposable
         }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
-        _projectPath = Path.Combine(projectRoot, "gc", "gc.csproj");
+        
+        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var binaryName = isWindows ? "gc.exe" : "gc";
+        _binaryPath = Path.Combine(projectRoot, "gc", "bin", "Debug", "net10.0", binaryName);
+
+        if (!File.Exists(_binaryPath))
+        {
+            throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
+        }
 
         _testDir = Path.Combine(Path.GetTempPath(), $"gc_security_test_{Guid.NewGuid()}");
         _repoDir = Path.Combine(_testDir, "repo");
@@ -85,15 +93,16 @@ public class Test
 
         AddTestFile("injection.cs", content);
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_injection.md");
+        var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
 
         // Verify markdown is properly formed
-        var outputFiles = Directory.GetFiles(_testDir, "*.md");
-        if (outputFiles.Length > 0)
+        if (File.Exists(outputFile))
         {
-            var markdown = File.ReadAllText(outputFiles[0]);
+            var markdown = File.ReadAllText(outputFile);
             Assert.Contains("injection.cs", markdown);
 
             _output.WriteLine($"✅ Markdown injection properly escaped");
@@ -105,6 +114,9 @@ public class Test
     {
         _output.WriteLine("Testing binary file detection...");
 
+        // Add a normal file to ensure the run succeeds
+        AddTestFile("normal.cs", "public class Normal { }");
+
         // Create binary file with null bytes
         var binaryContent = new byte[] { 0x00, 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x00 };
         var filePath = Path.Combine(_repoDir, "test.bin");
@@ -113,10 +125,15 @@ public class Test
         RunGitCommand("add", "test.bin");
         RunGitCommand("commit", "-m", "Add binary file");
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_bin_null.md");
+        var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.DoesNotContain("test.bin", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.Contains("normal.cs", content);
+        Assert.DoesNotContain("test.bin", content);
 
         _output.WriteLine($"✅ Binary files with null bytes are detected and skipped");
     }
@@ -126,6 +143,9 @@ public class Test
     {
         _output.WriteLine("Testing executable format detection...");
 
+        // Add a normal file to ensure the run succeeds
+        AddTestFile("normal.cs", "public class Normal { }");
+
         // Create PE executable header
         var peHeader = new byte[] { 0x4D, 0x5A }; // "MZ" header
         var filePath = Path.Combine(_repoDir, "test.exe");
@@ -134,10 +154,15 @@ public class Test
         RunGitCommand("add", "test.exe");
         RunGitCommand("commit", "-m", "Add executable");
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_exe.md");
+        var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.DoesNotContain("test.exe", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.Contains("normal.cs", content);
+        Assert.DoesNotContain("test.exe", content);
 
         _output.WriteLine($"✅ Executable formats are properly skipped");
     }
@@ -210,11 +235,15 @@ public class Test
             RunGitCommand("add", "unreadable.cs");
             RunGitCommand("commit", "-m", "Add unreadable file");
 
-            var result = RunGC("");
+            var outputFile = Path.Combine(_testDir, "output_unreadable.md");
+            var result = RunGC($"--output {outputFile}");
 
             // Should not crash, should skip the file
             Assert.Equal(0, result.ExitCode);
-            Assert.DoesNotContain("unreadable.cs", result.StandardOutput);
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            
+            var content = File.ReadAllText(outputFile);
+            Assert.DoesNotContain("unreadable.cs", content);
 
             _output.WriteLine($"✅ Permission errors are handled gracefully");
         }
@@ -239,7 +268,8 @@ public class Test
         // Run multiple GC instances concurrently
         var tasks = Enumerable.Range(0, 5).Select(i => Task.Run(() =>
         {
-            var result = RunGC("");
+            var outputFile = Path.Combine(_testDir, $"output_concurrent_{i}.md");
+            var result = RunGC($"--output {outputFile}");
             return result.ExitCode;
         })).ToArray();
 
@@ -273,10 +303,15 @@ public class Test
             }
         }
 
-        var result = RunGC("");
+        var outputFile = Path.Combine(_testDir, "output_special_paths.md");
+        var result = RunGC($"--output {outputFile}");
 
         // Should handle gracefully
         Assert.True(result.ExitCode == 0 || result.ExitCode != 0);
+        if (result.ExitCode == 0)
+        {
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+        }
 
         _output.WriteLine($"✅ Special path characters handled appropriately");
     }
@@ -308,8 +343,8 @@ public class Test
     {
         var processInfo = new ProcessStartInfo
         {
-            FileName = "dotnet",
-            Arguments = $"run --project {_projectPath} -- {args}",
+            FileName = _binaryPath,
+            Arguments = args,
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

@@ -16,7 +16,7 @@ public class ReleaseBinaryTests : IDisposable
     private readonly string _testDir;
     private readonly string _downloadDir;
     private readonly HttpClient _httpClient;
-    private readonly string _projectPath;
+    private readonly string _binaryPath;
 
     public ReleaseBinaryTests(ITestOutputHelper output)
     {
@@ -30,7 +30,15 @@ public class ReleaseBinaryTests : IDisposable
         }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
-        _projectPath = Path.Combine(projectRoot, "gc", "gc.csproj");
+        
+        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var binaryName = isWindows ? "gc.exe" : "gc";
+        _binaryPath = Path.Combine(projectRoot, "gc", "bin", "Debug", "net10.0", binaryName);
+
+        if (!File.Exists(_binaryPath))
+        {
+            throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
+        }
 
         _testDir = Path.Combine(Path.GetTempPath(), $"gc_test_{Guid.NewGuid()}");
         _downloadDir = Path.Combine(_testDir, "downloads");
@@ -105,7 +113,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGC("--test");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("test", result.StandardOutput.ToLower());
+        Assert.Contains("Running gc test suite", result.StandardOutput);
 
         _output.WriteLine($"✅ Test command works");
     }
@@ -132,7 +140,8 @@ public class ReleaseBinaryTests : IDisposable
         var noGitDir = Path.Combine(_testDir, "no_git_repo");
         Directory.CreateDirectory(noGitDir);
 
-        var result = RunGCInDirectory(noGitDir, "");
+        // Force git discovery so it fails
+        var result = RunGCInDirectory(noGitDir, "--discovery git");
 
         Assert.NotEqual(0, result.ExitCode);
         Assert.Contains("git", result.StandardError.ToLower());
@@ -163,10 +172,14 @@ public class ReleaseBinaryTests : IDisposable
         var testRepo = CreateTestRepository(new[] { "test.cs" });
         AddFileToRepository(testRepo, "test.cs", "public class Test { }");
 
-        var result = RunGCInDirectory(testRepo, "");
+        var outputFile = Path.Combine(_testDir, "output_single.md");
+        var result = RunGCInDirectory(testRepo, $"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("test.cs", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.Contains("test.cs", content);
 
         _output.WriteLine($"✅ Single file processing works");
     }
@@ -181,12 +194,16 @@ public class ReleaseBinaryTests : IDisposable
         AddFileToRepository(testRepo, "test.js", "JavaScript code");
         AddFileToRepository(testRepo, "test.md", "Markdown doc");
 
-        var result = RunGCInDirectory(testRepo, "--extension cs");
+        var outputFile = Path.Combine(_testDir, "output_ext.md");
+        var result = RunGCInDirectory(testRepo, $"--extension cs --output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("test.cs", result.StandardOutput);
-        Assert.DoesNotContain("test.js", result.StandardOutput);
-        Assert.DoesNotContain("test.md", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.Contains("test.cs", content);
+        Assert.DoesNotContain("test.js", content);
+        Assert.DoesNotContain("test.md", content);
 
         _output.WriteLine($"✅ Extension filtering works correctly");
     }
@@ -201,12 +218,16 @@ public class ReleaseBinaryTests : IDisposable
         AddFileToRepository(testRepo, "test.js", "JavaScript code");
         AddFileToRepository(testRepo, "test.md", "Markdown doc");
 
-        var result = RunGCInDirectory(testRepo, "--extension cs js");
+        var outputFile = Path.Combine(_testDir, "output_multiext.md");
+        var result = RunGCInDirectory(testRepo, $"--extension cs js --output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("test.cs", result.StandardOutput);
-        Assert.Contains("test.js", result.StandardOutput);
-        Assert.DoesNotContain("test.md", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.Contains("test.cs", content);
+        Assert.Contains("test.js", content);
+        Assert.DoesNotContain("test.md", content);
 
         _output.WriteLine($"✅ Multiple extension filtering works");
     }
@@ -220,11 +241,15 @@ public class ReleaseBinaryTests : IDisposable
         AddFileToRepository(testRepo, "src/test.cs", "C# code");
         AddFileToRepository(testRepo, "test.cs", "C# code");
 
-        var result = RunGCInDirectory(testRepo, "--exclude src/");
+        var outputFile = Path.Combine(_testDir, "output_exclude.md");
+        var result = RunGCInDirectory(testRepo, $"--exclude src/ --output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.DoesNotContain("src/test.cs", result.StandardOutput);
-        Assert.Contains("test.cs", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.DoesNotContain("src/test.cs", content);
+        Assert.Contains("test.cs", content);
 
         _output.WriteLine($"✅ Exclude patterns work correctly");
     }
@@ -241,6 +266,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, $"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
         Assert.True(File.Exists(outputFile));
         Assert.Contains("test.cs", File.ReadAllText(outputFile));
 
@@ -274,7 +300,8 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, "--verbose");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("discovered", result.StandardOutput.ToLower());
+        Assert.Contains("[VERBOSE]", result.StandardError);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
 
         _output.WriteLine($"✅ Verbose logging works");
     }
@@ -290,7 +317,8 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, "--debug");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("debug", result.StandardOutput.ToLower());
+        Assert.Contains("[DEBUG]", result.StandardError);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
 
         _output.WriteLine($"✅ Debug logging works");
     }
@@ -304,10 +332,14 @@ public class ReleaseBinaryTests : IDisposable
         AddFileToRepository(testRepo, "test.cs", "public class Test { }");
         AddBinaryFileToRepository(testRepo, "test.bin");
 
-        var result = RunGCInDirectory(testRepo, "");
+        var outputFile = Path.Combine(_testDir, "output_bin.md");
+        var result = RunGCInDirectory(testRepo, $"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.DoesNotContain("test.bin", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.DoesNotContain("test.bin", content);
 
         _output.WriteLine($"✅ Binary files are correctly skipped");
     }
@@ -322,10 +354,14 @@ public class ReleaseBinaryTests : IDisposable
         var largeContent = new string('A', 2 * 1024 * 1024); // 2MB
         AddFileToRepository(testRepo, "large.txt", largeContent);
 
-        var result = RunGCInDirectory(testRepo, "");
+        var outputFile = Path.Combine(_testDir, "output_large.md");
+        var result = RunGCInDirectory(testRepo, $"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.DoesNotContain("large.txt", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.DoesNotContain("large.txt", content);
 
         _output.WriteLine($"✅ Large files are correctly skipped");
     }
@@ -346,9 +382,11 @@ public class ReleaseBinaryTests : IDisposable
 
         AddFileToRepository(testRepo, "test file.cs", "public class Test { }");
 
-        var result = RunGCInDirectory(testRepo, "");
+        var outputFile = Path.Combine(_testDir, "output_special.md");
+        var result = RunGCInDirectory(testRepo, $"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
 
         _output.WriteLine($"✅ Special characters in paths handled correctly");
     }
@@ -363,10 +401,14 @@ public class ReleaseBinaryTests : IDisposable
         AddFileToRepository(testRepo, "test.js", "JavaScript code");
         AddFileToRepository(testRepo, "test.py", "Python code");
 
-        var result = RunGCInDirectory(testRepo, "--preset backend");
+        var outputFile = Path.Combine(_testDir, "output_preset.md");
+        var result = RunGCInDirectory(testRepo, $"--preset backend --output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("test.py", result.StandardOutput);
+        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        
+        var content = File.ReadAllText(outputFile);
+        Assert.Contains("test.py", content);
 
         _output.WriteLine($"✅ Preset filters work correctly");
     }
@@ -429,8 +471,8 @@ public class ReleaseBinaryTests : IDisposable
     {
         var processInfo = new ProcessStartInfo
         {
-            FileName = "dotnet",
-            Arguments = $"run --project {_projectPath} -- {args}",
+            FileName = _binaryPath,
+            Arguments = args,
             WorkingDirectory = directory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

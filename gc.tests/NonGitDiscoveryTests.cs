@@ -11,7 +11,7 @@ public class NonGitDiscoveryTests : IDisposable
 {
     private readonly ITestOutputHelper _output;
     private readonly string _testDir;
-    private readonly string _projectPath;
+    private readonly string _binaryPath;
 
     public NonGitDiscoveryTests(ITestOutputHelper output)
     {
@@ -25,7 +25,15 @@ public class NonGitDiscoveryTests : IDisposable
         }
         
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
-        _projectPath = Path.Combine(projectRoot, "gc", "gc.csproj");
+        
+        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var binaryName = isWindows ? "gc.exe" : "gc";
+        _binaryPath = Path.Combine(projectRoot, "gc", "bin", "Debug", "net10.0", binaryName);
+
+        if (!File.Exists(_binaryPath))
+        {
+            throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
+        }
         
         _testDir = Path.Combine(Path.GetTempPath(), $"gc_nongit_test_{Guid.NewGuid()}");
         Directory.CreateDirectory(_testDir);
@@ -46,10 +54,16 @@ public class NonGitDiscoveryTests : IDisposable
         {
             Directory.SetCurrentDirectory(_testDir);
 
-            var result = RunGC("");
+            var outputFile = Path.Combine(_testDir, "output.md");
+            var result = RunGC($"--output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("Discovered", result.StandardOutput);
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains(outputFile, result.StandardOutput);
+            
+            var content = File.ReadAllText(outputFile);
+            Assert.Contains("test.js", content);
+            Assert.Contains("test.cs", content);
 
             _output.WriteLine($"✅ Non-git discovery works with multiple files");
         }
@@ -74,10 +88,15 @@ public class NonGitDiscoveryTests : IDisposable
         {
             Directory.SetCurrentDirectory(_testDir);
 
-            var result = RunGC("--extension js");
+            var outputFile = Path.Combine(_testDir, "output.md");
+            var result = RunGC($"--extension js --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("test.js", result.StandardOutput);
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            
+            var content = File.ReadAllText(outputFile);
+            Assert.Contains("test.js", content);
+            Assert.DoesNotContain("test.cs", content);
 
             _output.WriteLine($"✅ Extension filtering works in non-git mode");
         }
@@ -102,10 +121,14 @@ public class NonGitDiscoveryTests : IDisposable
         {
             Directory.SetCurrentDirectory(_testDir);
 
-            var result = RunGC("--preset web");
+            var outputFile = Path.Combine(_testDir, "output.md");
+            var result = RunGC($"--preset web --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("test.js", result.StandardOutput);
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            
+            var content = File.ReadAllText(outputFile);
+            Assert.Contains("test.js", content);
 
             _output.WriteLine($"✅ Preset filtering works in non-git mode");
         }
@@ -132,10 +155,15 @@ public class NonGitDiscoveryTests : IDisposable
         {
             Directory.SetCurrentDirectory(_testDir);
 
-            var result = RunGC("--extension js");
+            var outputFile = Path.Combine(_testDir, "output.md");
+            var result = RunGC($"--extension js --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("test.js", result.StandardOutput);
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            
+            var content = File.ReadAllText(outputFile);
+            Assert.Contains("test.js", content);
+            Assert.DoesNotContain("node_modules", content);
 
             _output.WriteLine($"✅ System directories are properly ignored");
         }
@@ -164,11 +192,15 @@ public class NonGitDiscoveryTests : IDisposable
         {
             Directory.SetCurrentDirectory(_testDir);
 
-            var result = RunGC("--preset web");
+            var outputFile = Path.Combine(_testDir, "output.md");
+            var result = RunGC($"--preset web --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("helper.ts", result.StandardOutput);
-            Assert.Contains("parser.js", result.StandardOutput);
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            
+            var content = File.ReadAllText(outputFile);
+            Assert.Contains("helper.ts", content);
+            Assert.Contains("parser.js", content);
 
             _output.WriteLine($"✅ Nested directories are handled correctly");
         }
@@ -197,12 +229,16 @@ public class NonGitDiscoveryTests : IDisposable
         {
             Directory.SetCurrentDirectory(_testDir);
 
-            var result = RunGC("--paths src");
+            var outputFile = Path.Combine(_testDir, "output.md");
+            var result = RunGC($"--paths src --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("src/file1.cs", result.StandardOutput);
-            Assert.DoesNotContain("lib/file2.cs", result.StandardOutput);
-            Assert.DoesNotContain("root.cs", result.StandardOutput);
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            
+            var content = File.ReadAllText(outputFile);
+            Assert.Contains("src/file1.cs", content);
+            Assert.DoesNotContain("lib/file2.cs", content);
+            Assert.DoesNotContain("root.cs", content);
 
             _output.WriteLine($"✅ Paths filtering works in non-git mode");
         }
@@ -224,10 +260,14 @@ public class NonGitDiscoveryTests : IDisposable
         {
             Directory.SetCurrentDirectory(_testDir);
 
-            var result = RunGC("--discovery filesystem");
+            var outputFile = Path.Combine(_testDir, "output.md");
+            var result = RunGC($"--discovery filesystem --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("test.cs", result.StandardOutput);
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            
+            var content = File.ReadAllText(outputFile);
+            Assert.Contains("test.cs", content);
 
             _output.WriteLine($"✅ Explicit filesystem mode works");
         }
@@ -260,12 +300,14 @@ public class NonGitDiscoveryTests : IDisposable
         {
             Directory.SetCurrentDirectory(libDir);
 
-            var result = RunGC("--preset web --output /tmp/third_party_copy.md");
+            var outputFile = Path.Combine(_testDir, "third_party_copy.md");
+            var result = RunGC($"--preset web --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.True(File.Exists("/tmp/third_party_copy.md"));
+            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.True(File.Exists(outputFile));
 
-            var content = File.ReadAllText("/tmp/third_party_copy.md");
+            var content = File.ReadAllText(outputFile);
             Assert.Contains("src/index.ts", content);
             Assert.Contains("lib/helper.js", content);
             // Should include source files, not dist files
@@ -283,8 +325,8 @@ public class NonGitDiscoveryTests : IDisposable
     {
         var processInfo = new ProcessStartInfo
         {
-            FileName = "dotnet",
-            Arguments = $"run --project {_projectPath} -- {args}",
+            FileName = _binaryPath,
+            Arguments = args,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false

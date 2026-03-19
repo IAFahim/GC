@@ -54,18 +54,62 @@ public static class CliParserExtensions
             if (arg.IsHelpFlag())
             {
                 showHelp = true;
+                state = ParseState.None;
                 continue;
             }
 
             if (arg.IsTestFlag())
             {
                 runTests = true;
+                state = ParseState.None;
                 continue;
             }
 
             if (arg.IsBenchmarkFlag())
             {
                 runRealBenchmark = true;
+                state = ParseState.None;
+                continue;
+            }
+
+            if (arg.IsVerboseFlag())
+            {
+                verbose = true;
+                state = ParseState.None;
+                continue;
+            }
+
+            if (arg.IsDebugFlag())
+            {
+                debug = true;
+                state = ParseState.None;
+                continue;
+            }
+
+            if (arg.IsInitConfigFlag())
+            {
+                initConfig = true;
+                state = ParseState.None;
+                continue;
+            }
+
+            if (arg.IsValidateConfigFlag())
+            {
+                validateConfig = true;
+                state = ParseState.None;
+                continue;
+            }
+
+            if (arg.IsDumpConfigFlag())
+            {
+                dumpConfig = true;
+                state = ParseState.None;
+                continue;
+            }
+
+            if (arg.TryGetNewState(out var newState))
+            {
+                state = newState;
                 continue;
             }
 
@@ -75,58 +119,30 @@ public static class CliParserExtensions
                 continue;
             }
 
-            if (arg.IsVerboseFlag())
+            // If it's not a flag, process it as a value for the current state
+            if (state != ParseState.None)
             {
-                verbose = true;
-                continue;
-            }
-
-            if (arg.IsDebugFlag())
-            {
-                debug = true;
-                continue;
-            }
-
-            if (arg.IsInitConfigFlag())
-            {
-                initConfig = true;
-                continue;
-            }
-
-            if (arg.IsValidateConfigFlag())
-            {
-                validateConfig = true;
-                continue;
-            }
-
-            if (arg.IsDumpConfigFlag())
-            {
-                dumpConfig = true;
-                continue;
-            }
-
-            if (arg.TryGetNewState(out var newState))
-            {
-                // Check if we have a dangling argument from previous state
-                if (state != ParseState.None && i + 1 >= args.Length)
+                arg.ProcessArg(state, paths, extensions, excludes, presets, ref output, ref discoveryMode, ref maxMemoryBytes);
+                
+                // Some states only accept one value
+                if (state == ParseState.Output || state == ParseState.MaxMemory || state == ParseState.Discovery)
                 {
-                    Console.Error.WriteLine($"Error: Missing value for argument: {args[args.Length - 1]}");
-                    Environment.Exit(1);
+                    state = ParseState.None;
                 }
-
-                state = newState;
-                continue;
             }
-
-            arg.ProcessArg(state, paths, extensions, excludes, presets, ref output, ref discoveryMode, ref maxMemoryBytes);
-            state = ParseState.None; // Reset state after processing
-        }
-
-        // Check for dangling state at the end
-        if (state != ParseState.None)
-        {
-            Console.Error.WriteLine($"Error: Missing value for last argument");
-            Environment.Exit(1);
+            else
+            {
+                // Unrecognized argument or value without a flag
+                if (!arg.StartsWith("-"))
+                {
+                    // Fallback: treat as path if no flag is active
+                    paths.Add(arg.Replace('\\', '/'));
+                }
+                else
+                {
+                    Console.Error.WriteLine($"Warning: Unrecognized option: {arg}");
+                }
+            }
         }
 
         return new CliArguments(
@@ -241,7 +257,18 @@ public static class CliParserExtensions
                 paths.Add(arg.Replace('\\', '/'));
                 break;
             case ParseState.Extensions:
-                extensions.Add(arg.TrimStart('.').ToLowerInvariant());
+                // Support comma-separated extensions too
+                if (arg.Contains(","))
+                {
+                    foreach (var ext in arg.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        extensions.Add(ext.Trim().TrimStart('.').ToLowerInvariant());
+                    }
+                }
+                else
+                {
+                    extensions.Add(arg.TrimStart('.').ToLowerInvariant());
+                }
                 break;
             case ParseState.Excludes:
                 excludes.Add(arg.Replace('\\', '/'));
@@ -257,8 +284,6 @@ public static class CliParserExtensions
                 break;
             case ParseState.Discovery:
                 discoveryMode = ParseDiscoveryMode(arg);
-                break;
-            case ParseState.None:
                 break;
         }
     }

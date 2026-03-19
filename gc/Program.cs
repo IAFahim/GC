@@ -10,95 +10,112 @@ public static class Program
 {
     public static void Main(string[] args)
     {
-        if (args == null) throw new ArgumentNullException(nameof(args));
-
-        // Parse CLI args (configuration is loaded internally)
-        var cliArgs = args.ParseCli();
-
-        // Handle new CLI flags
-        if (cliArgs.InitConfig)
+        try
         {
-            InitializeConfig();
-            return;
+            if (args == null) throw new ArgumentNullException(nameof(args));
+
+            // Parse CLI args (configuration is loaded internally)
+            var cliArgs = args.ParseCli();
+
+            // Handle new CLI flags
+            if (cliArgs.InitConfig)
+            {
+                InitializeConfig();
+                return;
+            }
+
+            if (cliArgs.ValidateConfig)
+            {
+                ValidateConfig(cliArgs.Configuration!);
+                return;
+            }
+
+            if (cliArgs.DumpConfig)
+            {
+                DumpConfig(cliArgs.Configuration!);
+                return;
+            }
+
+            if (cliArgs.ShowHelp)
+            {
+                PrintHelp();
+                return;
+            }
+
+            if (cliArgs.RunTests)
+            {
+                TestRunner.RunTests();
+                return;
+            }
+
+            if (cliArgs.RunRealBenchmark)
+            {
+                RealBenchmark.RunRealBenchmark();
+                return;
+            }
+
+            Logger.LogDebug($"gc started with verbose logging. Arguments: {string.Join(" ", args)}");
+
+            var rawFiles = cliArgs.DiscoverFiles();
+
+            if (rawFiles.Length == 0)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Error.WriteLine("No tracked files found in this repository.");
+                Console.ResetColor();
+                Console.Error.WriteLine("The repository appears to be empty (no files have been committed).");
+                return;
+            }
+
+            var filteredFiles = rawFiles.FilterFiles(cliArgs);
+            if (filteredFiles.Length == 0)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Error.WriteLine($"No files match the specified filters.");
+                Console.ResetColor();
+                Console.Error.WriteLine($"Found {rawFiles.Length} total files, but all were filtered out.");
+                Console.Error.WriteLine("Try adjusting your --paths, --extension, or --exclude options.");
+                return;
+            }
+
+            // Use streaming for file output to reduce memory usage
+            if (!string.IsNullOrEmpty(cliArgs.OutputFile))
+            {
+                // Stream directly to file without holding everything in memory
+                using var outputStream = File.Create(cliArgs.OutputFile);
+                var (fileCount, totalBytes) = filteredFiles.ReadContentsLazy(cliArgs).GenerateMarkdownStreaming(outputStream, cliArgs);
+
+                // Print stats
+                var tokens = totalBytes / 4;
+                var sizeStr = totalBytes < 1024 ? $"{totalBytes} B" :
+                    totalBytes < 1048576 ? $"{totalBytes / 1024.0:F2} KB" :
+                    $"{totalBytes / 1048576.0:F2} MB";
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.Write("[OK] ");
+                Console.ResetColor();
+                Console.WriteLine($"Exported to {cliArgs.OutputFile}: {fileCount} files | Size: {sizeStr} | Tokens: ~{tokens}");
+            }
+            else
+            {
+                // For clipboard, we still need the string
+                var fileContents = filteredFiles.ReadContents(cliArgs);
+                var markdown = fileContents.GenerateMarkdown(cliArgs);
+                markdown.HandleOutput(cliArgs, fileContents);
+            }
         }
-
-        if (cliArgs.ValidateConfig)
+        catch (Exception ex)
         {
-            ValidateConfig(cliArgs.Configuration!);
-            return;
-        }
-
-        if (cliArgs.DumpConfig)
-        {
-            DumpConfig(cliArgs.Configuration!);
-            return;
-        }
-
-        if (cliArgs.ShowHelp)
-        {
-            PrintHelp();
-            return;
-        }
-
-        if (cliArgs.RunTests)
-        {
-            TestRunner.RunTests();
-            return;
-        }
-
-        if (cliArgs.RunRealBenchmark)
-        {
-            RealBenchmark.RunRealBenchmark();
-            return;
-        }
-
-        Logger.LogDebug($"gc started with verbose logging. Arguments: {string.Join(" ", args)}");
-
-        var rawFiles = cliArgs.DiscoverFiles();
-
-        if (rawFiles.Length == 0)
-        {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.Error.WriteLine("No tracked files found in this repository.");
             Console.ResetColor();
-            Console.Error.WriteLine("The repository appears to be empty (no files have been committed).");
-            return;
-        }
-
-        var filteredFiles = rawFiles.FilterFiles(cliArgs);
-        if (filteredFiles.Length == 0)
-        {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.Error.WriteLine($"No files match the specified filters.");
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"[FATAL ERROR] {ex.Message}");
             Console.ResetColor();
-            Console.Error.WriteLine($"Found {rawFiles.Length} total files, but all were filtered out.");
-            Console.Error.WriteLine("Try adjusting your --paths, --extension, or --exclude options.");
-            return;
-        }
-
-        // Use streaming for file output to reduce memory usage
-        if (!string.IsNullOrEmpty(cliArgs.OutputFile))
-        {
-            // Stream directly to file without holding everything in memory
-            using var outputStream = File.Create(cliArgs.OutputFile);
-            var (fileCount, totalBytes) = filteredFiles.ReadContentsLazy(cliArgs).GenerateMarkdownStreaming(outputStream, cliArgs);
-
-            // Print stats
-            var tokens = totalBytes / 4;
-            var sizeStr = totalBytes < 1024 ? $"{totalBytes} B" :
-                totalBytes < 1048576 ? $"{totalBytes / 1024.0:F2} KB" :
-                $"{totalBytes / 1048576.0:F2} MB";
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.Write("[OK] ");
-            Console.ResetColor();
-            Console.WriteLine($"Exported to {cliArgs.OutputFile}: {fileCount} files | Size: {sizeStr} | Tokens: ~{tokens}");
-        }
-        else
-        {
-            // For clipboard, we still need the string
-            var fileContents = filteredFiles.ReadContents(cliArgs);
-            var markdown = fileContents.GenerateMarkdown(cliArgs);
-            markdown.HandleOutput(cliArgs, fileContents);
+            
+            if (Environment.GetEnvironmentVariable("GC_DEBUG") == "1")
+            {
+                Console.Error.WriteLine(ex.StackTrace);
+            }
+            
+            Environment.Exit(1);
         }
     }
 

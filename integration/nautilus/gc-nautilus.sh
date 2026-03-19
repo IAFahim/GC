@@ -13,12 +13,8 @@
 LOG_FILE="/tmp/gc-nautilus.log"
 echo "--- $(date) ---" > "$LOG_FILE"
 
-# Nautilus passes selected paths via NAUTILUS_SCRIPT_SELECTED_FILE_PATHS
-# It is newline-delimited.
-IFS=$'\n'
-SELECTED_PATHS=($NAUTILUS_SCRIPT_SELECTED_FILE_PATHS)
-
-if [ ${#SELECTED_PATHS[@]} -eq 0 ]; then
+# Nautilus passes selected paths as arguments to the script
+if [ "$#" -eq 0 ]; then
     notify-send "gc" "No files or folders selected." -i info
     echo "No paths selected" >> "$LOG_FILE"
     exit 0
@@ -26,7 +22,7 @@ fi
 
 # Prepare paths array
 TARGET_PATHS=()
-for path in "${SELECTED_PATHS[@]}"; do
+for path in "$@"; do
     # Convert relative path to absolute if needed
     if [[ "$path" != /* ]]; then
         path="$(pwd)/$path"

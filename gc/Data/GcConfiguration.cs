@@ -1,7 +1,23 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text.Json.Serialization;
 
 namespace gc.Data;
+
+[JsonSerializable(typeof(GcConfiguration))]
+[JsonSerializable(typeof(LimitsConfiguration))]
+[JsonSerializable(typeof(DiscoveryConfiguration))]
+[JsonSerializable(typeof(FiltersConfiguration))]
+[JsonSerializable(typeof(PresetConfiguration))]
+[JsonSerializable(typeof(MarkdownConfiguration))]
+[JsonSerializable(typeof(OutputConfiguration))]
+[JsonSerializable(typeof(LoggingConfiguration))]
+[JsonSerializable(typeof(Dictionary<string, PresetConfiguration>))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
+public partial class GcJsonSerializerContext : JsonSerializerContext
+{
+}
 
 /// <summary>
 /// Main configuration class for GC tool.
@@ -62,7 +78,7 @@ public class LimitsConfiguration
             size = size.Substring(0, size.Length - 1);
         }
 
-        if (double.TryParse(size, out var value))
+        if (double.TryParse(size, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
         {
             return (long)(value * multiplier);
         }

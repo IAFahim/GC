@@ -24,6 +24,7 @@ public static class FileFilterExtensions
 
         var filtered = rawFiles
             .AsParallel()
+            .WithDegreeOfParallelism(Environment.ProcessorCount)
             .Where(path => path.IsValidPath(args, activeExtensions))
             .Select(path =>
             {
@@ -34,6 +35,16 @@ public static class FileFilterExtensions
                 return new FileEntry(path, extension, language);
             })
             .ToArray();
+
+        // Enforce MaxFiles limit
+        var maxFiles = args.Configuration?.Limits?.MaxFiles ?? 100000;
+        if (filtered.Length > maxFiles && maxFiles > 0)
+        {
+            Logger.LogVerbose($"Limiting files from {filtered.Length} to {maxFiles} (MaxFiles limit)");
+            var limited = new FileEntry[maxFiles];
+            Array.Copy(filtered, limited, maxFiles);
+            filtered = limited;
+        }
 
         Logger.LogVerbose($"Filtered to {filtered.Length} files");
         Logger.LogDebug($"Rejected {rawFiles.Length - filtered.Length} files");
@@ -158,7 +169,15 @@ public static class FileFilterExtensions
 
         foreach (var pathStr in paths)
         {
-            if (path.StartsWith(pathStr, StringComparison.OrdinalIgnoreCase))
+            // Normalize slashes for comparison
+            var normalizedPathStr = pathStr.Replace('\\', '/').TrimEnd('/');
+            
+            if (path.Equals(normalizedPathStr, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (path.StartsWith(normalizedPathStr + "/", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

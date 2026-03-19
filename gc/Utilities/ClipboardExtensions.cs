@@ -17,7 +17,7 @@ public static class ClipboardExtensions
 
         // Check clipboard size before copying
         var markdownSize = System.Text.Encoding.UTF8.GetByteCount(markdown);
-        const long maxClipboardSize = 10485760; // 10MB typical clipboard limit
+        var maxClipboardSize = args.Configuration?.Limits?.GetMaxClipboardSizeBytes() ?? 10485760; // 10MB default
 
         Logger.LogVerbose($"Output size: {FormatSize(markdownSize)}");
 

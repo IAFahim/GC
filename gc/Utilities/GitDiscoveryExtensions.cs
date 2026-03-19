@@ -142,17 +142,19 @@ public static class GitDiscoveryExtensions
 
         using var stream = process.StandardOutput.BaseStream;
         int bytesRead;
-        int start = 0;
         int position = 0;
 
-        while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+        while ((bytesRead = stream.Read(buffer, position, buffer.Length - position)) > 0)
         {
-            for (var i = 0; i < bytesRead; i++)
+            int totalBytes = position + bytesRead;
+            int start = 0;
+
+            for (var i = position; i < totalBytes; i++)
             {
                 if (buffer[i] == 0)  // Null terminator found
                 {
                     // Calculate the length of the filename
-                    var fileNameLength = position - start;
+                    var fileNameLength = i - start;
 
                     // Create a span from the buffer for this filename
                     var fileNameSpan = buffer.AsSpan(start, fileNameLength);
@@ -163,26 +165,26 @@ public static class GitDiscoveryExtensions
 
                     // Move to next filename
                     start = i + 1;
-                    position = start;
-                }
-                else
-                {
-                    position++;
                 }
             }
 
             // Reset position for next buffer read, keep overflow data
-            if (start < bytesRead)
+            if (start < totalBytes)
             {
+                var remaining = totalBytes - start;
+                
+                // If the remaining string is equal to the buffer length, we need a bigger buffer
+                if (remaining == buffer.Length)
+                {
+                    Array.Resize(ref buffer, buffer.Length * 2);
+                }
+                
                 // Copy remaining data to start of buffer
-                var remaining = bytesRead - start;
                 Array.Copy(buffer, start, buffer, 0, remaining);
-                start = 0;
                 position = remaining;
             }
             else
             {
-                start = 0;
                 position = 0;
             }
         }

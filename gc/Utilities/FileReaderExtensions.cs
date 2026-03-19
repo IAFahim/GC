@@ -51,6 +51,7 @@ public static class FileReaderExtensions
 
         var results = entries
             .AsParallel()
+            .WithDegreeOfParallelism(Environment.ProcessorCount)
             .Select(entry => TryReadFile(entry, ref processedCount, ref skippedCount, ref errorCount, entries.Length))
             .OfType<FileContent>()
             .ToArray();
@@ -71,7 +72,7 @@ public static class FileReaderExtensions
         }
 
         var fileInfo = new FileInfo(entry.Path);
-        if (fileInfo.Length == 0 || fileInfo.Length > Constants.MaxFileSize)
+        if (fileInfo.Length > Constants.MaxFileSize)
         {
             Logger.LogDebug($"Skipping {entry.Path}: size={fileInfo.Length}, max={Constants.MaxFileSize}");
             Interlocked.Increment(ref skippedCount);
@@ -80,15 +81,41 @@ public static class FileReaderExtensions
 
         try
         {
-            // Check for binary files before reading to prevent corruption
-            if (IsBinaryFile(entry.Path, fileInfo.Length))
+            // Read the entire file into memory (since we need it anyway)
+            var bytes = File.ReadAllBytes(entry.Path);
+            
+            // Check for binary files by looking for non-printable characters in the first 4KB
+            // Allow null bytes for UTF-16/UTF-32 support, but check ratio of text vs non-text
+            int checkLength = Math.Min(4096, bytes.Length);
+            int nonPrintableCount = 0;
+            bool isBinary = false;
+            
+            for (var i = 0; i < checkLength; i++)
+            {
+                byte b = bytes[i];
+                // Non-printable control characters, excluding standard whitespace (tab, LF, CR)
+                if (b < 32 && b != 9 && b != 10 && b != 13)
+                {
+                    // If it's a null byte, we don't immediately fail, but we count it
+                    nonPrintableCount++;
+                }
+            }
+
+            // If more than 10% of characters are non-printable, consider it binary
+            // Also consider files with very high null-byte ratios as binary
+            if (checkLength > 0 && ((double)nonPrintableCount / checkLength) > 0.1)
+            {
+                isBinary = true;
+            }
+
+            if (isBinary)
             {
                 Logger.LogDebug($"Skipping binary file: {entry.Path}");
                 Interlocked.Increment(ref skippedCount);
                 return null;
             }
 
-            var text = File.ReadAllText(entry.Path);
+            var text = System.Text.Encoding.UTF8.GetString(bytes);
             Interlocked.Increment(ref processedCount);
             if (Logger.CurrentLevel >= LogLevel.Verbose && processedCount % 100 == 0)
             {
@@ -102,25 +129,6 @@ public static class FileReaderExtensions
             Interlocked.Increment(ref errorCount);
             return null;
         }
-    }
-
-    private static bool IsBinaryFile(string path, long maxSize)
-    {
-        // Read first 4KB to check for null bytes (indicator of binary files)
-        var bufferSize = Math.Min(4096, maxSize);
-        var buffer = new byte[bufferSize];
-
-        using var fs = File.OpenRead(path);
-        var bytesRead = fs.Read(buffer, 0, buffer.Length);
-
-        // Check for null byte (strong indicator of binary content)
-        for (var i = 0; i < bytesRead; i++)
-        {
-            if (buffer[i] == 0)
-                return true;
-        }
-
-        return false;
     }
 
     private static string FormatSize(long bytes)

@@ -65,9 +65,24 @@ public readonly struct CliArguments
         {
             Logger.SetLevel(LogLevel.Verbose);
         }
+        else if (configuration?.Logging?.Level != null)
+        {
+            var level = configuration.Logging.Level.ToLowerInvariant() switch
+            {
+                "debug" => LogLevel.Debug,
+                "verbose" => LogLevel.Verbose,
+                _ => LogLevel.Normal
+            };
+            Logger.SetLevel(level);
+        }
         else
         {
             Logger.SetLevel(LogLevel.Normal);
+        }
+
+        if (configuration?.Logging?.IncludeTimestamps == true)
+        {
+            Logger.IncludeTimestamps = true;
         }
     }
 }

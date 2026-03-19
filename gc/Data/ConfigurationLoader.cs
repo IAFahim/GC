@@ -229,12 +229,17 @@ public static class ConfigurationLoader
         try
         {
             var json = File.ReadAllText(filePath);
-            var config = JsonSerializer.Deserialize<GcConfiguration>(json, new JsonSerializerOptions
+            var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 PropertyNameCaseInsensitive = true,
                 ReadCommentHandling = JsonCommentHandling.Skip,
                 AllowTrailingCommas = true
-            });
+            };
+            
+            // Add the AOT-compatible source generated context
+            options.TypeInfoResolver = GcJsonSerializerContext.Default;
+
+            var config = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.GcConfiguration);
 
             return config;
         }
@@ -334,26 +339,15 @@ public static class ConfigurationLoader
 
     private static void MergeFilters(FiltersConfiguration target, FiltersConfiguration source)
     {
-        // Merge system ignored patterns
-        if (source.SystemIgnoredPatterns != null && source.SystemIgnoredPatterns.Length > 0)
+        // Source completely overrides target for arrays to allow removing default patterns
+        if (source.SystemIgnoredPatterns != null)
         {
-            var merged = new HashSet<string>(target.SystemIgnoredPatterns, StringComparer.OrdinalIgnoreCase);
-            foreach (var pattern in source.SystemIgnoredPatterns)
-            {
-                merged.Add(pattern);
-            }
-            target.SystemIgnoredPatterns = merged.ToArray();
+            target.SystemIgnoredPatterns = source.SystemIgnoredPatterns;
         }
 
-        // Merge additional extensions
-        if (source.AdditionalExtensions != null && source.AdditionalExtensions.Length > 0)
+        if (source.AdditionalExtensions != null)
         {
-            var merged = new HashSet<string>(target.AdditionalExtensions, StringComparer.OrdinalIgnoreCase);
-            foreach (var ext in source.AdditionalExtensions)
-            {
-                merged.Add(ext);
-            }
-            target.AdditionalExtensions = merged.ToArray();
+            target.AdditionalExtensions = source.AdditionalExtensions;
         }
     }
 

@@ -13,12 +13,19 @@ public enum LogLevel
 public static class Logger
 {
     private static LogLevel _currentLevel = LogLevel.Normal;
+    private static bool _includeTimestamps = false;
     private static readonly object _lock = new();
 
     public static LogLevel CurrentLevel
     {
         get => _currentLevel;
         set => _currentLevel = value;
+    }
+    
+    public static bool IncludeTimestamps
+    {
+        get => _includeTimestamps;
+        set => _includeTimestamps = value;
     }
 
     public static void SetLevel(LogLevel level)
@@ -29,11 +36,16 @@ public static class Logger
         }
     }
 
+    private static string GetPrefix()
+    {
+        return _includeTimestamps ? $"[{DateTime.Now:HH:mm:ss.fff}] " : "";
+    }
+
     public static void LogInfo(string message)
     {
         if (_currentLevel >= LogLevel.Normal)
         {
-            Console.Error.WriteLine(message);
+            Console.Error.WriteLine($"{GetPrefix()}{message}");
         }
     }
 
@@ -41,7 +53,7 @@ public static class Logger
     {
         if (_currentLevel >= LogLevel.Verbose)
         {
-            Console.Error.WriteLine($"[VERBOSE] {message}");
+            Console.Error.WriteLine($"{GetPrefix()}[VERBOSE] {message}");
         }
     }
 
@@ -49,19 +61,19 @@ public static class Logger
     {
         if (_currentLevel >= LogLevel.Debug)
         {
-            Console.Error.WriteLine($"[DEBUG] {message}");
+            Console.Error.WriteLine($"{GetPrefix()}[DEBUG] {message}");
         }
     }
 
     public static void LogError(string message, Exception? ex = null)
     {
-        Console.Error.Write($"[ERROR] {message}");
+        Console.Error.Write($"{GetPrefix()}[ERROR] {message}");
         if (ex != null)
         {
             Console.Error.WriteLine($": {ex.Message}");
             if (_currentLevel >= LogLevel.Debug)
             {
-                Console.Error.WriteLine($"[DEBUG] Stack trace: {ex.StackTrace}");
+                Console.Error.WriteLine($"{GetPrefix()}[DEBUG] Stack trace: {ex.StackTrace}");
             }
         }
         else

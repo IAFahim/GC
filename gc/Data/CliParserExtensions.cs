@@ -316,7 +316,7 @@ public static class CliParserExtensions
             size = size.Substring(0, size.Length - 1);
         }
 
-        if (double.TryParse(size, out var value))
+        if (double.TryParse(size, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var value))
         {
             return (long)(value * multiplier);
         }

@@ -19,7 +19,6 @@ mkdir -p "$MOCK_BIN_DIR"
 export PATH="$MOCK_BIN_DIR:$PATH"
 
 # Mock 'gc' command
-# It will just record its arguments to a file for verification
 cat > "$MOCK_BIN_DIR/gc" << 'EOF'
 #!/bin/bash
 echo "GC_CALLED_WITH: $@" > /tmp/gc-mock-output
@@ -43,7 +42,6 @@ touch "$TEST_FILE_1"
 mkdir -p "$TEST_FOLDER_1"
 
 # 3. Simulate Nautilus Call
-# Nautilus provides absolute paths in NAUTILUS_SCRIPT_SELECTED_FILE_PATHS
 export NAUTILUS_SCRIPT_SELECTED_FILE_PATHS="$TEST_FILE_1
 $TEST_FOLDER_1"
 
@@ -51,8 +49,7 @@ $TEST_FOLDER_1"
 rm -f /tmp/gc-mock-output
 
 # Run the actual integration script
-# We point to the script in the current directory
-bash ./integration/nautilus/gc-copy-nautilus.sh
+bash ./integration/nautilus/gc-nautilus.sh
 
 # 4. Verify Results
 echo "🔍 Verifying results..."
@@ -81,7 +78,7 @@ exit 1
 EOF
 
 rm -f /tmp/gc-mock-output
-bash ./integration/nautilus/gc-copy-nautilus.sh
+bash ./integration/nautilus/gc-nautilus.sh
 
 if grep -q "NOTIFY_CALLED_WITH: gc - Error" /tmp/gc-mock-output; then
     echo -e "${GREEN}✅ Success: notify-send was called on error.${NC}"

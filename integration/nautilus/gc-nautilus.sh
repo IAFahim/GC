@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # gc - Nautilus Context Menu Script
-# This script integrates 'gc' with the Nautilus file explorer.
+# This script integrates 'gc' (Git Copy) with the Nautilus file explorer.
 # It allows right-clicking on folders/files to copy their contents as markdown.
 
 # Dependencies:
@@ -36,7 +36,6 @@ for path in "${SELECTED_PATHS[@]}"; do
 done
 
 # Run gc
-# We use an array for TARGET_PATHS to handle spaces correctly
 echo "Running: gc --paths ${TARGET_PATHS[@]}" >> "$LOG_FILE"
 
 # Capture output and exit code
@@ -48,7 +47,7 @@ echo "Exit code: $EXIT_CODE" >> "$LOG_FILE"
 echo "Output: $OUTPUT" >> "$LOG_FILE"
 
 if [ $EXIT_CODE -eq 0 ]; then
-    # Extract stats from output if possible (e.g. "[OK] Exported to Clipboard: 10 files")
+    # Extract stats from output if possible
     STATS=$(echo "$OUTPUT" | grep "Exported to")
     if [ -z "$STATS" ]; then
         STATS="Contents copied to clipboard successfully."

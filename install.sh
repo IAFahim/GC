@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# gc Installation Script
-# This script downloads and installs the latest version of gc
+# gc (Git Copy) Installation Script
+# This script downloads and installs the latest version of 'gc'
 
 set -e
 
@@ -10,6 +10,8 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+echo -e "${YELLOW}🚀 Installing gc (Git Copy)...${NC}"
 
 # Detect OS
 OS="$(uname -s)"
@@ -55,7 +57,7 @@ echo -e "${GREEN}Fetching latest release version...${NC}"
 LATEST_VERSION=$(curl -s https://api.github.com/repos/${REPO_NAME}/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
 
 if [ -z "$LATEST_VERSION" ]; then
-    echo -e "${YELLOW}Warning: Could not fetch latest version, using latest release${NC}"
+    echo -e "${YELLOW}Warning: Could not fetch latest version, using 'latest' tag...${NC}"
     LATEST_VERSION="latest"
 fi
 
@@ -90,21 +92,21 @@ if [ -f "$TEMP_DIR/gc_bin/gc" ]; then
     chmod +x "$INSTALL_DIR/gc"
     echo -e "${GREEN}Successfully installed gc to $INSTALL_DIR/gc${NC}"
 elif [ -f "$TEMP_DIR/gc_bin/gc.exe" ]; then
-    # This shouldn't happen on Linux/Mac but just in case
     mv "$TEMP_DIR/gc_bin/gc.exe" "$INSTALL_DIR/gc"
     chmod +x "$INSTALL_DIR/gc"
     echo -e "${GREEN}Successfully installed gc to $INSTALL_DIR/gc${NC}"
 else
-    echo -e "${RED}Error: Could not find gc binary in archive${NC}"
+    echo -e "${RED}Error: Could not find 'gc' binary in archive${NC}"
     ls -R "$TEMP_DIR/gc_bin"
     exit 1
 fi
 
 # Check if installation directory is in PATH
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-    echo -e "${YELLOW}Warning: $INSTALL_DIR is not in your PATH${NC}"
-    echo -e "${YELLOW}Add the following to your ~/.bashrc or ~/.zshrc:${NC}"
+    echo -e "${YELLOW}Warning: $INSTALL_DIR is not in your PATH.${NC}"
+    echo -e "${YELLOW}Please add the following to your ~/.bashrc or ~/.zshrc:${NC}"
     echo -e "${YELLOW}export PATH=\"\$PATH:$INSTALL_DIR\"${NC}"
 fi
 
-echo -e "${GREEN}Installation complete! Run 'gc --help' to get started.${NC}"
+echo -e "\n${GREEN}✅ Installation complete! Run 'gc --help' to get started.${NC}"
+echo -e "${YELLOW}Git Copy (gc) is now ready to use.${NC}"

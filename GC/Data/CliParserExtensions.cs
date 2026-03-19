@@ -25,7 +25,6 @@ public static class CliParserExtensions
         var output = string.Empty;
         var showHelp = false;
         var runTests = false;
-        var runBenchmarks = false;
         var runRealBenchmark = false;
         var maxMemoryBytes = ParseMemorySize("100MB");
         var verbose = false;
@@ -50,12 +49,6 @@ public static class CliParserExtensions
             }
 
             if (arg.IsBenchmarkFlag())
-            {
-                runBenchmarks = true;
-                continue;
-            }
-
-            if (arg.IsRealBenchmarkFlag())
             {
                 runRealBenchmark = true;
                 continue;
@@ -105,7 +98,6 @@ public static class CliParserExtensions
             output,
             showHelp,
             runTests,
-            runBenchmarks,
             runRealBenchmark,
             maxMemoryBytes,
             verbose,
@@ -126,11 +118,6 @@ public static class CliParserExtensions
     private static bool IsBenchmarkFlag(this string arg)
     {
         return string.Equals(arg, "--benchmark", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsRealBenchmarkFlag(this string arg)
-    {
-        return string.Equals(arg, "--real-benchmark", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsVerboseFlag(this string arg)

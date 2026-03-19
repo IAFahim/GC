@@ -68,7 +68,6 @@ public static class RealBenchmark
                 false,
                 false,
                 false,
-                false,
                 long.MaxValue,
                 false,
                 true  // Enable debug for timing info

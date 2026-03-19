@@ -25,12 +25,6 @@ public static class Program
             return;
         }
 
-        if (cliArgs.RunBenchmarks)
-        {
-            Benchmarks.RunBenchmarks();
-            return;
-        }
-
         if (cliArgs.RunRealBenchmark)
         {
             RealBenchmark.RunRealBenchmark();
@@ -103,8 +97,7 @@ OPTIONS:
     -v, --verbose              Enable verbose logging (show file-by-file progress)
     --debug                    Enable debug logging (show git commands, timing, errors)
     --test                     Run built-in test suite
-    --benchmark                Run simulated performance benchmarks
-    --real-benchmark           Run real repository benchmarks (current repo)
+    --benchmark                Run automated performance benchmarks on current repository
     -h, --help                 Show this help message");
     }
 }

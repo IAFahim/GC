@@ -46,10 +46,24 @@ public static class CliParserExtensions
         var dumpConfig = false;
 
         var state = ParseState.None;
+        var onlyPaths = false;
 
         for (var i = 0; i < args.Length; i++)
         {
             var arg = args[i];
+
+            if (onlyPaths)
+            {
+                paths.Add(arg.Replace('\\', '/'));
+                continue;
+            }
+
+            if (arg == "--")
+            {
+                onlyPaths = true;
+                state = ParseState.None;
+                continue;
+            }
 
             if (arg.IsHelpFlag())
             {

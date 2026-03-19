@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace gc.Data;
 
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(GcConfiguration))]
 [JsonSerializable(typeof(LimitsConfiguration))]
 [JsonSerializable(typeof(DiscoveryConfiguration))]

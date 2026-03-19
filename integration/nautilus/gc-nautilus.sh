@@ -13,8 +13,8 @@
 LOG_FILE="/tmp/gc-nautilus.log"
 echo "--- $(date) ---" > "$LOG_FILE"
 
-# Nautilus passes selected paths as arguments to the script
-if [ "$#" -eq 0 ]; then
+# Nautilus passes selected paths via environment variable
+if [ -z "$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS" ]; then
     notify-send "gc" "No files or folders selected." -i info
     echo "No paths selected" >> "$LOG_FILE"
     exit 0
@@ -22,14 +22,17 @@ fi
 
 # Prepare paths array
 TARGET_PATHS=()
-for path in "$@"; do
-    # Convert relative path to absolute if needed
-    if [[ "$path" != /* ]]; then
-        path="$(pwd)/$path"
+# Process NAUTILUS_SCRIPT_SELECTED_FILE_PATHS line by line
+while IFS= read -r path; do
+    if [ -n "$path" ]; then
+        # The paths might be absolute or relative depending on Nautilus version/context
+        if [[ "$path" != /* ]]; then
+            path="$(pwd)/$path"
+        fi
+        TARGET_PATHS+=("$path")
+        echo "Target path: $path" >> "$LOG_FILE"
     fi
-    TARGET_PATHS+=("$path")
-    echo "Target path: $path" >> "$LOG_FILE"
-done
+done <<< "$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS"
 
 # Set working directory to the parent of the first selected item
 # This helps 'gc' find the git root if it exists
@@ -44,11 +47,11 @@ echo "Working directory: $WORKING_DIR" >> "$LOG_FILE"
 cd "$WORKING_DIR" || exit 1
 
 # Run gc
-echo "Running: gc --paths \"${TARGET_PATHS[@]}\"" >> "$LOG_FILE"
+echo "Running: gc --paths -- \"${TARGET_PATHS[@]}\"" >> "$LOG_FILE"
 
 # Capture output and exit code
 # Pass the array to the command to preserve quoting
-OUTPUT=$(gc --paths "${TARGET_PATHS[@]}" 2>&1)
+OUTPUT=$(gc --paths -- "${TARGET_PATHS[@]}" 2>&1)
 EXIT_CODE=$?
 
 echo "Exit code: $EXIT_CODE" >> "$LOG_FILE"

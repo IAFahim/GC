@@ -24,16 +24,17 @@ public static class MarkdownGeneratorExtensions
 
         Logger.LogDebug("Sorted files by path");
 
-        // Use streaming approach to reduce memory pressure
-        using var memoryStream = new MemoryStream();
-        using var writer = new StreamWriter(memoryStream, Encoding.UTF8);
+        // Use StringBuilder approach to avoid double memory allocation
+        var sb = new StringBuilder();
+        using var writer = new StringWriter(sb);
 
         WriteMarkdownToStream(writer, sortedContents, args);
         writer.Flush();
 
-        Logger.LogVerbose($"Generated markdown: {memoryStream.Length} bytes");
+        var result = sb.ToString();
+        Logger.LogVerbose($"Generated markdown: {result.Length} characters");
 
-        return Encoding.UTF8.GetString(memoryStream.ToArray());
+        return result;
     }
 
     public static void GenerateMarkdownToStream(this FileContent[] contents, Stream outputStream, CliArguments args)
@@ -50,7 +51,7 @@ public static class MarkdownGeneratorExtensions
         Array.Copy(contents, sortedContents, contents.Length);
         Array.Sort(sortedContents, (a, b) => string.Compare(a.Entry.Path, b.Entry.Path, StringComparison.OrdinalIgnoreCase));
 
-        using var writer = new StreamWriter(outputStream, Encoding.UTF8, leaveOpen: true);
+        using var writer = new StreamWriter(outputStream, new UTF8Encoding(false), leaveOpen: true);
         WriteMarkdownToStream(writer, sortedContents, args);
         writer.Flush();
 
@@ -70,30 +71,58 @@ public static class MarkdownGeneratorExtensions
         Array.Copy(contents, sortedContents, contents.Length);
         Array.Sort(sortedContents, (a, b) => string.Compare(a.Entry.Path, b.Entry.Path, StringComparison.OrdinalIgnoreCase));
 
-        using var writer = new StreamWriter(filePath, false, Encoding.UTF8);
+        using var writer = new StreamWriter(filePath, false, new UTF8Encoding(false));
         WriteMarkdownToStream(writer, sortedContents, args);
 
         Logger.LogVerbose($"Markdown written to {filePath}");
     }
 
-    private static string GetSafeFence(string content)
+    private static string GetSafeFence(string? content, string filePath)
     {
-        // Check if content contains triple backticks
-        if (content.Contains("```"))
-            return "``````";  // Use 6 backticks
+        if (content != null)
+        {
+            if (content.Contains("```")) return "``````";
+            if (content.Contains("````")) return "````````";
+            if (content.Contains("`````")) return "``````````";
+            return "```";
+        }
 
-        // Check for quadruple backticks (unlikely but possible)
-        if (content.Contains("````"))
-            return "````````";  // Use 8 backticks
+        int maxBackticks = 0;
+        try
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(fs, Encoding.UTF8);
+            string? line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                if (!line.Contains("```")) continue;
+                
+                int currentBackticks = 0;
+                int maxInLine = 0;
+                for (int i = 0; i < line.Length; i++)
+                {
+                    if (line[i] == '`')
+                    {
+                        currentBackticks++;
+                        maxInLine = Math.Max(maxInLine, currentBackticks);
+                    }
+                    else
+                    {
+                        currentBackticks = 0;
+                    }
+                }
+                maxBackticks = Math.Max(maxBackticks, maxInLine);
+            }
+        }
+        catch { }
 
-        // Check for quintuple backticks (very unlikely)
-        if (content.Contains("`````"))
-            return "``````````";  // Use 10 backticks
-
-        return "```";  // Default to 3 backticks
+        if (maxBackticks >= 5) return "``````````";
+        if (maxBackticks == 4) return "````````";
+        if (maxBackticks >= 3) return "``````";
+        return "```";
     }
 
-    private static void WriteMarkdownToStream(StreamWriter writer, FileContent[] sortedContents, CliArguments args)
+    private static void WriteMarkdownToStream(TextWriter writer, FileContent[] sortedContents, CliArguments args)
     {
         // Get configuration values
         var projectStructureHeader = args.Configuration?.Markdown?.ProjectStructureHeader ?? "_Project Structure:_";
@@ -103,13 +132,39 @@ public static class MarkdownGeneratorExtensions
         // Write file contents
         foreach (var content in sortedContents)
         {
-            var fence = GetSafeFence(content.Content);
+            var fence = GetSafeFence(content.Content, content.Entry.Path);
             var fileHeader = args.Configuration?.Markdown?.FileHeaderTemplate ?? "## File: {path}";
-            var headerText = fileHeader.Replace("{path}", content.Entry.Path);
+            var headerText = fileHeader.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
 
             writer.WriteLine(headerText);
             writer.WriteLine($"{fence}{content.Entry.Language}");
-            writer.WriteLine(content.Content);
+            
+            if (content.Content != null)
+            {
+                writer.WriteLine(content.Content);
+            }
+            else
+            {
+                writer.Flush();
+                try
+                {
+                    using var fs = new FileStream(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var reader = new StreamReader(fs, Encoding.UTF8);
+                    char[] buffer = new char[8192];
+                    int read;
+                    while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        writer.Write(buffer, 0, read);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"Failed to read file contents for {content.Entry.Path}", ex);
+                    writer.WriteLine($"[Error reading file: {ex.Message}]");
+                }
+                writer.WriteLine(); // Ensure newline after streaming
+            }
+            
             writer.WriteLine(fence);
             writer.WriteLine();
         }
@@ -135,7 +190,7 @@ public static class MarkdownGeneratorExtensions
 
         using var _ = Logger.TimeOperation("Markdown generation (streaming)");
 
-        using var writer = new StreamWriter(outputStream, Encoding.UTF8, leaveOpen: true);
+        using var writer = new StreamWriter(outputStream, new UTF8Encoding(false), leaveOpen: true);
 
         // Sort by path for consistent output
         var sortedContents = contents.OrderBy(c => c.Entry.Path, StringComparer.OrdinalIgnoreCase).ToList();
@@ -152,13 +207,39 @@ public static class MarkdownGeneratorExtensions
         // Write file contents one at a time
         foreach (var content in sortedContents)
         {
-            var fence = GetSafeFence(content.Content);
+            var fence = GetSafeFence(content.Content, content.Entry.Path);
             var fileHeader = args.Configuration?.Markdown?.FileHeaderTemplate ?? "## File: {path}";
-            var headerText = fileHeader.Replace("{path}", content.Entry.Path);
+            var headerText = fileHeader.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
 
             writer.WriteLine(headerText);
             writer.WriteLine($"{fence}{content.Entry.Language}");
-            writer.WriteLine(content.Content);
+            
+            if (content.Content != null)
+            {
+                writer.WriteLine(content.Content);
+            }
+            else
+            {
+                writer.Flush();
+                try
+                {
+                    using var fs = new FileStream(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var reader = new StreamReader(fs, Encoding.UTF8);
+                    char[] buffer = new char[8192];
+                    int read;
+                    while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        writer.Write(buffer, 0, read);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"Failed to read file contents for {content.Entry.Path}", ex);
+                    writer.WriteLine($"[Error reading file: {ex.Message}]");
+                }
+                writer.WriteLine(); // Ensure newline after streaming
+            }
+            
             writer.WriteLine(fence);
             writer.WriteLine();
 

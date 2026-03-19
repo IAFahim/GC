@@ -54,7 +54,7 @@ bash ./integration/nautilus/gc-nautilus.sh
 # 4. Verify Results
 echo "🔍 Verifying results..."
 
-if grep -F "GC_CALLED_WITH: --paths $TEST_FILE_1 $TEST_FOLDER_1" /tmp/gc-mock-output; then
+if grep -F "GC_CALLED_WITH: --paths -- $TEST_FILE_1 $TEST_FOLDER_1" /tmp/gc-mock-output; then
     echo -e "${GREEN}✅ Success: gc was called with correct paths.${NC}"
 else
     echo -e "${RED}❌ Error: gc was not called with expected paths.${NC}"
@@ -62,10 +62,11 @@ else
     exit 1
 fi
 
-if grep -q "NOTIFY_CALLED_WITH: gc - Success" /tmp/gc-mock-output; then
+if grep -q "NOTIFY_CALLED_WITH: gc Exported to Clipboard: 5 files | Size: 10 KB | Tokens: ~2500 -i checkbox-checked-symbolic" /tmp/gc-mock-output; then
     echo -e "${GREEN}✅ Success: notify-send was called on success.${NC}"
 else
     echo -e "${RED}❌ Error: notify-send was not called.${NC}"
+    cat /tmp/gc-mock-output
     exit 1
 fi
 
@@ -80,10 +81,11 @@ EOF
 rm -f /tmp/gc-mock-output
 bash ./integration/nautilus/gc-nautilus.sh
 
-if grep -q "NOTIFY_CALLED_WITH: gc - Error" /tmp/gc-mock-output; then
+if grep -q "NOTIFY_CALLED_WITH: gc Error: Something went wrong -i error" /tmp/gc-mock-output; then
     echo -e "${GREEN}✅ Success: notify-send was called on error.${NC}"
 else
     echo -e "${RED}❌ Error: notify-send was not called on error.${NC}"
+    cat /tmp/gc-mock-output
     exit 1
 fi
 

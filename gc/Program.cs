@@ -64,6 +64,7 @@ public static class Program
                 Console.Error.WriteLine("No tracked files found in this repository.");
                 Console.ResetColor();
                 Console.Error.WriteLine("The repository appears to be empty (no files have been committed).");
+                Environment.Exit(1);
                 return;
             }
 

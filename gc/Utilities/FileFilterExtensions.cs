@@ -28,7 +28,7 @@ public static class FileFilterExtensions
             .Where(path => path.IsValidPath(args, activeExtensions))
             .Select(path =>
             {
-                var extension = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+                var extension = GetFullExtension(path).ToLowerInvariant();
                 var fileName = Path.GetFileName(path).ToLowerInvariant();
                 var languageKey = string.IsNullOrEmpty(extension) ? fileName : extension;
                 var language = languageKey.ResolveLanguage(args);
@@ -117,6 +117,21 @@ public static class FileFilterExtensions
 
     private static bool IsValidPath(this string path, CliArguments args, HashSet<string> activeExtensions)
     {
+        // Directory Traversal Prevention
+        try
+        {
+            var fullPath = Path.GetFullPath(path);
+            var currentDir = Path.GetFullPath(Directory.GetCurrentDirectory());
+            if (!fullPath.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
         if (path.IsSystemIgnored(args))
         {
             return false;
@@ -144,16 +159,34 @@ public static class FileFilterExtensions
     {
         // Get system ignored patterns from configuration or built-in defaults
         var patterns = args.Configuration?.Filters?.SystemIgnoredPatterns ?? BuiltInPresets.SystemIgnoredPatterns;
+        var normalizedPath = path.Replace('\\', '/');
 
         foreach (var str in patterns)
         {
-            if (path.Contains(str, StringComparison.OrdinalIgnoreCase))
+            var normalizedStr = str.Replace('\\', '/');
+            
+            if (normalizedStr.EndsWith('/'))
+            {
+                var dirName = normalizedStr.TrimEnd('/');
+                if (normalizedPath.Equals(dirName, StringComparison.OrdinalIgnoreCase) ||
+                    normalizedPath.StartsWith(dirName + "/", StringComparison.OrdinalIgnoreCase) ||
+                    normalizedPath.Contains("/" + dirName + "/", StringComparison.OrdinalIgnoreCase) ||
+                    normalizedPath.EndsWith("/" + dirName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            else if (normalizedStr.StartsWith('.') && normalizedPath.EndsWith(normalizedStr, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
-            if (path.EndsWith(str, StringComparison.OrdinalIgnoreCase))
+            else
             {
-                return true;
+                var fileName = Path.GetFileName(normalizedPath);
+                if (fileName.Equals(normalizedStr, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
             }
         }
 
@@ -207,11 +240,35 @@ public static class FileFilterExtensions
         return false;
     }
 
+    private static string GetFullExtension(string path)
+    {
+        var fileName = Path.GetFileName(path);
+        var firstDotIndex = fileName.IndexOf('.');
+        // Ignore dot at the end
+        if (firstDotIndex >= 0 && firstDotIndex < fileName.Length - 1)
+        {
+            // If it starts with a dot (like .gitignore), return the whole thing after dot
+            return fileName.Substring(firstDotIndex + 1);
+        }
+        return string.Empty;
+    }
+
     private static bool MatchesExtensions(this string path, HashSet<string> activeExtensions)
     {
-        var ext = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+        var ext = GetFullExtension(path).ToLowerInvariant();
         var fileName = Path.GetFileName(path).ToLowerInvariant();
+        
+        // Check for compound extensions progressively (.tar.gz, then .gz)
+        var parts = ext.Split('.');
+        for (int i = 0; i < parts.Length; i++)
+        {
+            var subExt = string.Join(".", parts.Skip(i));
+            if (activeExtensions.Contains(subExt))
+            {
+                return true;
+            }
+        }
 
-        return activeExtensions.Contains(ext) || activeExtensions.Contains(fileName);
+        return activeExtensions.Contains(fileName);
     }
 }

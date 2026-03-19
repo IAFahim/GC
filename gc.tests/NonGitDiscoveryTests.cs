@@ -49,13 +49,8 @@ public class NonGitDiscoveryTests : IDisposable
         File.WriteAllText(Path.Combine(_testDir, "test.cs"), "public class Test { }");
         File.WriteAllText(Path.Combine(_testDir, "test.py"), "print('test')");
 
-        var originalDir = Directory.GetCurrentDirectory();
-        try
-        {
-            Directory.SetCurrentDirectory(_testDir);
-
             var outputFile = Path.Combine(_testDir, "output.md");
-            var result = RunGC($"--output {outputFile}");
+            var result = RunGC(_testDir, $"--output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("[OK] Exported to", result.StandardOutput);
@@ -66,11 +61,6 @@ public class NonGitDiscoveryTests : IDisposable
             Assert.Contains("test.cs", content);
 
             _output.WriteLine($"✅ Non-git discovery works with multiple files");
-        }
-        finally
-        {
-            Directory.SetCurrentDirectory(originalDir);
-        }
     }
 
     [Fact]
@@ -83,13 +73,8 @@ public class NonGitDiscoveryTests : IDisposable
         File.WriteAllText(Path.Combine(_testDir, "test.cs"), "public class Test { }");
         File.WriteAllText(Path.Combine(_testDir, "test.py"), "print('test')");
 
-        var originalDir = Directory.GetCurrentDirectory();
-        try
-        {
-            Directory.SetCurrentDirectory(_testDir);
-
             var outputFile = Path.Combine(_testDir, "output.md");
-            var result = RunGC($"--extension js --output {outputFile}");
+            var result = RunGC(_testDir, $"--extension js --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("[OK] Exported to", result.StandardOutput);
@@ -99,11 +84,6 @@ public class NonGitDiscoveryTests : IDisposable
             Assert.DoesNotContain("test.cs", content);
 
             _output.WriteLine($"✅ Extension filtering works in non-git mode");
-        }
-        finally
-        {
-            Directory.SetCurrentDirectory(originalDir);
-        }
     }
 
     [Fact]
@@ -116,13 +96,8 @@ public class NonGitDiscoveryTests : IDisposable
         File.WriteAllText(Path.Combine(_testDir, "test.cs"), "public class Test { }");
         File.WriteAllText(Path.Combine(_testDir, "test.py"), "print('test')");
 
-        var originalDir = Directory.GetCurrentDirectory();
-        try
-        {
-            Directory.SetCurrentDirectory(_testDir);
-
             var outputFile = Path.Combine(_testDir, "output.md");
-            var result = RunGC($"--preset web --output {outputFile}");
+            var result = RunGC(_testDir, $"--preset web --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("[OK] Exported to", result.StandardOutput);
@@ -131,11 +106,6 @@ public class NonGitDiscoveryTests : IDisposable
             Assert.Contains("test.js", content);
 
             _output.WriteLine($"✅ Preset filtering works in non-git mode");
-        }
-        finally
-        {
-            Directory.SetCurrentDirectory(originalDir);
-        }
     }
 
     [Fact]
@@ -150,13 +120,8 @@ public class NonGitDiscoveryTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_testDir, ".git"));
         File.WriteAllText(Path.Combine(_testDir, ".git", "config"), "git config");
 
-        var originalDir = Directory.GetCurrentDirectory();
-        try
-        {
-            Directory.SetCurrentDirectory(_testDir);
-
             var outputFile = Path.Combine(_testDir, "output.md");
-            var result = RunGC($"--extension js --output {outputFile}");
+            var result = RunGC(_testDir, $"--extension js --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("[OK] Exported to", result.StandardOutput);
@@ -166,11 +131,6 @@ public class NonGitDiscoveryTests : IDisposable
             Assert.DoesNotContain("node_modules", content);
 
             _output.WriteLine($"✅ System directories are properly ignored");
-        }
-        finally
-        {
-            Directory.SetCurrentDirectory(originalDir);
-        }
     }
 
     [Fact]
@@ -187,13 +147,8 @@ public class NonGitDiscoveryTests : IDisposable
         Directory.CreateDirectory(libDir);
         File.WriteAllText(Path.Combine(libDir, "parser.js"), "module.exports = {};");
 
-        var originalDir = Directory.GetCurrentDirectory();
-        try
-        {
-            Directory.SetCurrentDirectory(_testDir);
-
             var outputFile = Path.Combine(_testDir, "output.md");
-            var result = RunGC($"--preset web --output {outputFile}");
+            var result = RunGC(_testDir, $"--preset web --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("[OK] Exported to", result.StandardOutput);
@@ -203,11 +158,6 @@ public class NonGitDiscoveryTests : IDisposable
             Assert.Contains("parser.js", content);
 
             _output.WriteLine($"✅ Nested directories are handled correctly");
-        }
-        finally
-        {
-            Directory.SetCurrentDirectory(originalDir);
-        }
     }
 
     [Fact]
@@ -224,13 +174,8 @@ public class NonGitDiscoveryTests : IDisposable
 
         File.WriteAllText(Path.Combine(_testDir, "root.cs"), "public class Root { }");
 
-        var originalDir = Directory.GetCurrentDirectory();
-        try
-        {
-            Directory.SetCurrentDirectory(_testDir);
-
             var outputFile = Path.Combine(_testDir, "output.md");
-            var result = RunGC($"--paths src --output {outputFile}");
+            var result = RunGC(_testDir, $"--paths src --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("[OK] Exported to", result.StandardOutput);
@@ -241,11 +186,6 @@ public class NonGitDiscoveryTests : IDisposable
             Assert.DoesNotContain("root.cs", content);
 
             _output.WriteLine($"✅ Paths filtering works in non-git mode");
-        }
-        finally
-        {
-            Directory.SetCurrentDirectory(originalDir);
-        }
     }
 
     [Fact]
@@ -255,13 +195,8 @@ public class NonGitDiscoveryTests : IDisposable
 
         File.WriteAllText(Path.Combine(_testDir, "test.cs"), "public class Test { }");
 
-        var originalDir = Directory.GetCurrentDirectory();
-        try
-        {
-            Directory.SetCurrentDirectory(_testDir);
-
             var outputFile = Path.Combine(_testDir, "output.md");
-            var result = RunGC($"--discovery filesystem --output {outputFile}");
+            var result = RunGC(_testDir, $"--discovery filesystem --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("[OK] Exported to", result.StandardOutput);
@@ -270,11 +205,6 @@ public class NonGitDiscoveryTests : IDisposable
             Assert.Contains("test.cs", content);
 
             _output.WriteLine($"✅ Explicit filesystem mode works");
-        }
-        finally
-        {
-            Directory.SetCurrentDirectory(originalDir);
-        }
     }
 
     [Fact]
@@ -295,13 +225,8 @@ public class NonGitDiscoveryTests : IDisposable
         File.WriteAllText(Path.Combine(libDir, "dist", "bundle.js"), "// minified js bundle");
         File.WriteAllText(Path.Combine(libDir, "lib", "helper.js"), "module.exports = {};");
 
-        var originalDir = Directory.GetCurrentDirectory();
-        try
-        {
-            Directory.SetCurrentDirectory(libDir);
-
             var outputFile = Path.Combine(_testDir, "third_party_copy.md");
-            var result = RunGC($"--preset web --output {outputFile}");
+            var result = RunGC(libDir, $"--preset web --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("[OK] Exported to", result.StandardOutput);
@@ -314,19 +239,15 @@ public class NonGitDiscoveryTests : IDisposable
             Assert.DoesNotContain("dist/bundle.js", content);
 
             _output.WriteLine($"✅ Non-git mode is useful for analyzing third-party libraries");
-        }
-        finally
-        {
-            Directory.SetCurrentDirectory(originalDir);
-        }
     }
 
-    private ProcessResult RunGC(string args)
+    private ProcessResult RunGC(string workingDir, string args)
     {
         var processInfo = new ProcessStartInfo
         {
             FileName = _binaryPath,
             Arguments = args,
+            WorkingDirectory = workingDir,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false

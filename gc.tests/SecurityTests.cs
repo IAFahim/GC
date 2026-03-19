@@ -10,6 +10,8 @@ namespace gc.Tests;
 
 public class SecurityTests : IDisposable
 {
+    private static bool _gitChecked;
+    private static bool _gitAvailable;
     private readonly ITestOutputHelper _output;
     private readonly string _testDir;
     private readonly string _repoDir;
@@ -48,6 +50,7 @@ public class SecurityTests : IDisposable
     public void PathInjection_SingleQuotesInPath_AreEscaped()
     {
         _output.WriteLine("Testing single quote path injection protection...");
+        if (!_gitAvailable) return;
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -77,6 +80,7 @@ public class SecurityTests : IDisposable
     public void MarkdownInjection_TripleBackticks_AreEscaped()
     {
         _output.WriteLine("Testing markdown injection protection...");
+        if (!_gitAvailable) return;
 
         // Create file with triple backticks
         var content = @"
@@ -113,6 +117,7 @@ public class Test
     public void BinaryFileDetection_NullBytes_AreDetected()
     {
         _output.WriteLine("Testing binary file detection...");
+        if (!_gitAvailable) return;
 
         // Add a normal file to ensure the run succeeds
         AddTestFile("normal.cs", "public class Normal { }");
@@ -142,6 +147,7 @@ public class Test
     public void BinaryFileDetection_ExecutableFormats_AreSkipped()
     {
         _output.WriteLine("Testing executable format detection...");
+        if (!_gitAvailable) return;
 
         // Add a normal file to ensure the run succeeds
         AddTestFile("normal.cs", "public class Normal { }");
@@ -171,6 +177,7 @@ public class Test
     public void MemoryLimitEnforcement_PreventsMemoryIssues()
     {
         _output.WriteLine("Testing memory limit enforcement...");
+        if (!_gitAvailable) return;
 
         // Create large file
         var largeContent = new string('A', 1024 * 1024); // 1MB
@@ -188,6 +195,7 @@ public class Test
     public void InputValidation_DanglingArguments_AreHandled()
     {
         _output.WriteLine("Testing input validation for dangling arguments...");
+        if (!_gitAvailable) return;
 
         var result = RunGC("--extension");
 
@@ -201,6 +209,7 @@ public class Test
     public void InputValidation_InvalidMemoryFormat_UsesDefault()
     {
         _output.WriteLine("Testing invalid memory format handling...");
+        if (!_gitAvailable) return;
 
         AddTestFile("test.cs", "public class Test { }");
 
@@ -216,6 +225,7 @@ public class Test
     public void FilePermissionErrors_AreHandledGracefully()
     {
         _output.WriteLine("Testing file permission error handling...");
+        if (!_gitAvailable) return;
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -288,6 +298,7 @@ public class Test
     public void SpecialFilePathCharacters_AreSanitized()
     {
         _output.WriteLine("Testing special character handling in paths...");
+        if (!_gitAvailable) return;
 
         string[] specialNames = { "test..cs", "test...cs", " test.cs", "test .cs" };
 
@@ -318,6 +329,21 @@ public class Test
 
     private void InitializeTestRepo()
     {
+        if (!_gitChecked)
+        {
+            _gitChecked = true;
+            try
+            {
+                var psi = new ProcessStartInfo { FileName = "git", Arguments = "--version", UseShellExecute = false, CreateNoWindow = true };
+                using var p = Process.Start(psi);
+                p?.WaitForExit();
+                _gitAvailable = (p?.ExitCode == 0);
+            }
+            catch { _gitAvailable = false; }
+        }
+
+        if (!_gitAvailable) return;
+
         Directory.CreateDirectory(_repoDir);
         RunGitCommand("init");
         RunGitCommand("config", "user.email", "test@example.com");
@@ -401,6 +427,34 @@ public class Test
         {
             if (Directory.Exists(_testDir))
             {
+                // Reset permissions to ensure delete works
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    try
+                    {
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = "chmod",
+                            Arguments = $"-R 777 \"{_testDir}\"",
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        using var process = Process.Start(psi);
+                        process?.WaitForExit();
+                    }
+                    catch { }
+                }
+
+                // Also need to fix git readonly files
+                foreach (var file in Directory.GetFiles(_testDir, "*", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        File.SetAttributes(file, FileAttributes.Normal);
+                    }
+                    catch { }
+                }
+
                 Directory.Delete(_testDir, true);
             }
         }

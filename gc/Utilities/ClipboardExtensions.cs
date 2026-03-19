@@ -82,49 +82,37 @@ public static class ClipboardExtensions
     {
         try
         {
-            Logger.LogDebug("Copying to clipboard via PowerShell");
+            Logger.LogDebug("Copying to clipboard via clip.exe");
 
-            var tempFile = Path.GetTempFileName();
-            File.WriteAllText(tempFile, markdown);
-
-            try
+            var psi = new ProcessStartInfo
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "powershell",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
+                FileName = "clip.exe",
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
-                psi.ArgumentList.Add("-NoProfile");
-                psi.ArgumentList.Add("-ExecutionPolicy");
-                psi.ArgumentList.Add("Bypass");
-                psi.ArgumentList.Add("-Command");
-                var escapedPath = tempFile.Replace("'", "''");
-                psi.ArgumentList.Add($"Set-Clipboard -Value (Get-Content '{escapedPath}' -Raw)");
-
-                using var process = Process.Start(psi);
-                if (process == null)
-                {
-                    return false;
-                }
-
-                process.WaitForExit();
-                return process.ExitCode == 0;
-            }
-            finally
+            using var process = Process.Start(psi);
+            if (process == null)
             {
-                if (File.Exists(tempFile))
-                {
-                    File.Delete(tempFile);
-                }
+                return false;
             }
+
+            // Using UTF-16 LE (Unicode) is often required by clip.exe to avoid mangling text if the console codepage is not UTF-8
+            // However, clip.exe reads standard input using the current console input encoding.
+            // A common reliable trick is to just write it out.
+            using var writer = new StreamWriter(process.StandardInput.BaseStream, new System.Text.UTF8Encoding(false));
+            writer.Write(markdown);
+            writer.Close();
+
+            process.WaitForExit();
+            return process.ExitCode == 0;
         }
         catch (Exception ex)
         {
-            Logger.LogDebug($"PowerShell clipboard copy failed: {ex.Message}");
+            Logger.LogDebug($"clip.exe clipboard copy failed: {ex.Message}");
             return false;
         }
     }

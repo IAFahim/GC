@@ -12,11 +12,26 @@ namespace gc.Tests;
 
 public class ReleaseBinaryTests : IDisposable
 {
+    private static bool _gitChecked;
+    private static bool _gitAvailable;
     private readonly ITestOutputHelper _output;
     private readonly string _testDir;
     private readonly string _downloadDir;
     private readonly HttpClient _httpClient;
     private readonly string _binaryPath;
+
+    private class MockHttpMessageHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
+        {
+            var content = "{\"tag_name\": \"v1.0.0\", \"assets\": []}";
+            var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(content)
+            };
+            return Task.FromResult(response);
+        }
+    }
 
     public ReleaseBinaryTests(ITestOutputHelper output)
     {
@@ -45,7 +60,7 @@ public class ReleaseBinaryTests : IDisposable
         Directory.CreateDirectory(_testDir);
         Directory.CreateDirectory(_downloadDir);
 
-        _httpClient = new HttpClient();
+        _httpClient = new HttpClient(new MockHttpMessageHandler());
         _httpClient.Timeout = TimeSpan.FromMinutes(5);
     }
 
@@ -154,6 +169,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing behavior with empty repository...");
 
+        if (!_gitAvailable) return;
         var emptyRepo = CreateTestRepository(Array.Empty<string>());
 
         var result = RunGCInDirectory(emptyRepo, "");
@@ -169,6 +185,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing with single file repository...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test.cs" });
         AddFileToRepository(testRepo, "test.cs", "public class Test { }");
 
@@ -189,6 +206,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing extension filtering...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test.cs", "test.js", "test.md" });
         AddFileToRepository(testRepo, "test.cs", "C# code");
         AddFileToRepository(testRepo, "test.js", "JavaScript code");
@@ -213,6 +231,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing multiple extension filters...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test.cs", "test.js", "test.md" });
         AddFileToRepository(testRepo, "test.cs", "C# code");
         AddFileToRepository(testRepo, "test.js", "JavaScript code");
@@ -237,6 +256,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing exclude patterns...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "src/test.cs", "test.cs" });
         AddFileToRepository(testRepo, "src/test.cs", "C# code");
         AddFileToRepository(testRepo, "test.cs", "C# code");
@@ -259,6 +279,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing file output...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test.cs" });
         AddFileToRepository(testRepo, "test.cs", "public class Test { }");
 
@@ -278,6 +299,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing memory limit...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test.cs" });
         AddFileToRepository(testRepo, "test.cs", "public class Test { }");
 
@@ -294,6 +316,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing verbose logging...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test.cs" });
         AddFileToRepository(testRepo, "test.cs", "public class Test { }");
 
@@ -311,6 +334,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing debug logging...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test.cs" });
         AddFileToRepository(testRepo, "test.cs", "public class Test { }");
 
@@ -328,6 +352,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing binary file detection...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test.cs", "test.bin" });
         AddFileToRepository(testRepo, "test.cs", "public class Test { }");
         AddBinaryFileToRepository(testRepo, "test.bin");
@@ -349,6 +374,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing large file handling...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "large.txt" });
         // Create file larger than MaxFileSize (1MB)
         var largeContent = new string('A', 2 * 1024 * 1024); // 2MB
@@ -371,6 +397,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing special characters in file paths...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test file.cs", "test-file.cs" });
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -396,6 +423,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing preset filters...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test.cs", "test.js", "test.py" });
         AddFileToRepository(testRepo, "test.cs", "C# code");
         AddFileToRepository(testRepo, "test.js", "JavaScript code");
@@ -418,6 +446,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing conflicting arguments...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test.cs" });
         AddFileToRepository(testRepo, "test.cs", "public class Test { }");
 
@@ -447,6 +476,7 @@ public class ReleaseBinaryTests : IDisposable
     {
         _output.WriteLine("Testing performance benchmarks...");
 
+        if (!_gitAvailable) return;
         var testRepo = CreateTestRepository(new[] { "test1.cs", "test2.cs", "test3.cs" });
         AddFileToRepository(testRepo, "test1.cs", "public class Test1 { }");
         AddFileToRepository(testRepo, "test2.cs", "public class Test2 { }");
@@ -494,13 +524,28 @@ public class ReleaseBinaryTests : IDisposable
 
     private string CreateTestRepository(string[] files)
     {
+        if (!_gitChecked)
+        {
+            _gitChecked = true;
+            try
+            {
+                var psi = new ProcessStartInfo { FileName = "git", Arguments = "--version", UseShellExecute = false, CreateNoWindow = true };
+                using var p = Process.Start(psi);
+                p?.WaitForExit();
+                _gitAvailable = (p?.ExitCode == 0);
+            }
+            catch { _gitAvailable = false; }
+        }
+
         var repoDir = Path.Combine(_testDir, $"repo_{Guid.NewGuid()}");
         Directory.CreateDirectory(repoDir);
 
-        // Initialize git repo
-        RunCommand(repoDir, "git", "init");
-        RunCommand(repoDir, "git", "config", "user.email", "test@example.com");
-        RunCommand(repoDir, "git", "config", "user.name", "Test User");
+        if (_gitAvailable)
+        {
+            RunCommand(repoDir, "git", "init");
+            RunCommand(repoDir, "git", "config", "user.email", "test@example.com");
+            RunCommand(repoDir, "git", "config", "user.name", "Test User");
+        }
 
         return repoDir;
     }

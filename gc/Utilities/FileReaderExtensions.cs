@@ -9,7 +9,7 @@ namespace gc.Utilities;
 
 public static class FileReaderExtensions
 {
-    public static FileContent[] ReadContents(this FileEntry[] entries, in CliArguments args)
+    public static FileContent[] ReadContents(this FileEntry[] entries, CliArguments args)
     {
         if (entries == null) throw new ArgumentNullException(nameof(entries));
 
@@ -52,7 +52,7 @@ public static class FileReaderExtensions
         var results = entries
             .AsParallel()
             .WithDegreeOfParallelism(Environment.ProcessorCount)
-            .Select(entry => TryReadFile(entry, ref processedCount, ref skippedCount, ref errorCount, entries.Length))
+            .Select(entry => TryReadFile(entry, ref processedCount, ref skippedCount, ref errorCount, entries.Length, args, false))
             .OfType<FileContent>()
             .ToArray();
 
@@ -61,7 +61,7 @@ public static class FileReaderExtensions
         return results;
     }
 
-    private static FileContent? TryReadFile(FileEntry entry, ref int processedCount, ref int skippedCount, ref int errorCount, int totalEntries)
+    private static FileContent? TryReadFile(FileEntry entry, ref int processedCount, ref int skippedCount, ref int errorCount, int totalEntries, CliArguments args, bool streamContent = false)
     {
         var exists = File.Exists(entry.Path);
         if (!exists)
@@ -71,38 +71,57 @@ public static class FileReaderExtensions
             return null;
         }
 
-        var fileInfo = new FileInfo(entry.Path);
-        if (fileInfo.Length > Constants.MaxFileSize)
+        long fileLength;
+        try 
         {
-            Logger.LogDebug($"Skipping {entry.Path}: size={fileInfo.Length}, max={Constants.MaxFileSize}");
+            var fileInfo = new FileInfo(entry.Path);
+            fileLength = fileInfo.Length;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug($"Failed to get file info for {entry.Path}: {ex.Message}");
+            Interlocked.Increment(ref errorCount);
+            return null;
+        }
+
+        var maxFileSize = args.Configuration?.Limits?.GetMaxFileSizeBytes() ?? 1048576;
+        if (fileLength > maxFileSize)
+        {
+            Logger.LogDebug($"Skipping {entry.Path}: size={fileLength}, max={maxFileSize}");
             Interlocked.Increment(ref skippedCount);
             return null;
         }
 
         try
         {
-            // Read the entire file into memory (since we need it anyway)
-            var bytes = File.ReadAllBytes(entry.Path);
+            // Check for binary files by reading up to 4KB
+            int checkLength = (int)Math.Min(4096, fileLength);
+            byte[] checkBytes = new byte[checkLength];
             
-            // Check for binary files by looking for non-printable characters in the first 4KB
-            // Allow null bytes for UTF-16/UTF-32 support, but check ratio of text vs non-text
-            int checkLength = Math.Min(4096, bytes.Length);
+            using (var fs = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                int bytesRead = 0;
+                while (bytesRead < checkLength)
+                {
+                    int read = fs.Read(checkBytes, bytesRead, checkLength - bytesRead);
+                    if (read == 0) break;
+                    bytesRead += read;
+                }
+            }
+
             int nonPrintableCount = 0;
             bool isBinary = false;
             
             for (var i = 0; i < checkLength; i++)
             {
-                byte b = bytes[i];
+                byte b = checkBytes[i];
                 // Non-printable control characters, excluding standard whitespace (tab, LF, CR)
                 if (b < 32 && b != 9 && b != 10 && b != 13)
                 {
-                    // If it's a null byte, we don't immediately fail, but we count it
                     nonPrintableCount++;
                 }
             }
 
-            // If more than 10% of characters are non-printable, consider it binary
-            // Also consider files with very high null-byte ratios as binary
             if (checkLength > 0 && ((double)nonPrintableCount / checkLength) > 0.1)
             {
                 isBinary = true;
@@ -115,13 +134,24 @@ public static class FileReaderExtensions
                 return null;
             }
 
-            var text = System.Text.Encoding.UTF8.GetString(bytes);
             Interlocked.Increment(ref processedCount);
             if (Logger.CurrentLevel >= LogLevel.Verbose && processedCount % 100 == 0)
             {
                 Logger.LogVerbose($"Read {processedCount}/{totalEntries} files...");
             }
-            return new FileContent(entry, text, fileInfo.Length);
+
+            if (streamContent)
+            {
+                return new FileContent(entry, null!, fileLength);
+            }
+            
+            // Read the entire file into memory for non-streaming mode
+            var text = File.ReadAllText(entry.Path, System.Text.Encoding.UTF8);
+            return new FileContent(entry, text, fileLength);
+        }
+        catch (OutOfMemoryException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -181,7 +211,7 @@ public static class FileReaderExtensions
         // Process files sequentially for true streaming (one file at a time)
         foreach (var entry in entries)
         {
-            var result = TryReadFile(entry, ref processedCount, ref skippedCount, ref errorCount, entries.Length);
+            var result = TryReadFile(entry, ref processedCount, ref skippedCount, ref errorCount, entries.Length, args, true);
             if (result != null)
             {
                 yield return result.Value;

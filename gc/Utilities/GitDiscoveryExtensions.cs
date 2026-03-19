@@ -19,11 +19,18 @@ public static class GitDiscoveryExtensions
 
         if (useGit)
         {
-            // Try git-based discovery first
+            // Try git-based discovery
             var gitFiles = TryDiscoverWithGit(args);
             if (gitFiles != null)
             {
                 return gitFiles;
+            }
+
+            // If we specifically requested git mode and it failed, throw or return empty
+            if (args.DiscoveryMode == DiscoveryMode.Git)
+            {
+                Logger.LogError("Git discovery failed but was explicitly requested.");
+                return Array.Empty<string>();
             }
         }
 
@@ -219,7 +226,30 @@ public static class GitDiscoveryExtensions
     private static string[] EnumerateFiles(string rootPath)
     {
         var files = new List<string>(1024);
-        var ignoredPatterns = Constants.SystemIgnoredPatterns.ToList();
+        var ignoredPatterns = BuiltInPresets.SystemIgnoredPatterns.ToList();
+
+        // Try to read .gitignore
+        var gitignorePath = Path.Combine(rootPath, ".gitignore");
+        if (File.Exists(gitignorePath))
+        {
+            try
+            {
+                var lines = File.ReadAllLines(gitignorePath);
+                foreach (var line in lines)
+                {
+                    var trimmed = line.Trim();
+                    if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#")) continue;
+                    
+                    // Simple conversion from gitignore to our ignore format
+                    if (trimmed.StartsWith("/")) trimmed = trimmed.Substring(1);
+                    ignoredPatterns.Add(trimmed);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug($"Failed to read .gitignore: {ex.Message}");
+            }
+        }
 
         // Add common build/directory patterns
         var ignoredDirs = new[]

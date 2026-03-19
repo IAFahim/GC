@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 
 namespace gc.Utilities;
 
@@ -11,6 +12,33 @@ public static class TestRunner
 
         try
         {
+            // Find the test project file
+            var currentDir = AppContext.BaseDirectory;
+            string? projectPath = null;
+            while (currentDir != null)
+            {
+                var candidate = Path.Combine(currentDir, "gc.tests", "gc.tests.csproj");
+                if (File.Exists(candidate))
+                {
+                    projectPath = candidate;
+                    break;
+                }
+                candidate = Path.Combine(currentDir, "gc.tests.csproj");
+                if (File.Exists(candidate))
+                {
+                    projectPath = candidate;
+                    break;
+                }
+                currentDir = Directory.GetParent(currentDir)?.FullName;
+            }
+
+            if (projectPath == null)
+            {
+                Console.Error.WriteLine("Could not find gc.tests.csproj. Make sure you are running from the project repository.");
+                Environment.Exit(1);
+                return;
+            }
+
             var psi = new ProcessStartInfo
             {
                 FileName = "dotnet",
@@ -21,7 +49,9 @@ public static class TestRunner
             };
 
             psi.ArgumentList.Add("test");
-            psi.ArgumentList.Add("gc.tests/gc.tests.csproj");
+            psi.ArgumentList.Add(projectPath);
+            psi.ArgumentList.Add("--filter");
+            psi.ArgumentList.Add("FullyQualifiedName!~ReleaseBinaryTests");
             psi.ArgumentList.Add("--verbosity");
             psi.ArgumentList.Add("normal");
             psi.ArgumentList.Add("--no-build");

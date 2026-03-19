@@ -312,9 +312,9 @@ public class Test
         var outputFile = Path.Combine(_testDir, "output_zero.md");
         var result = RunGC($"--output {outputFile}");
 
-        // For non-git discovery, it should show no files found
+        // For non-git discovery, it should show no files found (since .bin is ignored by default)
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("No tracked files found", result.StandardError);
+        Assert.Contains("No files match the specified filters", result.StandardError);
 
         _output.WriteLine($"✅ Zero-byte files handled");
     }

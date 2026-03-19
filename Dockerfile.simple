@@ -1,18 +1,21 @@
-# Simple Dockerfile for GC (Git Copy)
-# This works on Windows, Mac, and Linux
+# Simple Dockerfile for gc (Git Copy)
+# Uses the full .NET SDK to run the project directly
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0
 
 WORKDIR /app
 
-# Install git (required for GC to work)
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# Install git (required for gc to work)
+RUN apt-get update && \
+    apt-get install -y git && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy all source files
+# Copy the entire project
 COPY . .
 
-# Build the project (without AOT for Docker compatibility)
-RUN dotnet build -c Release -p:PublishAot=false
+# Restore dependencies
+RUN dotnet restore gc/gc.csproj
 
-# Default command - show help
-CMD ["dotnet", "run", "--project", "GC/GC.csproj", "--", "--help"]
+# Run gc --help by default
+ENTRYPOINT ["dotnet", "run", "--project", "gc/gc.csproj", "--"]
+CMD ["--help"]

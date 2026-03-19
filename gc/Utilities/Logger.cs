@@ -1,0 +1,106 @@
+using System;
+using System.Diagnostics;
+
+namespace gc.Utilities;
+
+public enum LogLevel
+{
+    Normal,
+    Verbose,
+    Debug
+}
+
+public static class Logger
+{
+    private static LogLevel _currentLevel = LogLevel.Normal;
+    private static readonly object _lock = new();
+
+    public static LogLevel CurrentLevel
+    {
+        get => _currentLevel;
+        set => _currentLevel = value;
+    }
+
+    public static void SetLevel(LogLevel level)
+    {
+        lock (_lock)
+        {
+            _currentLevel = level;
+        }
+    }
+
+    public static void LogInfo(string message)
+    {
+        if (_currentLevel >= LogLevel.Normal)
+        {
+            Console.Error.WriteLine(message);
+        }
+    }
+
+    public static void LogVerbose(string message)
+    {
+        if (_currentLevel >= LogLevel.Verbose)
+        {
+            Console.Error.WriteLine($"[VERBOSE] {message}");
+        }
+    }
+
+    public static void LogDebug(string message)
+    {
+        if (_currentLevel >= LogLevel.Debug)
+        {
+            Console.Error.WriteLine($"[DEBUG] {message}");
+        }
+    }
+
+    public static void LogError(string message, Exception? ex = null)
+    {
+        Console.Error.Write($"[ERROR] {message}");
+        if (ex != null)
+        {
+            Console.Error.WriteLine($": {ex.Message}");
+            if (_currentLevel >= LogLevel.Debug)
+            {
+                Console.Error.WriteLine($"[DEBUG] Stack trace: {ex.StackTrace}");
+            }
+        }
+        else
+        {
+            Console.Error.WriteLine();
+        }
+    }
+
+    public static IDisposable? TimeOperation(string operationName)
+    {
+        if (_currentLevel < LogLevel.Debug)
+        {
+            return null;
+        }
+
+        return new OperationTimer(operationName);
+    }
+
+    private class OperationTimer : IDisposable
+    {
+        private readonly string _operationName;
+        private readonly Stopwatch _stopwatch;
+        private bool _disposed;
+
+        public OperationTimer(string operationName)
+        {
+            _operationName = operationName;
+            _stopwatch = Stopwatch.StartNew();
+            LogDebug($"Starting: {_operationName}");
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+
+            _stopwatch.Stop();
+            LogDebug($"Completed: {_operationName} in {_stopwatch.ElapsedMilliseconds}ms");
+            _disposed = true;
+        }
+    }
+}

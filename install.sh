@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# GC Installation Script
-# This script downloads and installs the latest version of GC
+# gc Installation Script
+# This script downloads and installs the latest version of gc
 
 set -e
 
@@ -47,16 +47,16 @@ case "$ARCH" in
         ;;
 esac
 
-# Repository name (hardcoded to avoid git dependency)
-REPO_NAME="IAFahim/GC"
+# Repository name
+REPO_NAME="IAFahim/gc"
 
 # Get latest release version
 echo -e "${GREEN}Fetching latest release version...${NC}"
 LATEST_VERSION=$(curl -s https://api.github.com/repos/${REPO_NAME}/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
 
 if [ -z "$LATEST_VERSION" ]; then
-    echo -e "${YELLOW}Warning: Could not fetch latest version, using v0.1.0${NC}"
-    LATEST_VERSION="v0.1.0"
+    echo -e "${YELLOW}Warning: Could not fetch latest version, using latest release${NC}"
+    LATEST_VERSION="latest"
 fi
 
 # Construct download URL
@@ -69,7 +69,7 @@ TEMP_DIR=$(mktemp -d)
 trap "rm -rf $TEMP_DIR" EXIT
 
 # Download archive
-echo -e "${GREEN}Downloading GC ${LATEST_VERSION} for ${PLATFORM}...${NC}"
+echo -e "${GREEN}Downloading gc ${LATEST_VERSION} for ${PLATFORM}...${NC}"
 if ! curl -L -o "$TEMP_DIR/${ARCHIVE_NAME}" "$DOWNLOAD_URL"; then
     echo -e "${RED}Error: Failed to download ${ARCHIVE_NAME}${NC}"
     echo -e "${YELLOW}Please download manually from: ${DOWNLOAD_URL}${NC}"
@@ -78,19 +78,25 @@ fi
 
 # Extract archive
 echo -e "${GREEN}Extracting archive...${NC}"
-mkdir -p "$TEMP_DIR/gc"
-tar -xzf "$TEMP_DIR/${ARCHIVE_NAME}" -C "$TEMP_DIR/gc"
+mkdir -p "$TEMP_DIR/gc_bin"
+tar -xzf "$TEMP_DIR/${ARCHIVE_NAME}" -C "$TEMP_DIR/gc_bin"
 
 # Install
 INSTALL_DIR="$HOME/.local/bin"
 mkdir -p "$INSTALL_DIR"
 
-if [ -f "$TEMP_DIR/gc/GC" ]; then
-    mv "$TEMP_DIR/gc/GC" "$INSTALL_DIR/git-copy"
-    chmod +x "$INSTALL_DIR/git-copy"
-    echo -e "${GREEN}Successfully installed GC to $INSTALL_DIR/git-copy${NC}"
+if [ -f "$TEMP_DIR/gc_bin/gc" ]; then
+    mv "$TEMP_DIR/gc_bin/gc" "$INSTALL_DIR/gc"
+    chmod +x "$INSTALL_DIR/gc"
+    echo -e "${GREEN}Successfully installed gc to $INSTALL_DIR/gc${NC}"
+elif [ -f "$TEMP_DIR/gc_bin/gc.exe" ]; then
+    # This shouldn't happen on Linux/Mac but just in case
+    mv "$TEMP_DIR/gc_bin/gc.exe" "$INSTALL_DIR/gc"
+    chmod +x "$INSTALL_DIR/gc"
+    echo -e "${GREEN}Successfully installed gc to $INSTALL_DIR/gc${NC}"
 else
-    echo -e "${RED}Error: Could not find GC binary in archive${NC}"
+    echo -e "${RED}Error: Could not find gc binary in archive${NC}"
+    ls -R "$TEMP_DIR/gc_bin"
     exit 1
 fi
 
@@ -101,4 +107,4 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     echo -e "${YELLOW}export PATH=\"\$PATH:$INSTALL_DIR\"${NC}"
 fi
 
-echo -e "${GREEN}Installation complete! Run 'git-copy --help' to get started.${NC}"
+echo -e "${GREEN}Installation complete! Run 'gc --help' to get started.${NC}"

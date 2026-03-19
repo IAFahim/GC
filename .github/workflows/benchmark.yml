@@ -1,12 +1,9 @@
 name: Continuous Benchmark
 
 on:
-  schedule:
-    # Run every 30 minutes
-    - cron: '*/30 * * * *'
-  workflow_dispatch:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,7 +21,7 @@ jobs:
 
     - name: Run Benchmark
       run: |
-        dotnet run --project GC/GC.csproj -- --benchmark 2>&1 | tee benchmark_results.txt
+        dotnet run --project gc/gc.csproj -- --benchmark 2>&1 | tee benchmark_results.txt
 
     - name: Extract Metrics
       id: metrics
@@ -38,30 +35,24 @@ jobs:
         echo "total_time=${TOTAL_TIME}" >> $GITHUB_OUTPUT
         echo "timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_OUTPUT
 
-    - name: Update README with Real Data
+    - name: Update BENCHMARK.md
       run: |
-        # Remove old benchmark section
-        sed -i '/<!-- BENCHMARK_START -->/,<!-- BENCHMARK_END -->/d' README.md || true
+        echo '# 📊 Real Performance Data' > BENCHMARK.md
+        echo '' >> BENCHMARK.md
+        echo 'Latest benchmark results from automated testing:' >> BENCHMARK.md
+        echo '' >> BENCHMARK.md
+        echo '| Metric | Value |' >> BENCHMARK.md
+        echo '|--------|-------|' >> BENCHMARK.md
+        echo "| Discovery Time | ${{ steps.metrics.outputs.discovery_time }} ms |" >> BENCHMARK.md
+        echo "| File Read Time | ${{ steps.metrics.outputs.read_time }} ms |" >> BENCHMARK.md
+        echo "| Total Time | ${{ steps.metrics.outputs.total_time }} ms |" >> BENCHMARK.md
+        echo '' >> BENCHMARK.md
+        echo "*Last updated: ${{ steps.metrics.outputs.timestamp }}*" >> BENCHMARK.md
 
-        # Add new benchmark section
-        echo '<!-- BENCHMARK_START -->' >> README.md
-        echo '## 📊 Real Performance Data' >> README.md
-        echo '' >> README.md
-        echo 'Latest benchmark results from automated testing:' >> README.md
-        echo '' >> README.md
-        echo '| Metric | Value |' >> README.md
-        echo '|--------|-------|' >> README.md
-        echo "| Discovery Time | ${{ steps.metrics.outputs.discovery_time }} ms |" >> README.md
-        echo "| File Read Time | ${{ steps.metrics.outputs.read_time }} ms |" >> README.md
-        echo "| Total Time | ${{ steps.metrics.outputs.total_time }} ms |" >> README.md
-        echo '' >> README.md
-        echo "*Last updated: ${{ steps.metrics.outputs.timestamp }}*" >> README.md
-        echo '<!-- BENCHMARK_END -->' >> README.md
-
-    - name: Commit Updated README
+    - name: Commit Updated BENCHMARK.md
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
-        git add README.md || true
+        git add BENCHMARK.md || true
         git diff --quiet && git diff --staged --quiet || git commit -m "📊 Update benchmark data - ${{ steps.metrics.outputs.timestamp }}"
         git push || echo "No changes to commit"

@@ -1,16 +1,16 @@
-# Makefile for GC (Git Copy) - Cross-platform Docker commands
+# Makefile for gc (Git Copy) - Cross-platform Docker commands
 # Works on Windows (with WSL), Mac, and Linux
 
 .PHONY: help build test run shell clean
 
 # Default target
 help:
-	@echo "GC (Git Copy) - Docker Commands"
+	@echo "gc (Git Copy) - Docker Commands"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make build    - Build Docker image"
 	@echo "  make test     - Run tests in Docker"
-	@echo "  make run      - Run GC with default settings"
+	@echo "  make run      - Run gc with default settings"
 	@echo "  make shell    - Start interactive shell in container"
 	@echo "  make clean    - Remove Docker images and containers"
 	@echo ""
@@ -26,7 +26,7 @@ build:
 test:
 	docker-compose run --rm gc-test
 
-# Run GC with custom arguments
+# Run gc with custom arguments
 run:
 	docker-compose run --rm gc $(ARGS)
 

@@ -7,6 +7,32 @@ using Xunit;
 
 namespace GC.Tests;
 
+public static class TestHelpers
+{
+    public static CliArguments CreateTestCliArguments()
+    {
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        return new CliArguments(
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            string.Empty,
+            false,
+            false,
+            false,
+            DiscoveryMode.Auto,
+            long.MaxValue,
+            false,
+            false,
+            false,
+            false,
+            false,
+            config
+        );
+    }
+}
+
 public class CliParsingTests
 {
     [Fact]
@@ -283,9 +309,10 @@ public class MarkdownGeneratorTests
     {
         // Arrange
         var contents = Array.Empty<FileContent>();
+        var args = TestHelpers.CreateTestCliArguments();
 
         // Act
-        var result = contents.GenerateMarkdown();
+        var result = contents.GenerateMarkdown(args);
 
         // Assert
         // Even with no files, the markdown generator includes structure
@@ -301,9 +328,10 @@ public class MarkdownGeneratorTests
         var content = "public class Test {}";
         var fileContent = new FileContent(entry, content, 100);
         var contents = new[] { fileContent };
+        var args = TestHelpers.CreateTestCliArguments();
 
         // Act
-        var result = contents.GenerateMarkdown();
+        var result = contents.GenerateMarkdown(args);
 
         // Assert
         Assert.Contains("test.cs", result);
@@ -320,9 +348,10 @@ public class MarkdownGeneratorTests
         var content1 = new FileContent(entry1, "class Zebra {}", 100);
         var content2 = new FileContent(entry2, "class Alpha {}", 100);
         var contents = new[] { content1, content2 };
+        var args = TestHelpers.CreateTestCliArguments();
 
         // Act
-        var result = contents.GenerateMarkdown();
+        var result = contents.GenerateMarkdown(args);
 
         // Assert
         var alphaIndex = result.IndexOf("alpha.cs");
@@ -341,9 +370,10 @@ public class IntegrationTests
         var content = "public class Test { }";
         var fileContent = new FileContent(entry, content, 100);
         var contents = new[] { fileContent };
+        var args = TestHelpers.CreateTestCliArguments();
 
         // Test markdown generation
-        var markdown = contents.GenerateMarkdown();
+        var markdown = contents.GenerateMarkdown(args);
         Assert.NotEmpty(markdown);
         Assert.Contains("test.cs", markdown);
         Assert.Contains(content, markdown);

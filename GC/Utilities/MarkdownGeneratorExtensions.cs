@@ -9,7 +9,7 @@ namespace GC.Utilities;
 
 public static class MarkdownGeneratorExtensions
 {
-    public static string GenerateMarkdown(this FileContent[] contents)
+    public static string GenerateMarkdown(this FileContent[] contents, CliArguments args)
     {
         if (contents == null) throw new ArgumentNullException(nameof(contents));
 
@@ -28,7 +28,7 @@ public static class MarkdownGeneratorExtensions
         using var memoryStream = new MemoryStream();
         using var writer = new StreamWriter(memoryStream, Encoding.UTF8);
 
-        WriteMarkdownToStream(writer, sortedContents);
+        WriteMarkdownToStream(writer, sortedContents, args);
         writer.Flush();
 
         Logger.LogVerbose($"Generated markdown: {memoryStream.Length} bytes");
@@ -36,7 +36,7 @@ public static class MarkdownGeneratorExtensions
         return Encoding.UTF8.GetString(memoryStream.ToArray());
     }
 
-    public static void GenerateMarkdownToStream(this FileContent[] contents, Stream outputStream)
+    public static void GenerateMarkdownToStream(this FileContent[] contents, Stream outputStream, CliArguments args)
     {
         if (contents == null) throw new ArgumentNullException(nameof(contents));
         if (outputStream == null) throw new ArgumentNullException(nameof(outputStream));
@@ -51,13 +51,13 @@ public static class MarkdownGeneratorExtensions
         Array.Sort(sortedContents, (a, b) => string.Compare(a.Entry.Path, b.Entry.Path, StringComparison.OrdinalIgnoreCase));
 
         using var writer = new StreamWriter(outputStream, Encoding.UTF8, leaveOpen: true);
-        WriteMarkdownToStream(writer, sortedContents);
+        WriteMarkdownToStream(writer, sortedContents, args);
         writer.Flush();
 
         Logger.LogVerbose("Markdown generation complete");
     }
 
-    public static void GenerateMarkdownToFile(this FileContent[] contents, string filePath)
+    public static void GenerateMarkdownToFile(this FileContent[] contents, string filePath, CliArguments args)
     {
         if (contents == null) throw new ArgumentNullException(nameof(contents));
         if (string.IsNullOrEmpty(filePath)) throw new ArgumentException("File path cannot be empty", nameof(filePath));
@@ -71,7 +71,7 @@ public static class MarkdownGeneratorExtensions
         Array.Sort(sortedContents, (a, b) => string.Compare(a.Entry.Path, b.Entry.Path, StringComparison.OrdinalIgnoreCase));
 
         using var writer = new StreamWriter(filePath, false, Encoding.UTF8);
-        WriteMarkdownToStream(writer, sortedContents);
+        WriteMarkdownToStream(writer, sortedContents, args);
 
         Logger.LogVerbose($"Markdown written to {filePath}");
     }
@@ -93,13 +93,21 @@ public static class MarkdownGeneratorExtensions
         return "```";  // Default to 3 backticks
     }
 
-    private static void WriteMarkdownToStream(StreamWriter writer, FileContent[] sortedContents)
+    private static void WriteMarkdownToStream(StreamWriter writer, FileContent[] sortedContents, CliArguments args)
     {
+        // Get configuration values
+        var projectStructureHeader = args.Configuration?.Markdown?.ProjectStructureHeader ?? "_Project Structure:_";
+        var textLang = "text"; // Default text language
+        var defaultFence = args.Configuration?.Markdown?.Fence ?? "```";
+
         // Write file contents
         foreach (var content in sortedContents)
         {
             var fence = GetSafeFence(content.Content);
-            writer.WriteLine($"## File: {content.Entry.Path}");
+            var fileHeader = args.Configuration?.Markdown?.FileHeaderTemplate ?? "## File: {path}";
+            var headerText = fileHeader.Replace("{path}", content.Entry.Path);
+
+            writer.WriteLine(headerText);
             writer.WriteLine($"{fence}{content.Entry.Language}");
             writer.WriteLine(content.Content);
             writer.WriteLine(fence);
@@ -108,19 +116,19 @@ public static class MarkdownGeneratorExtensions
 
         Logger.LogDebug("Generated file content sections");
 
-        // Write project structure (using default fence as it only contains file paths)
-        writer.WriteLine(Constants.ProjectStructureHeader);
-        writer.WriteLine($"{Constants.MarkdownFence}{Constants.TextLang}");
+        // Write project structure
+        writer.WriteLine(projectStructureHeader);
+        writer.WriteLine($"{defaultFence}{textLang}");
 
         foreach (var content in sortedContents)
         {
             writer.WriteLine(content.Entry.Path);
         }
 
-        writer.WriteLine(Constants.MarkdownFence);
+        writer.WriteLine(defaultFence);
     }
 
-    public static (int fileCount, long totalBytes) GenerateMarkdownStreaming(this IEnumerable<FileContent> contents, Stream outputStream)
+    public static (int fileCount, long totalBytes) GenerateMarkdownStreaming(this IEnumerable<FileContent> contents, Stream outputStream, CliArguments args)
     {
         if (contents == null) throw new ArgumentNullException(nameof(contents));
         if (outputStream == null) throw new ArgumentNullException(nameof(outputStream));
@@ -134,13 +142,21 @@ public static class MarkdownGeneratorExtensions
 
         Logger.LogVerbose($"Generating markdown for {sortedContents.Count} files to stream...");
 
+        // Get configuration values
+        var projectStructureHeader = args.Configuration?.Markdown?.ProjectStructureHeader ?? "_Project Structure:_";
+        var textLang = "text";
+        var defaultFence = args.Configuration?.Markdown?.Fence ?? "```";
+
         long totalBytes = 0;
 
         // Write file contents one at a time
         foreach (var content in sortedContents)
         {
             var fence = GetSafeFence(content.Content);
-            writer.WriteLine($"## File: {content.Entry.Path}");
+            var fileHeader = args.Configuration?.Markdown?.FileHeaderTemplate ?? "## File: {path}";
+            var headerText = fileHeader.Replace("{path}", content.Entry.Path);
+
+            writer.WriteLine(headerText);
             writer.WriteLine($"{fence}{content.Entry.Language}");
             writer.WriteLine(content.Content);
             writer.WriteLine(fence);
@@ -154,15 +170,15 @@ public static class MarkdownGeneratorExtensions
         Logger.LogDebug("Generated file content sections");
 
         // Write project structure
-        writer.WriteLine(Constants.ProjectStructureHeader);
-        writer.WriteLine($"{Constants.MarkdownFence}{Constants.TextLang}");
+        writer.WriteLine(projectStructureHeader);
+        writer.WriteLine($"{defaultFence}{textLang}");
 
         foreach (var content in sortedContents)
         {
             writer.WriteLine(content.Entry.Path);
         }
 
-        writer.WriteLine(Constants.MarkdownFence);
+        writer.WriteLine(defaultFence);
 
         Logger.LogVerbose("Markdown generation complete");
 

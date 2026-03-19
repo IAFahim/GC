@@ -59,6 +59,7 @@ public static class RealBenchmark
 
             // Benchmark 1: File Discovery
             Console.WriteLine("📊 Phase 1: File Discovery");
+            var config = ConfigurationLoader.LoadConfiguration();
             var args = new CliArguments(
                 Array.Empty<string>(),
                 Array.Empty<string>(),
@@ -71,7 +72,11 @@ public static class RealBenchmark
                 GC.Data.DiscoveryMode.Auto,
                 long.MaxValue,
                 false,
-                true  // Enable debug for timing info
+                true,  // Enable debug for timing info
+                false,
+                false,
+                false,
+                config
             );
 
             var discoveryWatch = Stopwatch.StartNew();
@@ -117,7 +122,7 @@ public static class RealBenchmark
             // Benchmark 3: Markdown Generation
             Console.WriteLine("📊 Phase 3: Markdown Generation");
             var markdownWatch = Stopwatch.StartNew();
-            var markdown = fileContents.GenerateMarkdown();
+            var markdown = fileContents.GenerateMarkdown(args);
             markdownWatch.Stop();
 
             Console.WriteLine($"  • Markdown size:    {FormatSize(markdown.Length)}");
@@ -139,7 +144,7 @@ public static class RealBenchmark
 
             using var memoryStream = new MemoryStream();
             var lazyContents = fileEntries.ReadContentsLazy(args);
-            var (streamedCount, totalBytes) = lazyContents.GenerateMarkdownStreaming(memoryStream);
+            var (streamedCount, totalBytes) = lazyContents.GenerateMarkdownStreaming(memoryStream, args);
 
             streamWatch.Stop();
             var streamEndMemory = process.WorkingSet64 / 1024 / 1024;

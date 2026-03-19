@@ -1,0 +1,256 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GC Configuration",
+  "description": "Configuration schema for GC (Git Copy) tool - A tool for consolidating git repository files into markdown format",
+  "type": "object",
+  "additionalProperties": false,
+
+  "definitions": {
+    "memorySize": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?(B|KB|MB|GB)$",
+      "description": "Memory size with unit suffix (e.g., 100MB, 1GB, 500KB)",
+      "examples": ["100MB", "1GB", "500KB"]
+    },
+
+    "discoveryMode": {
+      "type": "string",
+      "enum": ["auto", "git", "filesystem"],
+      "description": "File discovery mode: auto (detect git repo), git (force git), filesystem (force filesystem scan)"
+    },
+
+    "preset": {
+      "type": "object",
+      "description": "A preset defines a collection of file extensions",
+      "properties": {
+        "extensions": {
+          "type": "array",
+          "description": "List of file extensions (without dots)",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9+\\-]*$",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of this preset"
+        }
+      },
+      "required": ["extensions"],
+      "additionalProperties": false
+    },
+
+    "logLevel": {
+      "type": "string",
+      "enum": ["quiet", "normal", "verbose", "debug"],
+      "description": "Logging verbosity level"
+    },
+
+    "outputFormat": {
+      "type": "string",
+      "enum": ["markdown", "plain", "json"],
+      "description": "Default output format"
+    }
+  },
+
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON schema reference for validation and IDE support"
+    },
+
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Configuration version following semantic versioning",
+      "examples": ["1.0.0", "1.2.3"]
+    },
+
+    "limits": {
+      "type": "object",
+      "description": "Memory and file size limits",
+      "properties": {
+        "maxFileSize": {
+          "$ref": "#/definitions/memorySize",
+          "description": "Maximum size for individual files to process",
+          "default": "1MB"
+        },
+        "maxClipboardSize": {
+          "$ref": "#/definitions/memorySize",
+          "description": "Maximum total size for clipboard output",
+          "default": "10MB"
+        },
+        "maxMemoryBytes": {
+          "$ref": "#/definitions/memorySize",
+          "description": "Maximum memory to use for processing",
+          "default": "100MB"
+        },
+        "maxFiles": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum number of files to process",
+          "default": 100000
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "discovery": {
+      "type": "object",
+      "description": "File discovery settings",
+      "properties": {
+        "mode": {
+          "$ref": "#/definitions/discoveryMode",
+          "default": "auto"
+        },
+        "useGit": {
+          "type": "boolean",
+          "description": "Whether to use git for file discovery when available",
+          "default": true
+        },
+        "followSymlinks": {
+          "type": "boolean",
+          "description": "Whether to follow symbolic links during file discovery",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "filters": {
+      "type": "object",
+      "description": "File filtering settings",
+      "properties": {
+        "systemIgnoredPatterns": {
+          "type": "array",
+          "description": "Patterns for files/directories to always ignore",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": ["node_modules/", "bin/", "obj/", ".git/"]
+        },
+        "additionalExtensions": {
+          "type": "array",
+          "description": "Additional file extensions to always include",
+          "items": {
+            "type": "string",
+            "pattern": "^\\.[a-z0-9]+$",
+            "minLength": 2
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "presets": {
+      "type": "object",
+      "description": "Predefined file extension sets for common use cases",
+      "additionalProperties": {
+        "$ref": "#/definitions/preset"
+      },
+      "default": {
+        "web": {
+          "extensions": ["html", "htm", "css", "js", "jsx", "ts", "tsx"],
+          "description": "Web development files"
+        },
+        "backend": {
+          "extensions": ["py", "rb", "php", "go", "rs", "java", "cs"],
+          "description": "Backend development files"
+        }
+      }
+    },
+
+    "languageMappings": {
+      "type": "object",
+      "description": "Map file extensions to language names for syntax highlighting",
+      "patternProperties": {
+        "^[a-z0-9]+$": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Language name (e.g., javascript, python, csharp)"
+        }
+      },
+      "default": {
+        "js": "javascript",
+        "ts": "typescript",
+        "py": "python",
+        "cs": "csharp"
+      }
+    },
+
+    "markdown": {
+      "type": "object",
+      "description": "Markdown formatting options",
+      "properties": {
+        "fence": {
+          "type": "string",
+          "description": "Code fence characters for markdown code blocks",
+          "pattern": "^`+$",
+          "minLength": 1,
+          "default": "```"
+        },
+        "projectStructureHeader": {
+          "type": "string",
+          "description": "Header text for project structure section",
+          "maxLength": 200,
+          "default": "_Project Structure:_"
+        },
+        "fileHeaderTemplate": {
+          "type": "string",
+          "description": "Template for file section headers. Use {path} as placeholder for file path.",
+          "default": "## File: {path}"
+        },
+        "languageDetection": {
+          "type": "string",
+          "enum": ["extension", "content", "filename"],
+          "description": "Method for detecting programming languages",
+          "default": "extension"
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "output": {
+      "type": "object",
+      "description": "Output formatting options",
+      "properties": {
+        "defaultFormat": {
+          "$ref": "#/definitions/outputFormat",
+          "default": "markdown"
+        },
+        "includeStats": {
+          "type": "boolean",
+          "description": "Include statistics in output",
+          "default": true
+        },
+        "sortByPath": {
+          "type": "boolean",
+          "description": "Sort files by path alphabetically",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "logging": {
+      "type": "object",
+      "description": "Logging configuration",
+      "properties": {
+        "level": {
+          "$ref": "#/definitions/logLevel",
+          "default": "normal"
+        },
+        "includeTimestamps": {
+          "type": "boolean",
+          "description": "Include timestamps in log output",
+          "default": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

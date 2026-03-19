@@ -1,0 +1,160 @@
+{
+  "$schema": "../../schema.json",
+  "version": "1.0.0",
+  "_comment": "GC Configuration File - Full Example",
+  "_comment2": "This file shows all available configuration options",
+
+  "limits": {
+    "_comment": "Memory and file size limits",
+    "maxFileSize": "1MB",
+    "maxClipboardSize": "10MB",
+    "maxMemoryBytes": "100MB",
+    "maxFiles": 100000
+  },
+
+  "discovery": {
+    "_comment": "File discovery mode: auto, git, or filesystem",
+    "mode": "auto",
+    "useGit": true,
+    "followSymlinks": false
+  },
+
+  "filters": {
+    "_comment": "File filtering patterns",
+    "systemIgnoredPatterns": [
+      "node_modules/",
+      "bin/",
+      "obj/",
+      "package-lock.json",
+      "yarn.lock",
+      "Cargo.lock",
+      ".DS_Store",
+      "Thumbs.db",
+      ".git/",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".ico",
+      ".woff",
+      ".woff2",
+      ".pdf",
+      ".exe",
+      ".bin",
+      ".pyc",
+      ".dll",
+      ".pdb",
+      ".min.js",
+      ".min.css",
+      ".meta",
+      "id_rsa",
+      "id_dsa",
+      ".pem",
+      ".key",
+      ".p12",
+      ".env",
+      "secrets",
+      "credentials"
+    ],
+    "additionalExtensions": [".customext"]
+  },
+
+  "presets": {
+    "_comment": "Predefined file extension sets for common use cases",
+    "web": {
+      "extensions": ["html", "htm", "css", "scss", "sass", "less", "js", "jsx", "ts", "tsx", "json", "svg", "vue", "svelte"],
+      "description": "Web development files"
+    },
+    "backend": {
+      "extensions": ["py", "rb", "php", "pl", "go", "rs", "java", "cs", "cpp", "h", "c", "hpp", "swift", "kt", "ex", "exs", "sh"],
+      "description": "Backend development files"
+    },
+    "dotnet": {
+      "extensions": ["cs", "razor", "csproj", "json", "http", "xaml"],
+      "description": ".NET development files"
+    },
+    "unity": {
+      "extensions": ["cs", "shader", "cginc", "hlsl", "glsl", "asmdef", "asmref", "uss", "uxml", "json", "yaml"],
+      "description": "Unity game engine files"
+    },
+    "java": {
+      "extensions": ["java", "kt", "kts", "scala"],
+      "description": "JVM languages"
+    },
+    "cpp": {
+      "extensions": ["c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "rs", "go", "swift"],
+      "description": "C/C++ files"
+    },
+    "script": {
+      "extensions": ["py", "rb", "php", "pl", "pm", "lua", "sh", "bash", "zsh", "ps1"],
+      "description": "Scripting languages"
+    },
+    "data": {
+      "extensions": ["sql", "xml", "json", "yaml", "yml", "toml", "ini", "md", "csv", "graphql"],
+      "description": "Data formats"
+    },
+    "config": {
+      "extensions": ["env", "conf", "ini", "Dockerfile", "Makefile", "Gemfile", "package.json", "cargo.toml", "go.mod"],
+      "description": "Configuration files"
+    },
+    "build": {
+      "extensions": ["Dockerfile", "Makefile", "Gemfile", "package.json"],
+      "description": "Build files"
+    },
+    "docs": {
+      "extensions": ["md", "txt", "rst", "adoc"],
+      "description": "Documentation"
+    },
+
+    "_comment_example": "You can add your own custom presets:",
+    "mylang": {
+      "extensions": ["xyz", "xyzlib"],
+      "description": "My custom language"
+    }
+  },
+
+  "languageMappings": {
+    "_comment": "Map file extensions to language names for syntax highlighting",
+    "js": "javascript",
+    "ts": "typescript",
+    "py": "python",
+    "cs": "csharp",
+    "sh": "bash",
+    "md": "markdown",
+    "h": "c",
+    "hpp": "cpp",
+    "razor": "html",
+    "vue": "html",
+    "shader": "glsl",
+    "cginc": "glsl",
+    "hlsl": "glsl",
+    "uss": "css",
+    "uxml": "xml",
+    "ps1": "powershell",
+    "dockerfile": "dockerfile",
+    "makefile": "makefile",
+    "gemfile": "ruby",
+    "rakefile": "ruby"
+  },
+
+  "markdown": {
+    "_comment": "Markdown formatting options",
+    "fence": "```",
+    "projectStructureHeader": "_Project Structure:_",
+    "fileHeaderTemplate": "## File: {path}",
+    "languageDetection": "extension"
+  },
+
+  "output": {
+    "_comment": "Output formatting options",
+    "defaultFormat": "markdown",
+    "includeStats": true,
+    "sortByPath": true
+  },
+
+  "logging": {
+    "_comment": "Logging level: normal, verbose, debug, or quiet",
+    "level": "normal",
+    "includeTimestamps": false
+  }
+}

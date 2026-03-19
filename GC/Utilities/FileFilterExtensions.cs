@@ -30,7 +30,7 @@ public static class FileFilterExtensions
                 var extension = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
                 var fileName = Path.GetFileName(path).ToLowerInvariant();
                 var languageKey = string.IsNullOrEmpty(extension) ? fileName : extension;
-                var language = languageKey.ResolveLanguage();
+                var language = languageKey.ResolveLanguage(args);
                 return new FileEntry(path, extension, language);
             })
             .ToArray();
@@ -49,7 +49,7 @@ public static class FileFilterExtensions
 
         foreach (var preset in args.Presets)
         {
-            var mapped = preset.ResolvePreset();
+            var mapped = preset.ResolvePreset(args);
             foreach (var str in mapped)
             {
                 set.Add(str);
@@ -59,40 +59,54 @@ public static class FileFilterExtensions
         return set;
     }
 
-    private static string[] ResolvePreset(this string preset)
+    private static string[] ResolvePreset(this string preset, CliArguments args)
     {
+        // Try to get from configuration first
+        if (args.Configuration?.Presets != null &&
+            args.Configuration.Presets.TryGetValue(preset, out var presetConfig))
+        {
+            return presetConfig.Extensions;
+        }
+
+        // Fallback to built-in presets
         return preset switch
         {
-            "web" => Constants.PresetWeb,
-            "backend" => Constants.PresetBackend,
-            "dotnet" => Constants.PresetDotnet,
-            "unity" => Constants.PresetUnity,
-            "java" => Constants.PresetJava,
-            "cpp" => Constants.PresetCpp,
-            "script" => Constants.PresetScript,
-            "data" => Constants.PresetData,
-            "config" => Constants.PresetConfig,
-            "build" => Constants.PresetBuild,
-            "docs" => Constants.PresetDocs,
-            _ =>[]
+            "web" => BuiltInPresets.PresetWeb,
+            "backend" => BuiltInPresets.PresetBackend,
+            "dotnet" => BuiltInPresets.PresetDotnet,
+            "unity" => BuiltInPresets.PresetUnity,
+            "java" => BuiltInPresets.PresetJava,
+            "cpp" => BuiltInPresets.PresetCpp,
+            "script" => BuiltInPresets.PresetScript,
+            "data" => BuiltInPresets.PresetData,
+            "config" => BuiltInPresets.PresetConfig,
+            "build" => BuiltInPresets.PresetBuild,
+            "docs" => BuiltInPresets.PresetDocs,
+            _ => Array.Empty<string>()
         };
     }
 
-    private static string ResolveLanguage(this string key)
+    private static string ResolveLanguage(this string key, CliArguments args)
     {
-        for (var i = 0; i < Constants.LangMapKeys.Length; i++)
+        // Try to get from configuration first
+        if (args.Configuration?.LanguageMappings != null &&
+            args.Configuration.LanguageMappings.TryGetValue(key, out var language))
         {
-            if (string.Equals(Constants.LangMapKeys[i], key, StringComparison.OrdinalIgnoreCase))
-            {
-                return Constants.LangMapValues[i];
-            }
+            return language;
         }
+
+        // Fallback to built-in mappings
+        if (BuiltInPresets.LanguageMappings.TryGetValue(key, out var builtInLanguage))
+        {
+            return builtInLanguage;
+        }
+
         return key;
     }
 
     private static bool IsValidPath(this string path, CliArguments args, HashSet<string> activeExtensions)
     {
-        if (path.IsSystemIgnored())
+        if (path.IsSystemIgnored(args))
         {
             return false;
         }
@@ -115,9 +129,12 @@ public static class FileFilterExtensions
         return true;
     }
 
-    private static bool IsSystemIgnored(this string path)
+    private static bool IsSystemIgnored(this string path, CliArguments args)
     {
-        foreach (var str in Constants.SystemIgnoredPatterns)
+        // Get system ignored patterns from configuration or built-in defaults
+        var patterns = args.Configuration?.Filters?.SystemIgnoredPatterns ?? BuiltInPresets.SystemIgnoredPatterns;
+
+        foreach (var str in patterns)
         {
             if (path.Contains(str, StringComparison.OrdinalIgnoreCase))
             {

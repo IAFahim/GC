@@ -1,0 +1,19 @@
+{
+  "$schema": "../../schema.json",
+  "version": "1.0.0",
+
+  "_comment": "GC Configuration File - Minimal Example",
+  "_comment2": "Only include the options you want to customize",
+
+  "presets": {
+    "my-project": {
+      "extensions": ["cs", "csproj", "json", "http"],
+      "description": "My C# project files"
+    }
+  },
+
+  "markdown": {
+    "fence": "~~~",
+    "projectStructureHeader": "## Project Structure"
+  }
+}

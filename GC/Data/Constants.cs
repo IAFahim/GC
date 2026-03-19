@@ -1,5 +1,15 @@
+using System;
+
 namespace GC.Data;
 
+/// <summary>
+/// Built-in constants for GC tool.
+/// NOTE: This class is now obsolete. Configuration is loaded from JSON files.
+/// Use ConfigurationLoader.LoadConfiguration() to get the active configuration.
+/// Use BuiltInPresets.GetDefaultConfiguration() for built-in defaults.
+/// This class is maintained for backward compatibility only.
+/// </summary>
+[Obsolete("Configuration is now loaded from JSON files. Use ConfigurationLoader.LoadConfiguration() for active configuration or BuiltInPresets.GetDefaultConfiguration() for built-in defaults.")]
 public static class Constants
 {
     public const int MaxFileSize = 1048576;

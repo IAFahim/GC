@@ -26,6 +26,9 @@ public static class CliParserExtensions
 
     public static CliArguments ParseCli(this string[] args)
     {
+        // Load configuration
+        var config = ConfigurationLoader.LoadConfiguration();
+
         var paths = new List<string>(4);
         var extensions = new List<string>(8);
         var excludes = new List<string>(8);
@@ -34,10 +37,13 @@ public static class CliParserExtensions
         var showHelp = false;
         var runTests = false;
         var runRealBenchmark = false;
-        var discoveryMode = DiscoveryMode.Auto;
-        var maxMemoryBytes = ParseMemorySize("100MB");
+        var discoveryMode = ParseDiscoveryMode(config.Discovery.Mode);
+        var maxMemoryBytes = config.Limits.GetMaxMemoryBytesValue();
         var verbose = false;
         var debug = false;
+        var initConfig = false;
+        var validateConfig = false;
+        var dumpConfig = false;
 
         var state = ParseState.None;
 
@@ -81,6 +87,24 @@ public static class CliParserExtensions
                 continue;
             }
 
+            if (arg.IsInitConfigFlag())
+            {
+                initConfig = true;
+                continue;
+            }
+
+            if (arg.IsValidateConfigFlag())
+            {
+                validateConfig = true;
+                continue;
+            }
+
+            if (arg.IsDumpConfigFlag())
+            {
+                dumpConfig = true;
+                continue;
+            }
+
             if (arg.TryGetNewState(out var newState))
             {
                 // Check if we have a dangling argument from previous state
@@ -117,7 +141,11 @@ public static class CliParserExtensions
             discoveryMode,
             maxMemoryBytes,
             verbose,
-            debug);
+            debug,
+            initConfig,
+            validateConfig,
+            dumpConfig,
+            config);
     }
 
     private static bool IsHelpFlag(this string arg)
@@ -145,6 +173,21 @@ public static class CliParserExtensions
     private static bool IsDebugFlag(this string arg)
     {
         return string.Equals(arg, "--debug", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsInitConfigFlag(this string arg)
+    {
+        return string.Equals(arg, "--init-config", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsValidateConfigFlag(this string arg)
+    {
+        return string.Equals(arg, "--validate-config", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDumpConfigFlag(this string arg)
+    {
+        return string.Equals(arg, "--dump-config", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryGetNewState(this string arg, out ParseState state)

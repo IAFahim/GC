@@ -24,27 +24,24 @@ if [ ${#SELECTED_PATHS[@]} -eq 0 ]; then
     exit 0
 fi
 
-# We'll use the first selected path as the primary target
-# gc handles multiple paths if passed via --paths
-TARGET_PATHS=""
+# Prepare paths array
+TARGET_PATHS=()
 for path in "${SELECTED_PATHS[@]}"; do
     # Convert relative path to absolute if needed
     if [[ "$path" != /* ]]; then
-        # NAUTILUS_SCRIPT_CURRENT_URI can help get the base dir
-        # but usually paths are relative to the current dir where nautilus is
         path="$(pwd)/$path"
     fi
-    TARGET_PATHS="$TARGET_PATHS \"$path\""
+    TARGET_PATHS+=("$path")
     echo "Target path: $path" >> "$LOG_FILE"
 done
 
 # Run gc
-# We use eval because TARGET_PATHS has quoted paths
-CMD="gc --paths $TARGET_PATHS"
-echo "Running: $CMD" >> "$LOG_FILE"
+# We use an array for TARGET_PATHS to handle spaces correctly
+echo "Running: gc --paths ${TARGET_PATHS[@]}" >> "$LOG_FILE"
 
 # Capture output and exit code
-OUTPUT=$(eval "$CMD" 2>&1)
+# Pass the array to the command to preserve quoting
+OUTPUT=$(gc --paths "${TARGET_PATHS[@]}" 2>&1)
 EXIT_CODE=$?
 
 echo "Exit code: $EXIT_CODE" >> "$LOG_FILE"

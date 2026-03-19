@@ -322,3 +322,16 @@ MIT License - see LICENSE file for details
 - [ ] Custom output formats
 - [ ] Git submodules support
 - [ ] Language server integration
+<!-- BENCHMARK_START -->
+## 📊 Real Performance Data
+
+Latest benchmark results from automated testing:
+
+| Metric | Value |
+|--------|-------|
+| Discovery Time | tie: ms |
+| File Read Time | tie: ms |
+| Total Time | tie: ms |
+
+*Last updated: 2026-03-19 03:08:56 UTC*
+<!-- BENCHMARK_END -->

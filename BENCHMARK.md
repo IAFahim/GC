@@ -1,6 +1,8 @@
-# 📊 Real Performance Data
+# 📊 gc Performance Benchmarks
 
-Latest benchmark results from automated testing:
+This file tracks the automated performance metrics for `gc` (Git Copy). Benchmarks are executed on every push to the `main` branch.
+
+## Latest Results
 
 | Metric | Value |
 |--------|-------|
@@ -9,3 +11,6 @@ Latest benchmark results from automated testing:
 | Total Time | 44 ms |
 
 *Last updated: 2026-03-19 18:36:43 UTC*
+
+---
+*Note: Benchmarks are run on GitHub Actions runners. Performance on local hardware will vary but is typically faster due to AOT compilation and native execution.*

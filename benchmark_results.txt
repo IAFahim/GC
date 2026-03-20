@@ -1,0 +1,16 @@
+╔════════════════════════════════════════════════════════════════╗
+║            GC (Git Copy) - Real Repository Benchmark            ║
+╚════════════════════════════════════════════════════════════════╝
+
+Testing against repository: /home/runner/work/GC/GC
+  • Files discovered: 80
+  • Discovery time:   23 ms
+  • Files after filter: 80
+  • Read time:        22 ms
+  • Total bytes:      289,051
+  • Throughput:       12.53 MB/s
+  • Total time:       45 ms
+
+╔════════════════════════════════════════════════════════════════╗
+║                    Benchmark Complete                            ║
+╚════════════════════════════════════════════════════════════════╝

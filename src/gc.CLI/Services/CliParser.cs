@@ -27,6 +27,7 @@ public sealed class CliParser
         var presets = new List<string>();
         var output = string.Empty;
         var showHelp = false;
+        var showVersion = false;
         var runTests = false;
         var runRealBenchmark = false;
         var verbose = false;
@@ -39,6 +40,7 @@ public sealed class CliParser
 
         var state = ParseState.None;
         var onlyPaths = false;
+        var unknownFlagFound = false;
 
         foreach (var arg in args)
         {
@@ -56,7 +58,7 @@ public sealed class CliParser
 
             if (IsFlag(arg, out var flagType))
             {
-                ProcessFlag(flagType, ref showHelp, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig);
+                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig);
                 state = ParseState.None;
                 continue;
             }
@@ -77,8 +79,17 @@ public sealed class CliParser
             }
             else
             {
-                ProcessDefaultArg(arg, paths);
+                if (!ProcessDefaultArg(arg, paths))
+                {
+                    unknownFlagFound = true;
+                }
             }
+        }
+
+        // If unknown flag found, show help
+        if (unknownFlagFound)
+        {
+            showHelp = true;
         }
 
         return Result<CliArguments>.Success(new CliArguments
@@ -89,6 +100,7 @@ public sealed class CliParser
             Presets = presets.ToArray(),
             OutputFile = output,
             ShowHelp = showHelp,
+            ShowVersion = showVersion,
             RunTests = runTests,
             RunRealBenchmark = runRealBenchmark,
             DiscoveryMode = discoveryMode,
@@ -107,6 +119,7 @@ public sealed class CliParser
         flagType = arg.ToLowerInvariant() switch
         {
             "-h" or "--help" => "help",
+            "--version" => "version",
             "--test" => "test",
             "--benchmark" => "benchmark",
             "-v" or "--verbose" => "verbose",
@@ -119,11 +132,12 @@ public sealed class CliParser
         return !string.IsNullOrEmpty(flagType);
     }
 
-    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig)
+    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig)
     {
         switch (flagType)
         {
             case "help": showHelp = true; break;
+            case "version": showVersion = true; break;
             case "test": runTests = true; break;
             case "benchmark": runRealBenchmark = true; break;
             case "verbose": verbose = true; break;
@@ -185,12 +199,16 @@ public sealed class CliParser
         }
     }
 
-    private static void ProcessDefaultArg(string arg, List<string> paths)
+    private static bool ProcessDefaultArg(string arg, List<string> paths)
     {
         if (!arg.StartsWith('-'))
         {
             paths.Add(arg.Replace('\\', '/'));
+            return true;
         }
+
+        // Unknown flag (starts with - but wasn't recognized)
+        return false;
     }
 
     private static long ParseMemorySize(string size)

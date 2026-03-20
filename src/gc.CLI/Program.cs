@@ -42,6 +42,7 @@ public static class Program
         else if (cliArgs.Verbose) logger.Level = gc.Domain.Interfaces.LogLevel.Info;
 
         if (cliArgs.ShowHelp) { PrintHelp(); return 0; }
+        if (cliArgs.ShowVersion) { PrintVersion(); return 0; }
         if (cliArgs.RunTests) { TestRunner.RunTests(); return 0; }
         if (cliArgs.RunRealBenchmark) { await RealBenchmark.RunRealBenchmarkAsync(logger); return 0; }
 
@@ -64,6 +65,18 @@ public static class Program
         if (cliArgs.InitConfig) return (await configService.InitializeConfigAsync()).IsSuccess ? 0 : 1;
         if (cliArgs.ValidateConfig) return configService.ValidateConfig(config).IsSuccess ? 0 : 1;
         if (cliArgs.DumpConfig) return configService.DumpConfig(config).IsSuccess ? 0 : 1;
+
+        // Update config with CLI args
+        if (cliArgs.DiscoveryMode != gc.CLI.Models.DiscoveryMode.Auto)
+        {
+            config = config with
+            {
+                Discovery = config.Discovery with
+                {
+                    Mode = cliArgs.DiscoveryMode.ToString().ToLowerInvariant()
+                }
+            };
+        }
 
         var result = await useCase.ExecuteAsync(
             Directory.GetCurrentDirectory(),
@@ -97,6 +110,13 @@ OPTIONS:
     --validate-config           Validate configuration
     --dump-config               Show configuration
     --test                     Run tests
-    --benchmark                Run benchmark");
+    --benchmark                Run benchmark
+    --version                  Show version information");
+    }
+
+    private static void PrintVersion()
+    {
+        Console.WriteLine("gc version 1.0.0");
+        Console.WriteLine("Git Copy (Elite C# Edition)");
     }
 }

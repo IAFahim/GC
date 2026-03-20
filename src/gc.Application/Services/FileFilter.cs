@@ -71,6 +71,28 @@ public sealed class FileFilter
         // Check extension filter
         if (extensions.Count > 0 && !extensions.Contains(GetFullExtension(path))) return false;
 
+        // Check system ignored patterns from config
+        if (config.Filters?.SystemIgnoredPatterns != null)
+        {
+            var pathNormalized = path.Replace('\\', '/');
+            foreach (var ignoredPattern in config.Filters.SystemIgnoredPatterns)
+            {
+                var patternNormalized = ignoredPattern.Replace('\\', '/');
+
+                // Check if path matches ignored pattern
+                if (pathNormalized.Contains(patternNormalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                // Also check extension-specific patterns (e.g., ".bin")
+                if (patternNormalized.StartsWith('.') && pathNormalized.EndsWith(patternNormalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+        }
+
         // Check search paths
         var searchPathsList = searchPaths.ToList();
         if (searchPathsList.Count > 0)

@@ -49,7 +49,11 @@ public sealed class GenerateContextUseCase
         if (!filterResult.IsSuccess) return Result.Failure(filterResult.Error!);
 
         var entries = filterResult.Value!.ToList();
-        if (!entries.Any()) return Result.Failure("No files match the specified filters.");
+        if (!entries.Any())
+        {
+            _logger.Info("No files match the specified filters.");
+            return Result.Success();
+        }
 
         _logger.Info($"Processing {entries.Count} files...");
 

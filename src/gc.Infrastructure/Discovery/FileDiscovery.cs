@@ -22,17 +22,22 @@ public sealed class FileDiscovery : IFileDiscovery
             var discoveryConfig = config.Discovery ?? new DiscoveryConfiguration();
             var mode = discoveryConfig.Mode.ToLowerInvariant();
 
-            if (mode == "git" || (mode == "auto" && await IsGitRepositoryAsync(rootPath, ct)))
+            if (mode == "git")
+            {
+                if (!await IsGitRepositoryAsync(rootPath, ct))
+                {
+                    return Result<IEnumerable<string>>.Failure("Not a git repository. git discovery mode requires a git repository.");
+                }
+
+                return await DiscoverWithGitAsync(rootPath, ct);
+            }
+
+            if (mode == "auto" && await IsGitRepositoryAsync(rootPath, ct))
             {
                 var gitFiles = await DiscoverWithGitAsync(rootPath, ct);
                 if (gitFiles.IsSuccess)
                 {
                     return gitFiles;
-                }
-
-                if (mode == "git")
-                {
-                    return Result<IEnumerable<string>>.Failure("Git discovery failed but was explicitly requested.");
                 }
             }
 

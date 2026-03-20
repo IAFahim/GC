@@ -56,19 +56,16 @@ jobs:
         echo '' >> BENCHMARK.md
         echo "*Last updated: ${{ steps.metrics.outputs.timestamp }}*" >> BENCHMARK.md
 
-    - name: Create Pull Request
-      uses: peter-evans/create-pull-request@v7
-      with:
-        branch: benchmark-report-${{ github.run_number }}
-        title: "Benchmark Report - ${{ steps.metrics.outputs.timestamp }}"
-        body: |
-          Automated benchmark results report.
-
-          ## Metrics
-          - Discovery Time: ${{ steps.metrics.outputs.discovery_time }} ms
-          - File Read Time: ${{ steps.metrics.outputs.read_time }} ms
-          - Total Time: ${{ steps.metrics.outputs.total_time }} ms
-
-          *Last updated: ${{ steps.metrics.outputs.timestamp }}*
-        commit-message: "Update benchmark data - ${{ steps.metrics.outputs.timestamp }}"
-        delete-branch: true
+    - name: Commit and Push Results
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add BENCHMARK.md
+        
+        # Only commit if there are changes
+        if git diff --staged --quiet; then
+          echo "No changes in BENCHMARK.md, skipping commit."
+        else
+          git commit -m "docs: Update benchmark results [skip ci]"
+          git push origin main
+        fi

@@ -20,21 +20,27 @@ jobs:
       with:
         dotnet-version: '10.0.x'
 
+    - name: Restore dependencies
+      run: dotnet restore src/gc.CLI/gc.CLI.csproj
+
     - name: Run Benchmark
       run: |
-        dotnet run --project src/gc.CLI/gc.CLI.csproj -- --benchmark 2>&1 | tee benchmark_results.txt
+        dotnet run --project src/gc.CLI/gc.CLI.csproj --no-restore -- --benchmark 2>&1 | tee benchmark_results.txt
 
     - name: Extract Metrics
       id: metrics
       run: |
-        DISCOVERY_TIME=$(grep -oP "Discovery time:.*?\K[0-9]+(?= ms)" benchmark_results.txt || echo "0")
-        READ_TIME=$(grep -oP "Read time:.*?\K[0-9]+(?= ms)" benchmark_results.txt | head -1 || echo "0")
-        TOTAL_TIME=$(grep -oP "Total time:.*?\K[0-9]+(?= ms)" benchmark_results.txt || echo "0")
+        cat benchmark_results.txt
+        DISCOVERY_TIME=$(grep -oP "Discovery time:\s+\K[0-9]+" benchmark_results.txt || echo "0")
+        READ_TIME=$(grep -oP "Read time:\s+\K[0-9]+" benchmark_results.txt | head -1 || echo "0")
+        TOTAL_TIME=$(grep -oP "Total time:\s+\K[0-9]+" benchmark_results.txt || echo "0")
 
         echo "discovery_time=${DISCOVERY_TIME}" >> $GITHUB_OUTPUT
         echo "read_time=${READ_TIME}" >> $GITHUB_OUTPUT
         echo "total_time=${TOTAL_TIME}" >> $GITHUB_OUTPUT
         echo "timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_OUTPUT
+        
+        echo "Extracted: Discovery=${DISCOVERY_TIME}ms, Read=${READ_TIME}ms, Total=${TOTAL_TIME}ms"
 
     - name: Update BENCHMARK.md
       run: |

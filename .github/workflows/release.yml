@@ -51,7 +51,7 @@ jobs:
       run: dotnet build src/gc.CLI/gc.CLI.csproj --configuration Release --no-restore
 
     - name: Test
-      run: dotnet test --no-restore --verbosity normal
+      run: dotnet test gc.sln --no-restore --verbosity normal
 
     - name: Publish ${{ matrix.target }}
       run: dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -r ${{ matrix.target }} --self-contained -p:PublishAot=true -o ./publish/${{ matrix.target }}

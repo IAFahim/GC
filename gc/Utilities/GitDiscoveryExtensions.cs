@@ -290,25 +290,52 @@ public static class GitDiscoveryExtensions
 
     private static bool ShouldIgnoreFile(string path, List<string> ignoredPatterns)
     {
-        var fileName = Path.GetFileName(path).ToLowerInvariant();
+        // Normalize path to use forward slashes and lowercase
+        var normalizedPath = path.Replace('\\', '/').ToLowerInvariant();
 
-        // Check exact matches
-        if (ignoredPatterns.Contains(fileName))
-        {
-            return true;
-        }
-
-        // Check pattern matches (simple wildcard support)
         foreach (var pattern in ignoredPatterns)
         {
-            if (pattern.StartsWith("*") && fileName.EndsWith(pattern.Substring(1), StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+            var normalizedPattern = pattern.Replace('\\', '/').ToLowerInvariant();
 
-            if (pattern.EndsWith("*") && fileName.StartsWith(pattern.Substring(0, pattern.Length - 1), StringComparison.OrdinalIgnoreCase))
+            // Directory pattern (ends with /)
+            if (normalizedPattern.EndsWith("/"))
             {
-                return true;
+                // Check if any directory in the path matches the pattern
+                var dirPattern = normalizedPattern.TrimEnd('/');
+                var pathParts = normalizedPath.Split('/');
+
+                if (pathParts.Contains(dirPattern))
+                {
+                    return true;
+                }
+            }
+            // File pattern
+            else
+            {
+                var fileName = Path.GetFileName(normalizedPath);
+
+                // Exact filename match
+                if (normalizedPattern == fileName)
+                {
+                    return true;
+                }
+
+                // Wildcard patterns
+                if (normalizedPattern.StartsWith("*") && fileName.EndsWith(normalizedPattern.Substring(1)))
+                {
+                    return true;
+                }
+
+                if (normalizedPattern.EndsWith("*") && fileName.StartsWith(normalizedPattern.Substring(0, normalizedPattern.Length - 1)))
+                {
+                    return true;
+                }
+
+                // Extension pattern (e.g., *.log)
+                if (normalizedPattern.StartsWith("*.") && fileName.EndsWith(normalizedPattern.Substring(1)))
+                {
+                    return true;
+                }
             }
         }
 

@@ -80,12 +80,95 @@ public static class ClipboardExtensions
     {
         try
         {
-            Logger.LogDebug("Copying to clipboard via clip.exe");
+            Logger.LogDebug("Copying to clipboard via PowerShell Set-Clipboard");
 
+            // Use PowerShell's Set-Clipboard which properly handles UTF-8 encoding
             var psi = new ProcessStartInfo
             {
-                FileName = "clip.exe",
-                RedirectStandardInput = true,
+                FileName = "pwsh",
+                Arguments = $"-Command Set-Clipboard -Value @(\"{markdown.Replace("\"", "`\"").Replace("$", "`$")}\")",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                Logger.LogDebug("PowerShell 7+ not found, trying Windows PowerShell");
+                return CopyToClipboardWindowsLegacy(markdown);
+            }
+
+            process.WaitForExit();
+            if (process.ExitCode == 0)
+            {
+                Logger.LogDebug("PowerShell 7+ clipboard copy successful");
+                return true;
+            }
+
+            Logger.LogDebug("PowerShell 7+ clipboard copy failed, trying Windows PowerShell");
+            return CopyToClipboardWindowsLegacy(markdown);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug($"PowerShell clipboard copy failed: {ex.Message}, trying legacy method");
+            return CopyToClipboardWindowsLegacy(markdown);
+        }
+    }
+
+    private static bool CopyToClipboardWindowsLegacy(string markdown)
+    {
+        try
+        {
+            Logger.LogDebug("Copying to clipboard via Windows PowerShell (powershell.exe)");
+
+            // Use Windows PowerShell's Set-Clipboard which properly handles UTF-8 encoding
+            var psi = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-Command Set-Clipboard -Value @(\"{markdown.Replace("\"", "`\"").Replace("$", "`$")}\")",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                Logger.LogDebug("Windows PowerShell not found, trying clip.exe with chcp 65001");
+                return CopyToClipboardWindowsClipExe(markdown);
+            }
+
+            process.WaitForExit();
+            if (process.ExitCode == 0)
+            {
+                Logger.LogDebug("Windows PowerShell clipboard copy successful");
+                return true;
+            }
+
+            Logger.LogDebug("Windows PowerShell clipboard copy failed, trying clip.exe with chcp 65001");
+            return CopyToClipboardWindowsClipExe(markdown);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug($"Windows PowerShell clipboard copy failed: {ex.Message}, trying clip.exe with chcp 65001");
+            return CopyToClipboardWindowsClipExe(markdown);
+        }
+    }
+
+    private static bool CopyToClipboardWindowsClipExe(string markdown)
+    {
+        try
+        {
+            Logger.LogDebug("Copying to clipboard via clip.exe with UTF-8 encoding");
+
+            // Set console code page to UTF-8 before piping to clip.exe
+            var psi = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c chcp 65001 >nul 2>&1 && echo \"{markdown.Replace("\"", "^\"").Replace("&", "^&").Replace("<", "^<").Replace(">", "^>").Replace("|", "^|").Replace("%", "^%")}\" | clip.exe",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -97,13 +180,6 @@ public static class ClipboardExtensions
             {
                 return false;
             }
-
-            // Using UTF-16 LE (Unicode) is often required by clip.exe to avoid mangling text if the console codepage is not UTF-8
-            // However, clip.exe reads standard input using the current console input encoding.
-            // A common reliable trick is to just write it out.
-            using var writer = new StreamWriter(process.StandardInput.BaseStream, new System.Text.UTF8Encoding(false));
-            writer.Write(markdown);
-            writer.Close();
 
             process.WaitForExit();
             return process.ExitCode == 0;

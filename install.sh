@@ -102,16 +102,13 @@ if [ "$EXTRACT_SUCCESS" = false ]; then
 
     if tar -xzf "$TEMP_DIR/${ARCHIVE_NAME}" -C "$EXTRACT_TEMP_DIR" 2>/dev/null; then
         # Find the actual gc binary (not text files like README_gc.txt)
-        # Search for exact filename match and validate it's an executable binary
+        # Search for exact filename match and validate it has execute permissions
         GC_BINARY=""
         for candidate in $(find "$EXTRACT_TEMP_DIR" -type f \( -name "gc" -o -name "gc.exe" \)); do
-            # Check if file is executable binary (ELF for Linux, Mach-O for macOS, PE for Windows)
-            if file "$candidate" | grep -qE '(ELF|Mach-O|PE32|PE32\+|executable)'; then
-                # Verify it's not a text file
-                if ! file "$candidate" | grep -q 'text'; then
-                    GC_BINARY="$candidate"
-                    break
-                fi
+            # Check if file has execute permission
+            if [ -x "$candidate" ]; then
+                GC_BINARY="$candidate"
+                break
             fi
         done
 

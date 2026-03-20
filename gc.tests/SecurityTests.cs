@@ -6,8 +6,8 @@ namespace gc.Tests;
 
 public class SecurityTests : IDisposable
 {
-    private static bool _gitChecked;
-    private static bool _gitAvailable;
+    private bool _gitChecked;
+    private bool _gitAvailable;
     private readonly ITestOutputHelper _output;
     private readonly string _testDir;
     private readonly string _repoDir;

@@ -104,20 +104,38 @@ public static class FileReaderExtensions
                 }
             }
 
+            int consecutiveNulls = 0;
             int nonPrintableCount = 0;
             bool isBinary = false;
-            
+
             for (var i = 0; i < checkLength; i++)
             {
                 byte b = checkBytes[i];
+
+                // Track consecutive null bytes (indicates UTF-16 LE binary data)
+                if (b == 0x00)
+                {
+                    consecutiveNulls++;
+                    if (consecutiveNulls >= 3)
+                    {
+                        isBinary = true;
+                        break;
+                    }
+                }
+                else
+                {
+                    consecutiveNulls = 0;
+                }
+
                 // Non-printable control characters, excluding standard whitespace (tab, LF, CR)
-                if (b < 32 && b != 9 && b != 10 && b != 13)
+                if (b < 32 && b != 9 && b != 10 && b != 13 && b != 0x00)
                 {
                     nonPrintableCount++;
                 }
             }
 
-            if (checkLength > 0 && ((double)nonPrintableCount / checkLength) > 0.1)
+            // Additional check for high non-printable density (excluding UTF-16 nulls)
+            if (!isBinary && checkLength > 0 && ((double)nonPrintableCount / checkLength) > 0.1)
             {
                 isBinary = true;
             }
@@ -163,35 +181,10 @@ public static class FileReaderExtensions
 
         using var _ = Logger.TimeOperation("File reading (streaming)");
 
-        // Calculate total size before reading
+        // Calculate total size for logging only (streaming doesn't load into memory)
         long totalSize = entries.Sum(e => e.Size);
 
-        Logger.LogVerbose($"Reading {entries.Length} files (total size: {Formatting.FormatSize(totalSize)})...");
-
-        // Check against memory limit
-        if (totalSize > args.MaxMemoryBytes)
-        {
-            var maxSizeStr = Formatting.FormatSize(args.MaxMemoryBytes);
-            var totalSizeStr = Formatting.FormatSize(totalSize);
-
-            Logger.LogError($"Memory limit exceeded: {totalSizeStr} > {maxSizeStr}");
-            Console.WriteLine($"Use --max-memory to increase the limit (e.g., --max-memory 500MB)");
-            Environment.Exit(1);
-            yield break;
-        }
-
-        // Warning if approaching limit
-        if (totalSize > args.MaxMemoryBytes * 0.8)
-        {
-            var maxSizeStr = Formatting.FormatSize(args.MaxMemoryBytes);
-            var totalSizeStr = Formatting.FormatSize(totalSize);
-            var percentage = (totalSize * 100.0 / args.MaxMemoryBytes).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
-
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.Write("[WARNING] ");
-            Console.ResetColor();
-            Console.WriteLine($"Approaching memory limit: {totalSizeStr} ({percentage}% of {maxSizeStr})");
-        }
+        Logger.LogVerbose($"Streaming {entries.Length} files (total size: {Formatting.FormatSize(totalSize)})...");
 
         var processedCount = 0;
         var skippedCount = 0;

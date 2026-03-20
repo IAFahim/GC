@@ -225,17 +225,17 @@ public static class ConfigurationLoader
         try
         {
             var json = File.ReadAllText(filePath);
-            var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
-            {
-                PropertyNameCaseInsensitive = true,
-                ReadCommentHandling = JsonCommentHandling.Skip,
-                AllowTrailingCommas = true
-            };
-            
-            // Add the AOT-compatible source generated context
-            options.TypeInfoResolver = GcJsonSerializerContext.Default;
 
-            var config = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.GcConfiguration);
+            // Get the source-generated JsonTypeInfo
+            var typeInfo = GcJsonSerializerContext.Default.GcConfiguration;
+
+            // Configure the options on the JsonTypeInfo for AOT compatibility
+            // Note: ReadCommentHandling and AllowTrailingCommas are set via the source generator
+            var options = typeInfo.Options;
+            options.ReadCommentHandling = JsonCommentHandling.Skip;
+            options.AllowTrailingCommas = true;
+
+            var config = JsonSerializer.Deserialize(json, typeInfo);
 
             return config;
         }

@@ -34,10 +34,8 @@ public static class CliParserExtensions
         var state = ParseState.None;
         var onlyPaths = false;
 
-        for (var i = 0; i < args.Length; i++)
+        foreach (var arg in args)
         {
-            var arg = args[i];
-
             if (onlyPaths)
             {
                 paths.Add(arg.Replace('\\', '/'));

@@ -81,10 +81,11 @@ public sealed class RealBenchmark
 
         if (genResult.IsSuccess)
         {
-            Console.WriteLine($"  • Streaming time:   {streamWatch.ElapsedMilliseconds} ms");
+            Console.WriteLine($"  • Read time:        {streamWatch.ElapsedMilliseconds} ms");
             Console.WriteLine($"  • Total bytes:      {genResult.Value:N0}");
             var speed = genResult.Value / (streamWatch.ElapsedMilliseconds / 1000.0);
             Console.WriteLine($"  • Throughput:       {speed / 1024 / 1024:F2} MB/s");
+            Console.WriteLine($"  • Total time:       {discoveryWatch.ElapsedMilliseconds + streamWatch.ElapsedMilliseconds} ms");
         }
     }
 }

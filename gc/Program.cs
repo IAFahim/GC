@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+﻿using System.Globalization;
 using gc.Data;
 using gc.Utilities;
 
@@ -12,10 +12,8 @@ public static class Program
         {
             if (args == null) throw new ArgumentNullException(nameof(args));
 
-            // Parse CLI args (configuration is loaded internally)
             var cliArgs = args.ParseCli();
 
-            // Handle new CLI flags
             if (cliArgs.InitConfig)
             {
                 InitializeConfig();
@@ -70,33 +68,31 @@ public static class Program
             if (filteredFiles.Length == 0)
             {
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.Error.WriteLine($"No files match the specified filters.");
+                Console.Error.WriteLine("No files match the specified filters.");
                 Console.ResetColor();
                 Console.Error.WriteLine($"Found {rawFiles.Length} total files, but all were filtered out.");
                 Console.Error.WriteLine("Try adjusting your --paths, --extension, or --exclude options.");
                 return;
             }
 
-            // Use streaming for file output to reduce memory usage
             if (!string.IsNullOrEmpty(cliArgs.OutputFile))
             {
-                // Stream directly to file without holding everything in memory
                 using var outputStream = File.Create(cliArgs.OutputFile);
-                var (fileCount, totalBytes) = filteredFiles.ReadContentsLazy(cliArgs).GenerateMarkdownStreaming(outputStream, cliArgs);
+                var (fileCount, totalBytes) = filteredFiles.ReadContentsLazy(cliArgs)
+                    .GenerateMarkdownStreaming(outputStream, cliArgs);
 
-                // Print stats
                 var tokens = totalBytes / 4;
                 var sizeStr = totalBytes < 1024 ? $"{totalBytes} B" :
-                    totalBytes < 1048576 ? $"{(totalBytes / 1024.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} KB" :
-                    $"{(totalBytes / 1048576.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} MB";
+                    totalBytes < 1048576 ? $"{(totalBytes / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} KB" :
+                    $"{(totalBytes / 1048576.0).ToString("F2", CultureInfo.InvariantCulture)} MB";
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write("[OK] ");
                 Console.ResetColor();
-                Console.WriteLine($"Exported to {cliArgs.OutputFile}: {fileCount} files | Size: {sizeStr} | Tokens: ~{tokens}");
+                Console.WriteLine(
+                    $"Exported to {cliArgs.OutputFile}: {fileCount} files | Size: {sizeStr} | Tokens: ~{tokens}");
             }
             else
             {
-                // For clipboard, we still need the string
                 var fileContents = filteredFiles.ReadContents(cliArgs);
                 var markdown = fileContents.GenerateMarkdown(cliArgs);
                 markdown.HandleOutput(cliArgs, fileContents);
@@ -108,16 +104,12 @@ public static class Program
             Console.ForegroundColor = ConsoleColor.Red;
             Console.Error.WriteLine($"[FATAL ERROR] {ex.Message}");
 
-            if (Environment.GetEnvironmentVariable("GC_DEBUG") == "1")
-            {
-                Console.Error.WriteLine(ex.StackTrace);
-            }
+            if (Environment.GetEnvironmentVariable("GC_DEBUG") == "1") Console.Error.WriteLine(ex.StackTrace);
 
             Environment.Exit(1);
         }
         finally
         {
-            // Single console reset point - ensures colors are reset even on crashes
             Console.ResetColor();
         }
     }
@@ -152,14 +144,12 @@ OPTIONS:
         var configDir = ".gc";
         var configPath = Path.Combine(configDir, "config.json");
 
-        // Create .gc directory if it doesn't exist
         if (!Directory.Exists(configDir))
         {
             Directory.CreateDirectory(configDir);
             Console.WriteLine($"Created directory: {configDir}");
         }
 
-        // Check if config already exists
         if (File.Exists(configPath))
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
@@ -174,7 +164,6 @@ OPTIONS:
             }
         }
 
-        // Create default configuration JSON manually for AOT compatibility
         var defaultConfigJson = @"{
   ""version"": ""1.0.0"",
   ""limits"": {
@@ -220,29 +209,26 @@ OPTIONS:
 
         var paths = ConfigurationLoader.GetConfigPaths();
 
-        // Show which config files exist
         Console.WriteLine("Configuration files:");
         if (File.Exists(paths.ProjectConfig))
             Console.WriteLine($"  ✓ Project: {paths.ProjectConfig}");
         else
-            Console.WriteLine($"  - Project: Not found");
+            Console.WriteLine("  - Project: Not found");
 
         if (File.Exists(paths.UserConfig))
             Console.WriteLine($"  ✓ User: {paths.UserConfig}");
         else
-            Console.WriteLine($"  - User: Not found");
+            Console.WriteLine("  - User: Not found");
 
         if (File.Exists(paths.SystemConfig))
             Console.WriteLine($"  ✓ System: {paths.SystemConfig}");
         else
-            Console.WriteLine($"  - System: Not found");
+            Console.WriteLine("  - System: Not found");
 
         Console.WriteLine();
 
-        // Validate configuration
         var result = ConfigurationValidator.ValidateConfiguration(config);
 
-        // Show presets
         if (config.Presets != null && config.Presets.Count > 0)
         {
             Console.WriteLine($"Effective presets: {string.Join(", ", config.Presets.Keys)}");
@@ -256,7 +242,6 @@ OPTIONS:
 
     private static void DumpConfig(GcConfiguration config)
     {
-        // For AOT compatibility, we'll dump the config in a simple format
         Console.WriteLine("{");
         Console.WriteLine($"  \"version\": \"{config.Version}\",");
         Console.WriteLine("  \"limits\": {");
@@ -281,9 +266,6 @@ OPTIONS:
         Console.WriteLine();
         Console.WriteLine("Presets:");
         foreach (var preset in config.Presets)
-        {
             Console.WriteLine($"  - {preset.Key}: {string.Join(", ", preset.Value.Extensions)}");
-        }
     }
 }
-

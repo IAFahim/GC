@@ -32,7 +32,6 @@ public static class FileFilterExtensions
             })
             .ToArray();
 
-        // Enforce MaxFiles limit
         var maxFiles = args.Configuration?.Limits?.MaxFiles ?? 100000;
         if (filtered.Length > maxFiles && maxFiles > 0)
         {
@@ -57,10 +56,7 @@ public static class FileFilterExtensions
         foreach (var preset in args.Presets)
         {
             var mapped = preset.ResolvePreset(args);
-            foreach (var str in mapped)
-            {
-                set.Add(str);
-            }
+            foreach (var str in mapped) set.Add(str);
         }
 
         return set;
@@ -68,14 +64,10 @@ public static class FileFilterExtensions
 
     private static string[] ResolvePreset(this string preset, CliArguments args)
     {
-        // Try to get from configuration first
         if (args.Configuration?.Presets != null &&
             args.Configuration.Presets.TryGetValue(preset, out var presetConfig))
-        {
             return presetConfig.Extensions;
-        }
 
-        // Fallback to built-in presets
         return preset switch
         {
             "web" => BuiltInPresets.PresetWeb,
@@ -95,72 +87,48 @@ public static class FileFilterExtensions
 
     private static string ResolveLanguage(this string key, CliArguments args)
     {
-        // Try to get from configuration first
         if (args.Configuration?.LanguageMappings != null &&
             args.Configuration.LanguageMappings.TryGetValue(key, out var language))
-        {
             return language;
-        }
 
-        // Fallback to built-in mappings
-        if (BuiltInPresets.LanguageMappings.TryGetValue(key, out var builtInLanguage))
-        {
-            return builtInLanguage;
-        }
+        if (BuiltInPresets.LanguageMappings.TryGetValue(key, out var builtInLanguage)) return builtInLanguage;
 
         return key;
     }
 
     private static bool IsValidPath(this string path, CliArguments args, HashSet<string> activeExtensions)
     {
-        // Directory Traversal Prevention
         try
         {
             var fullPath = Path.GetFullPath(path);
             var currentDir = Path.GetFullPath(Directory.GetCurrentDirectory());
-            if (!fullPath.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
+            if (!fullPath.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase)) return false;
         }
         catch
         {
             return false;
         }
 
-        if (path.IsSystemIgnored(args))
-        {
-            return false;
-        }
+        if (path.IsSystemIgnored(args)) return false;
 
-        if (!path.MatchesPaths(args.Paths))
-        {
-            return false;
-        }
+        if (!path.MatchesPaths(args.Paths)) return false;
 
-        if (path.IsExcluded(args.Excludes))
-        {
-            return false;
-        }
+        if (path.IsExcluded(args.Excludes)) return false;
 
-        if (activeExtensions.Count > 0 && !path.MatchesExtensions(activeExtensions))
-        {
-            return false;
-        }
+        if (activeExtensions.Count > 0 && !path.MatchesExtensions(activeExtensions)) return false;
 
         return true;
     }
 
     private static bool IsSystemIgnored(this string path, CliArguments args)
     {
-        // Get system ignored patterns from configuration or built-in defaults
         var patterns = args.Configuration?.Filters?.SystemIgnoredPatterns ?? BuiltInPresets.SystemIgnoredPatterns;
         var normalizedPath = path.Replace('\\', '/');
 
         foreach (var str in patterns)
         {
             var normalizedStr = str.Replace('\\', '/');
-            
+
             if (normalizedStr.EndsWith('/'))
             {
                 var dirName = normalizedStr.TrimEnd('/');
@@ -168,21 +136,17 @@ public static class FileFilterExtensions
                     normalizedPath.StartsWith(dirName + "/", StringComparison.OrdinalIgnoreCase) ||
                     normalizedPath.Contains("/" + dirName + "/", StringComparison.OrdinalIgnoreCase) ||
                     normalizedPath.EndsWith("/" + dirName, StringComparison.OrdinalIgnoreCase))
-                {
                     return true;
-                }
             }
-            else if (normalizedStr.StartsWith('.') && normalizedPath.EndsWith(normalizedStr, StringComparison.OrdinalIgnoreCase))
+            else if (normalizedStr.StartsWith('.') &&
+                     normalizedPath.EndsWith(normalizedStr, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
             else
             {
                 var fileName = Path.GetFileName(normalizedPath);
-                if (fileName.Equals(normalizedStr, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
+                if (fileName.Equals(normalizedStr, StringComparison.OrdinalIgnoreCase)) return true;
             }
         }
 
@@ -191,25 +155,15 @@ public static class FileFilterExtensions
 
     private static bool MatchesPaths(this string path, string[] paths)
     {
-        if (paths.Length == 0)
-        {
-            return true;
-        }
+        if (paths.Length == 0) return true;
 
         foreach (var pathStr in paths)
         {
-            // Normalize slashes for comparison
             var normalizedPathStr = pathStr.Replace('\\', '/').TrimEnd('/');
-            
-            if (path.Equals(normalizedPathStr, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
 
-            if (path.StartsWith(normalizedPathStr + "/", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+            if (path.Equals(normalizedPathStr, StringComparison.OrdinalIgnoreCase)) return true;
+
+            if (path.StartsWith(normalizedPathStr + "/", StringComparison.OrdinalIgnoreCase)) return true;
         }
 
         return false;
@@ -219,18 +173,13 @@ public static class FileFilterExtensions
     {
         foreach (var exclude in excludes)
         {
-            if (path.StartsWith(exclude, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+            if (path.StartsWith(exclude, StringComparison.OrdinalIgnoreCase)) return true;
 
             if (path.Contains($"/{exclude}", StringComparison.OrdinalIgnoreCase))
                 return true;
 
-            if (exclude.StartsWith("*.") && path.EndsWith(exclude.Substring(1), StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
+            if (exclude.StartsWith("*.") &&
+                path.EndsWith(exclude.Substring(1), StringComparison.OrdinalIgnoreCase)) return true;
         }
 
         return false;
@@ -240,12 +189,7 @@ public static class FileFilterExtensions
     {
         var fileName = Path.GetFileName(path);
         var firstDotIndex = fileName.IndexOf('.');
-        // Ignore dot at the end
-        if (firstDotIndex >= 0 && firstDotIndex < fileName.Length - 1)
-        {
-            // If it starts with a dot (like .gitignore), return the whole thing after dot
-            return fileName.Substring(firstDotIndex + 1);
-        }
+        if (firstDotIndex >= 0 && firstDotIndex < fileName.Length - 1) return fileName.Substring(firstDotIndex + 1);
         return string.Empty;
     }
 
@@ -253,16 +197,12 @@ public static class FileFilterExtensions
     {
         var ext = GetFullExtension(path).ToLowerInvariant();
         var fileName = Path.GetFileName(path).ToLowerInvariant();
-        
-        // Check for compound extensions progressively (.tar.gz, then .gz)
+
         var parts = ext.Split('.');
-        for (int i = 0; i < parts.Length; i++)
+        for (var i = 0; i < parts.Length; i++)
         {
             var subExt = string.Join(".", parts.Skip(i));
-            if (activeExtensions.Contains(subExt))
-            {
-                return true;
-            }
+            if (activeExtensions.Contains(subExt)) return true;
         }
 
         return activeExtensions.Contains(fileName);

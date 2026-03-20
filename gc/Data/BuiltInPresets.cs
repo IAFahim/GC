@@ -1,28 +1,38 @@
-
 namespace gc.Data;
 
 /// <summary>
-/// Built-in presets and language mappings.
-/// These serve as defaults when no configuration files are present.
-/// Migrated from Constants.cs to support external configuration.
+///     Built-in presets and language mappings.
+///     These serve as defaults when no configuration files are present.
+///     Migrated from Constants.cs to support external configuration.
 /// </summary>
 public static class BuiltInPresets
 {
-    // Preset arrays migrated from Constants.cs
-    public static readonly string[] PresetWeb = ["html", "htm", "css", "scss", "sass", "less", "js", "jsx", "ts", "tsx", "json", "svg", "vue", "svelte"];
-    public static readonly string[] PresetBackend = ["py", "rb", "php", "pl", "go", "rs", "java", "cs", "cpp", "h", "c", "hpp", "swift", "kt", "ex", "exs", "sh"];
+    public static readonly string[] PresetWeb =
+        ["html", "htm", "css", "scss", "sass", "less", "js", "jsx", "ts", "tsx", "json", "svg", "vue", "svelte"];
+
+    public static readonly string[] PresetBackend =
+        ["py", "rb", "php", "pl", "go", "rs", "java", "cs", "cpp", "h", "c", "hpp", "swift", "kt", "ex", "exs", "sh"];
+
     public static readonly string[] PresetDotnet = ["cs", "razor", "csproj", "json", "http", "xaml"];
-    public static readonly string[] PresetUnity = ["cs", "shader", "cginc", "hlsl", "glsl", "asmdef", "asmref", "uss", "uxml", "json", "yaml"];
+
+    public static readonly string[] PresetUnity =
+        ["cs", "shader", "cginc", "hlsl", "glsl", "asmdef", "asmref", "uss", "uxml", "json", "yaml"];
+
     public static readonly string[] PresetJava = ["java", "kt", "kts", "scala"];
     public static readonly string[] PresetCpp = ["c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "rs", "go", "swift"];
     public static readonly string[] PresetScript = ["py", "rb", "php", "pl", "pm", "lua", "sh", "bash", "zsh", "ps1"];
-    public static readonly string[] PresetData = ["sql", "xml", "json", "yaml", "yml", "toml", "ini", "md", "csv", "graphql"];
-    public static readonly string[] PresetConfig = ["env", "conf", "ini", "Dockerfile", "Makefile", "Gemfile", "package.json", "cargo.toml", "go.mod"];
+
+    public static readonly string[] PresetData =
+        ["sql", "xml", "json", "yaml", "yml", "toml", "ini", "md", "csv", "graphql"];
+
+    public static readonly string[] PresetConfig =
+        ["env", "conf", "ini", "Dockerfile", "Makefile", "Gemfile", "package.json", "cargo.toml", "go.mod"];
+
     public static readonly string[] PresetBuild = ["Dockerfile", "Makefile", "Gemfile", "package.json"];
     public static readonly string[] PresetDocs = ["md", "txt", "rst", "adoc"];
 
-    // System ignored patterns migrated from Constants.cs
-    public static readonly string[] SystemIgnoredPatterns = [
+    public static readonly string[] SystemIgnoredPatterns =
+    [
         "node_modules/", "bin/", "obj/", "package-lock.json", "yarn.lock", "Cargo.lock",
         ".DS_Store", "Thumbs.db", ".git/", ".png", ".jpg", ".jpeg", ".gif", ".ico",
         ".woff", ".woff2", ".pdf", ".exe", ".bin", ".pyc", ".dll", ".pdb",
@@ -30,7 +40,6 @@ public static class BuiltInPresets
         ".env", "secrets", "credentials"
     ];
 
-    // Language mappings migrated from Constants.cs
     public static readonly Dictionary<string, string> LanguageMappings = new(StringComparer.OrdinalIgnoreCase)
     {
         ["js"] = "javascript",
@@ -56,63 +65,63 @@ public static class BuiltInPresets
     };
 
     /// <summary>
-    /// Get all built-in presets as a dictionary.
+    ///     Get all built-in presets as a dictionary.
     /// </summary>
     public static Dictionary<string, PresetConfiguration> GetAllPresets()
     {
         return new Dictionary<string, PresetConfiguration>(StringComparer.OrdinalIgnoreCase)
         {
-            ["web"] = new PresetConfiguration
+            ["web"] = new()
             {
                 Extensions = PresetWeb,
                 Description = "Web development files"
             },
-            ["backend"] = new PresetConfiguration
+            ["backend"] = new()
             {
                 Extensions = PresetBackend,
                 Description = "Backend development files"
             },
-            ["dotnet"] = new PresetConfiguration
+            ["dotnet"] = new()
             {
                 Extensions = PresetDotnet,
                 Description = ".NET development files"
             },
-            ["unity"] = new PresetConfiguration
+            ["unity"] = new()
             {
                 Extensions = PresetUnity,
                 Description = "Unity game engine files"
             },
-            ["java"] = new PresetConfiguration
+            ["java"] = new()
             {
                 Extensions = PresetJava,
                 Description = "JVM languages"
             },
-            ["cpp"] = new PresetConfiguration
+            ["cpp"] = new()
             {
                 Extensions = PresetCpp,
                 Description = "C/C++ files"
             },
-            ["script"] = new PresetConfiguration
+            ["script"] = new()
             {
                 Extensions = PresetScript,
                 Description = "Scripting languages"
             },
-            ["data"] = new PresetConfiguration
+            ["data"] = new()
             {
                 Extensions = PresetData,
                 Description = "Data formats"
             },
-            ["config"] = new PresetConfiguration
+            ["config"] = new()
             {
                 Extensions = PresetConfig,
                 Description = "Configuration files"
             },
-            ["build"] = new PresetConfiguration
+            ["build"] = new()
             {
                 Extensions = PresetBuild,
                 Description = "Build files"
             },
-            ["docs"] = new PresetConfiguration
+            ["docs"] = new()
             {
                 Extensions = PresetDocs,
                 Description = "Documentation"
@@ -121,7 +130,7 @@ public static class BuiltInPresets
     }
 
     /// <summary>
-    /// Get built-in default configuration.
+    ///     Get built-in default configuration.
     /// </summary>
     public static GcConfiguration GetDefaultConfiguration()
     {

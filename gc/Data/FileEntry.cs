@@ -1,6 +1,4 @@
-
 namespace gc.Data;
-
 
 public readonly struct FileEntry
 {

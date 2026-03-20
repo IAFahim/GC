@@ -10,7 +10,6 @@ public static class TestRunner
 
         try
         {
-            // Find the test project file
             var currentDir = AppContext.BaseDirectory;
             string? projectPath = null;
             while (currentDir != null)
@@ -21,18 +20,21 @@ public static class TestRunner
                     projectPath = candidate;
                     break;
                 }
+
                 candidate = Path.Combine(currentDir, "gc.tests.csproj");
                 if (File.Exists(candidate))
                 {
                     projectPath = candidate;
                     break;
                 }
+
                 currentDir = Directory.GetParent(currentDir)?.FullName;
             }
 
             if (projectPath == null)
             {
-                Console.Error.WriteLine("Could not find gc.tests.csproj. Make sure you are running from the project repository.");
+                Console.Error.WriteLine(
+                    "Could not find gc.tests.csproj. Make sure you are running from the project repository.");
                 Environment.Exit(1);
                 return;
             }
@@ -43,7 +45,7 @@ public static class TestRunner
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
-                CreateNoWindow = false // Show output to user
+                CreateNoWindow = false
             };
 
             psi.ArgumentList.Add("test");
@@ -62,24 +64,16 @@ public static class TestRunner
                 return;
             }
 
-            // Stream output to console
             while (!process.StandardOutput.EndOfStream)
             {
                 var line = process.StandardOutput.ReadLine();
-                if (line != null)
-                {
-                    Console.WriteLine(line);
-                }
+                if (line != null) Console.WriteLine(line);
             }
 
-            // Stream errors to console
             while (!process.StandardError.EndOfStream)
             {
                 var line = process.StandardError.ReadLine();
-                if (line != null)
-                {
-                    Console.Error.WriteLine(line);
-                }
+                if (line != null) Console.Error.WriteLine(line);
             }
 
             process.WaitForExit();

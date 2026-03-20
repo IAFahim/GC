@@ -1,3 +1,4 @@
+using System.Globalization;
 
 namespace gc.Data;
 
@@ -10,21 +11,8 @@ public enum DiscoveryMode
 
 public static class CliParserExtensions
 {
-    private enum ParseState
-    {
-        None,
-        Paths,
-        Extensions,
-        Excludes,
-        Presets,
-        Output,
-        MaxMemory,
-        Discovery
-    }
-
     public static CliArguments ParseCli(this string[] args)
     {
-        // Load configuration
         var config = ConfigurationLoader.LoadConfiguration();
 
         var paths = new List<string>(4);
@@ -131,29 +119,20 @@ public static class CliParserExtensions
                 continue;
             }
 
-            // If it's not a flag, process it as a value for the current state
             if (state != ParseState.None)
             {
-                arg.ProcessArg(state, paths, extensions, excludes, presets, ref output, ref discoveryMode, ref maxMemoryBytes);
-                
-                // Some states only accept one value
+                arg.ProcessArg(state, paths, extensions, excludes, presets, ref output, ref discoveryMode,
+                    ref maxMemoryBytes);
+
                 if (state == ParseState.Output || state == ParseState.MaxMemory || state == ParseState.Discovery)
-                {
                     state = ParseState.None;
-                }
             }
             else
             {
-                // Unrecognized argument or value without a flag
                 if (!arg.StartsWith("-"))
-                {
-                    // Fallback: treat as path if no flag is active
                     paths.Add(arg.Replace('\\', '/'));
-                }
                 else
-                {
                     Console.Error.WriteLine($"Warning: Unrecognized option: {arg}");
-                }
             }
         }
 
@@ -222,31 +201,38 @@ public static class CliParserExtensions
     {
         state = ParseState.None;
 
-        if (string.Equals(arg, "-p", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "--paths", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(arg, "-p", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "--paths", StringComparison.OrdinalIgnoreCase))
         {
             state = ParseState.Paths;
             return true;
         }
 
-        if (string.Equals(arg, "-e", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "--extension", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "--extensions", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(arg, "-e", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "--extension", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "--extensions", StringComparison.OrdinalIgnoreCase))
         {
             state = ParseState.Extensions;
             return true;
         }
 
-        if (string.Equals(arg, "-x", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "--exclude", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "--excludes", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(arg, "-x", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "--exclude", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "--excludes", StringComparison.OrdinalIgnoreCase))
         {
             state = ParseState.Excludes;
             return true;
         }
 
-        if (string.Equals(arg, "--preset", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "--presets", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(arg, "--preset", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "--presets", StringComparison.OrdinalIgnoreCase))
         {
             state = ParseState.Presets;
             return true;
         }
 
-        if (string.Equals(arg, "-o", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "--output", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(arg, "-o", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(arg, "--output", StringComparison.OrdinalIgnoreCase))
         {
             state = ParseState.Output;
             return true;
@@ -261,7 +247,9 @@ public static class CliParserExtensions
         return false;
     }
 
-    private static void ProcessArg(this string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref DiscoveryMode discoveryMode, ref long maxMemoryBytes)
+    private static void ProcessArg(this string arg, ParseState state, List<string> paths, List<string> extensions,
+        List<string> excludes, List<string> presets, ref string output, ref DiscoveryMode discoveryMode,
+        ref long maxMemoryBytes)
     {
         switch (state)
         {
@@ -269,18 +257,12 @@ public static class CliParserExtensions
                 paths.Add(arg.Replace('\\', '/'));
                 break;
             case ParseState.Extensions:
-                // Support comma-separated extensions too
                 if (arg.Contains(","))
-                {
                     foreach (var ext in arg.Split(',', StringSplitOptions.RemoveEmptyEntries))
-                    {
                         extensions.Add(ext.Trim().TrimStart('.').ToLowerInvariant());
-                    }
-                }
                 else
-                {
                     extensions.Add(arg.TrimStart('.').ToLowerInvariant());
-                }
+
                 break;
             case ParseState.Excludes:
                 excludes.Add(arg.Replace('\\', '/'));
@@ -303,7 +285,7 @@ public static class CliParserExtensions
     private static long ParseMemorySize(string size)
     {
         if (string.IsNullOrWhiteSpace(size))
-            return 104857600; // 100MB default
+            return 104857600;
 
         size = size.Trim().ToUpperInvariant();
         long multiplier = 1;
@@ -328,12 +310,10 @@ public static class CliParserExtensions
             size = size.Substring(0, size.Length - 1);
         }
 
-        if (double.TryParse(size, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var value))
-        {
+        if (double.TryParse(size, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
             return (long)(value * multiplier);
-        }
 
-        return 104857600; // 100MB default if parsing fails
+        return 104857600;
     }
 
     private static DiscoveryMode ParseDiscoveryMode(string mode)
@@ -359,5 +339,17 @@ public static class CliParserExtensions
         }
 
         return false;
+    }
+
+    private enum ParseState
+    {
+        None,
+        Paths,
+        Extensions,
+        Excludes,
+        Presets,
+        Output,
+        MaxMemory,
+        Discovery
     }
 }

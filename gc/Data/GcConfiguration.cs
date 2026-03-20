@@ -3,7 +3,8 @@ using System.Text.Json.Serialization;
 
 namespace gc.Data;
 
-[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(GcConfiguration))]
 [JsonSerializable(typeof(LimitsConfiguration))]
 [JsonSerializable(typeof(DiscoveryConfiguration))]
@@ -19,8 +20,8 @@ public partial class GcJsonSerializerContext : JsonSerializerContext
 }
 
 /// <summary>
-/// Main configuration class for GC tool.
-/// Supports cascading configuration from system, user, and project levels.
+///     Main configuration class for GC tool.
+///     Supports cascading configuration from system, user, and project levels.
 /// </summary>
 public class GcConfiguration
 {
@@ -36,7 +37,7 @@ public class GcConfiguration
 }
 
 /// <summary>
-/// Memory and file size limits configuration.
+///     Memory and file size limits configuration.
 /// </summary>
 public class LimitsConfiguration
 {
@@ -45,14 +46,25 @@ public class LimitsConfiguration
     public string MaxMemoryBytes { get; set; } = "100MB";
     public int MaxFiles { get; set; } = 100000;
 
-    public long GetMaxFileSizeBytes() => ParseMemorySize(MaxFileSize);
-    public long GetMaxClipboardSizeBytes() => ParseMemorySize(MaxClipboardSize);
-    public long GetMaxMemoryBytesValue() => ParseMemorySize(MaxMemoryBytes);
+    public long GetMaxFileSizeBytes()
+    {
+        return ParseMemorySize(MaxFileSize);
+    }
+
+    public long GetMaxClipboardSizeBytes()
+    {
+        return ParseMemorySize(MaxClipboardSize);
+    }
+
+    public long GetMaxMemoryBytesValue()
+    {
+        return ParseMemorySize(MaxMemoryBytes);
+    }
 
     private static long ParseMemorySize(string size)
     {
         if (string.IsNullOrWhiteSpace(size))
-            return 104857600; // 100MB default
+            return 104857600;
 
         size = size.Trim().ToUpperInvariant();
         long multiplier = 1;
@@ -78,16 +90,14 @@ public class LimitsConfiguration
         }
 
         if (double.TryParse(size, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
-        {
             return (long)(value * multiplier);
-        }
 
-        return 104857600; // 100MB default if parsing fails
+        return 104857600;
     }
 }
 
 /// <summary>
-/// File discovery mode configuration.
+///     File discovery mode configuration.
 /// </summary>
 public class DiscoveryConfiguration
 {
@@ -97,7 +107,7 @@ public class DiscoveryConfiguration
 }
 
 /// <summary>
-/// File filtering configuration.
+///     File filtering configuration.
 /// </summary>
 public class FiltersConfiguration
 {
@@ -106,7 +116,7 @@ public class FiltersConfiguration
 }
 
 /// <summary>
-/// Preset configuration for file extensions.
+///     Preset configuration for file extensions.
 /// </summary>
 public class PresetConfiguration
 {
@@ -115,7 +125,7 @@ public class PresetConfiguration
 }
 
 /// <summary>
-/// Markdown formatting configuration.
+///     Markdown formatting configuration.
 /// </summary>
 public class MarkdownConfiguration
 {
@@ -126,7 +136,7 @@ public class MarkdownConfiguration
 }
 
 /// <summary>
-/// Output configuration.
+///     Output configuration.
 /// </summary>
 public class OutputConfiguration
 {
@@ -136,7 +146,7 @@ public class OutputConfiguration
 }
 
 /// <summary>
-/// Logging configuration.
+///     Logging configuration.
 /// </summary>
 public class LoggingConfiguration
 {

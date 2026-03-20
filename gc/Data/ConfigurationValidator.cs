@@ -3,61 +3,13 @@ using System.Text;
 namespace gc.Data;
 
 /// <summary>
-/// Validates GC configuration objects and files.
-/// Provides detailed error reporting for invalid configurations.
+///     Validates GC configuration objects and files.
+///     Provides detailed error reporting for invalid configurations.
 /// </summary>
 public static class ConfigurationValidator
 {
-    public class ValidationResult
-    {
-        public bool IsValid { get; set; }
-        public List<string> Errors { get; set; } = new();
-        public List<string> Warnings { get; set; } = new();
-
-        public override string ToString()
-        {
-            var sb = new StringBuilder();
-
-            if (IsValid)
-            {
-                sb.AppendLine("✓ Configuration is valid");
-                if (Warnings.Count > 0)
-                {
-                    sb.AppendLine();
-                    sb.AppendLine("Warnings:");
-                    foreach (var warning in Warnings)
-                    {
-                        sb.AppendLine($"  ⚠ {warning}");
-                    }
-                }
-            }
-            else
-            {
-                sb.AppendLine("✗ Configuration is invalid");
-                sb.AppendLine();
-                sb.AppendLine("Errors:");
-                foreach (var error in Errors)
-                {
-                    sb.AppendLine($"  ✗ {error}");
-                }
-
-                if (Warnings.Count > 0)
-                {
-                    sb.AppendLine();
-                    sb.AppendLine("Warnings:");
-                    foreach (var warning in Warnings)
-                    {
-                        sb.AppendLine($"  ⚠ {warning}");
-                    }
-                }
-            }
-
-            return sb.ToString();
-        }
-    }
-
     /// <summary>
-    /// Validate a complete configuration object.
+    ///     Validate a complete configuration object.
     /// </summary>
     public static ValidationResult ValidateConfiguration(GcConfiguration? config)
     {
@@ -70,28 +22,20 @@ public static class ConfigurationValidator
             return result;
         }
 
-        // Validate limits
         ValidateLimits(config.Limits, result);
 
-        // Validate discovery
         ValidateDiscovery(config.Discovery, result);
 
-        // Validate filters
         ValidateFilters(config.Filters, result);
 
-        // Validate presets
         ValidatePresets(config.Presets, result);
 
-        // Validate language mappings
         ValidateLanguageMappings(config.LanguageMappings, result);
 
-        // Validate markdown configuration
         ValidateMarkdown(config.Markdown, result);
 
-        // Validate output configuration
         ValidateOutput(config.Output, result);
 
-        // Validate logging configuration
         ValidateLogging(config.Logging, result);
 
         result.IsValid = result.Errors.Count == 0;
@@ -110,10 +54,12 @@ public static class ConfigurationValidator
             result.Errors.Add($"Invalid MaxFileSize format: '{limits.MaxFileSize}'. Expected format: 100MB, 1GB, etc.");
 
         if (!ValidateMemorySize(limits.MaxClipboardSize))
-            result.Errors.Add($"Invalid MaxClipboardSize format: '{limits.MaxClipboardSize}'. Expected format: 100MB, 1GB, etc.");
+            result.Errors.Add(
+                $"Invalid MaxClipboardSize format: '{limits.MaxClipboardSize}'. Expected format: 100MB, 1GB, etc.");
 
         if (!ValidateMemorySize(limits.MaxMemoryBytes))
-            result.Errors.Add($"Invalid MaxMemoryBytes format: '{limits.MaxMemoryBytes}'. Expected format: 100MB, 1GB, etc.");
+            result.Errors.Add(
+                $"Invalid MaxMemoryBytes format: '{limits.MaxMemoryBytes}'. Expected format: 100MB, 1GB, etc.");
 
         if (limits.MaxFiles < 1)
             result.Errors.Add($"MaxFiles must be at least 1, got: {limits.MaxFiles}");
@@ -144,13 +90,9 @@ public static class ConfigurationValidator
         }
 
         if (filters.SystemIgnoredPatterns != null)
-        {
             foreach (var pattern in filters.SystemIgnoredPatterns)
-            {
                 if (string.IsNullOrWhiteSpace(pattern))
                     result.Warnings.Add("Empty pattern in SystemIgnoredPatterns");
-            }
-        }
     }
 
     private static void ValidatePresets(Dictionary<string, PresetConfiguration>? presets, ValidationResult result)
@@ -173,22 +115,12 @@ public static class ConfigurationValidator
             }
 
             if (preset.Extensions == null || preset.Extensions.Length == 0)
-            {
                 result.Errors.Add($"Preset '{presetName}' has no extensions defined");
-            }
             else
-            {
-                // Check for empty or whitespace extensions
                 foreach (var ext in preset.Extensions)
-                {
                     if (string.IsNullOrWhiteSpace(ext))
-                    {
                         result.Warnings.Add($"Preset '{presetName}' contains empty extension");
-                    }
-                }
-            }
 
-            // Check for duplicate extensions within preset
             if (preset.Extensions != null)
             {
                 var duplicates = preset.Extensions
@@ -197,9 +129,7 @@ public static class ConfigurationValidator
                     .Select(g => g.Key);
 
                 foreach (var duplicate in duplicates)
-                {
                     result.Warnings.Add($"Preset '{presetName}' contains duplicate extension: '{duplicate}'");
-                }
             }
         }
     }
@@ -243,7 +173,8 @@ public static class ConfigurationValidator
         {
             var detection = markdown.LanguageDetection.ToLowerInvariant();
             if (detection != "extension" && detection != "content" && detection != "filename")
-                result.Warnings.Add($"Invalid LanguageDetection: '{markdown.LanguageDetection}'. Expected: extension, content, or filename");
+                result.Warnings.Add(
+                    $"Invalid LanguageDetection: '{markdown.LanguageDetection}'. Expected: extension, content, or filename");
         }
     }
 
@@ -259,7 +190,8 @@ public static class ConfigurationValidator
         {
             var format = output.DefaultFormat.ToLowerInvariant();
             if (format != "markdown" && format != "plain" && format != "json")
-                result.Warnings.Add($"Invalid DefaultFormat: '{output.DefaultFormat}'. Expected: markdown, plain, or json");
+                result.Warnings.Add(
+                    $"Invalid DefaultFormat: '{output.DefaultFormat}'. Expected: markdown, plain, or json");
         }
     }
 
@@ -280,7 +212,7 @@ public static class ConfigurationValidator
     }
 
     /// <summary>
-    /// Validate memory size format (e.g., "100MB", "1GB").
+    ///     Validate memory size format (e.g., "100MB", "1GB").
     /// </summary>
     public static bool ValidateMemorySize(string? size)
     {
@@ -289,8 +221,7 @@ public static class ConfigurationValidator
 
         size = size.Trim().ToUpperInvariant();
 
-        // Check suffix
-        bool hasValidSuffix = size.EndsWith("B") ||
+        var hasValidSuffix = size.EndsWith("B") ||
                              size.EndsWith("KB") ||
                              size.EndsWith("MB") ||
                              size.EndsWith("GB");
@@ -298,12 +229,50 @@ public static class ConfigurationValidator
         if (!hasValidSuffix)
             return false;
 
-        // Remove suffix and validate number
         if (size.Length > 2 && (size.EndsWith("KB") || size.EndsWith("MB") || size.EndsWith("GB")))
             size = size.Substring(0, size.Length - 2);
         else if (size.EndsWith("B") && !size.EndsWith("KB") && !size.EndsWith("MB") && !size.EndsWith("GB"))
             size = size.Substring(0, size.Length - 1);
 
         return double.TryParse(size, out var value) && value > 0;
+    }
+
+    public class ValidationResult
+    {
+        public bool IsValid { get; set; }
+        public List<string> Errors { get; set; } = new();
+        public List<string> Warnings { get; set; } = new();
+
+        public override string ToString()
+        {
+            var sb = new StringBuilder();
+
+            if (IsValid)
+            {
+                sb.AppendLine("✓ Configuration is valid");
+                if (Warnings.Count > 0)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("Warnings:");
+                    foreach (var warning in Warnings) sb.AppendLine($"  ⚠ {warning}");
+                }
+            }
+            else
+            {
+                sb.AppendLine("✗ Configuration is invalid");
+                sb.AppendLine();
+                sb.AppendLine("Errors:");
+                foreach (var error in Errors) sb.AppendLine($"  ✗ {error}");
+
+                if (Warnings.Count > 0)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("Warnings:");
+                    foreach (var warning in Warnings) sb.AppendLine($"  ⚠ {warning}");
+                }
+            }
+
+            return sb.ToString();
+        }
     }
 }

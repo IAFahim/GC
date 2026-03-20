@@ -56,7 +56,6 @@ public readonly struct CliArguments
         DumpConfig = dumpConfig;
         Configuration = configuration;
 
-        // Set log level based on flags
         if (debug)
         {
             Logger.SetLevel(LogLevel.Debug);
@@ -80,9 +79,6 @@ public readonly struct CliArguments
             Logger.SetLevel(LogLevel.Normal);
         }
 
-        if (configuration?.Logging?.IncludeTimestamps == true)
-        {
-            Logger.IncludeTimestamps = true;
-        }
+        if (configuration?.Logging?.IncludeTimestamps == true) Logger.IncludeTimestamps = true;
     }
 }

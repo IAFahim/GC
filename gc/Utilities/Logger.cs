@@ -11,57 +11,38 @@ public enum LogLevel
 
 public static class Logger
 {
-    private static LogLevel _currentLevel = LogLevel.Normal;
-    private static bool _includeTimestamps = false;
     private static readonly object _lock = new();
 
-    public static LogLevel CurrentLevel
-    {
-        get => _currentLevel;
-        set => _currentLevel = value;
-    }
-    
-    public static bool IncludeTimestamps
-    {
-        get => _includeTimestamps;
-        set => _includeTimestamps = value;
-    }
+    public static LogLevel CurrentLevel { get; set; } = LogLevel.Normal;
+
+    public static bool IncludeTimestamps { get; set; }
 
     public static void SetLevel(LogLevel level)
     {
         lock (_lock)
         {
-            _currentLevel = level;
+            CurrentLevel = level;
         }
     }
 
     private static string GetPrefix()
     {
-        return _includeTimestamps ? $"[{DateTime.Now:HH:mm:ss.fff}] " : "";
+        return IncludeTimestamps ? $"[{DateTime.Now:HH:mm:ss.fff}] " : "";
     }
 
     public static void LogInfo(string message)
     {
-        if (_currentLevel >= LogLevel.Normal)
-        {
-            Console.Error.WriteLine($"{GetPrefix()}{message}");
-        }
+        if (CurrentLevel >= LogLevel.Normal) Console.Error.WriteLine($"{GetPrefix()}{message}");
     }
 
     public static void LogVerbose(string message)
     {
-        if (_currentLevel >= LogLevel.Verbose)
-        {
-            Console.Error.WriteLine($"{GetPrefix()}[VERBOSE] {message}");
-        }
+        if (CurrentLevel >= LogLevel.Verbose) Console.Error.WriteLine($"{GetPrefix()}[VERBOSE] {message}");
     }
 
     public static void LogDebug(string message)
     {
-        if (_currentLevel >= LogLevel.Debug)
-        {
-            Console.Error.WriteLine($"{GetPrefix()}[DEBUG] {message}");
-        }
+        if (CurrentLevel >= LogLevel.Debug) Console.Error.WriteLine($"{GetPrefix()}[DEBUG] {message}");
     }
 
     public static void LogError(string message, Exception? ex = null)
@@ -70,10 +51,8 @@ public static class Logger
         if (ex != null)
         {
             Console.Error.WriteLine($": {ex.Message}");
-            if (_currentLevel >= LogLevel.Debug)
-            {
+            if (CurrentLevel >= LogLevel.Debug)
                 Console.Error.WriteLine($"{GetPrefix()}[DEBUG] Stack trace: {ex.StackTrace}");
-            }
         }
         else
         {
@@ -83,10 +62,7 @@ public static class Logger
 
     public static IDisposable? TimeOperation(string operationName)
     {
-        if (_currentLevel < LogLevel.Debug)
-        {
-            return null;
-        }
+        if (CurrentLevel < LogLevel.Debug) return null;
 
         return new OperationTimer(operationName);
     }

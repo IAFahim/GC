@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text;
 using gc.Data;
 
 namespace gc.Utilities;
@@ -13,21 +15,20 @@ public static class ClipboardExtensions
 
         using var _ = Logger.TimeOperation("Output handling");
 
-        // Check clipboard size before copying
-        var markdownSize = System.Text.Encoding.UTF8.GetByteCount(markdown);
-        var maxClipboardSize = args.Configuration?.Limits?.GetMaxClipboardSizeBytes() ?? 10485760; // 10MB default
+        var markdownSize = Encoding.UTF8.GetByteCount(markdown);
+        var maxClipboardSize = args.Configuration?.Limits?.GetMaxClipboardSizeBytes() ?? 10485760;
 
         Logger.LogVerbose($"Output size: {Formatting.FormatSize(markdownSize)}");
 
         if (string.IsNullOrEmpty(args.OutputFile) && markdownSize > maxClipboardSize)
         {
             var sizeStr = markdownSize < 1024 ? $"{markdownSize} B" :
-                markdownSize < 1048576 ? $"{(markdownSize / 1024.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} KB" :
-                $"{(markdownSize / 1048576.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} MB";
-            var maxSizeStr = $"{(maxClipboardSize / 1048576.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} MB";
+                markdownSize < 1048576 ? $"{(markdownSize / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} KB" :
+                $"{(markdownSize / 1048576.0).ToString("F2", CultureInfo.InvariantCulture)} MB";
+            var maxSizeStr = $"{(maxClipboardSize / 1048576.0).ToString("F2", CultureInfo.InvariantCulture)} MB";
 
             Logger.LogError($"Output size exceeds clipboard limit: {sizeStr} > {maxSizeStr}");
-            Console.WriteLine($"Use -o <file> to save to a file instead.");
+            Console.WriteLine("Use -o <file> to save to a file instead.");
             Environment.Exit(1);
             return;
         }
@@ -53,26 +54,19 @@ public static class ClipboardExtensions
             Console.WriteLine("  - Windows: PowerShell (usually pre-installed)");
             Console.WriteLine("  - macOS: pbcopy (usually pre-installed)");
             Console.WriteLine("  - Linux: Install wl-copy (wayland) or xclip (X11)");
-            Console.WriteLine($"    Ubuntu/Debian: sudo apt install wl-clipboard xclip");
-            Console.WriteLine($"    Fedora/RHEL: sudo dnf install wl-clipboard xclip");
-            Console.WriteLine($"    Arch: sudo pacman -S wl-clipboard xclip");
+            Console.WriteLine("    Ubuntu/Debian: sudo apt install wl-clipboard xclip");
+            Console.WriteLine("    Fedora/RHEL: sudo dnf install wl-clipboard xclip");
+            Console.WriteLine("    Arch: sudo pacman -S wl-clipboard xclip");
             Environment.Exit(1);
         }
     }
 
     private static bool CopyToClipboard(this string markdown)
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            return CopyToClipboardWindows(markdown);
-        }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return CopyToClipboardWindows(markdown);
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            return CopyToClipboardMac(markdown);
-        }
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return CopyToClipboardMac(markdown);
 
-        // Linux: try wl-copy first (Wayland), then xclip (X11)
         return CopyToClipboardLinux(markdown);
     }
 
@@ -82,7 +76,6 @@ public static class ClipboardExtensions
         {
             Logger.LogDebug("Copying to clipboard via PowerShell Set-Clipboard");
 
-            // Use PowerShell's Set-Clipboard which properly handles UTF-8 encoding
             var psi = new ProcessStartInfo
             {
                 FileName = "pwsh",
@@ -123,7 +116,6 @@ public static class ClipboardExtensions
         {
             Logger.LogDebug("Copying to clipboard via Windows PowerShell (powershell.exe)");
 
-            // Use Windows PowerShell's Set-Clipboard which properly handles UTF-8 encoding
             var psi = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
@@ -164,11 +156,11 @@ public static class ClipboardExtensions
         {
             Logger.LogDebug("Copying to clipboard via clip.exe with UTF-8 encoding");
 
-            // Set console code page to UTF-8 before piping to clip.exe
             var psi = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
-                Arguments = $"/c chcp 65001 >nul 2>&1 && echo \"{markdown.Replace("\"", "^\"").Replace("&", "^&").Replace("<", "^<").Replace(">", "^>").Replace("|", "^|").Replace("%", "^%")}\" | clip.exe",
+                Arguments =
+                    $"/c chcp 65001 >nul 2>&1 && echo \"{markdown.Replace("\"", "^\"").Replace("&", "^&").Replace("<", "^<").Replace(">", "^>").Replace("|", "^|").Replace("%", "^%")}\" | clip.exe",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -176,10 +168,7 @@ public static class ClipboardExtensions
             };
 
             using var process = Process.Start(psi);
-            if (process == null)
-            {
-                return false;
-            }
+            if (process == null) return false;
 
             process.WaitForExit();
             return process.ExitCode == 0;
@@ -208,10 +197,7 @@ public static class ClipboardExtensions
             };
 
             using var process = Process.Start(psi);
-            if (process == null)
-            {
-                return false;
-            }
+            if (process == null) return false;
 
             using var writer = process.StandardInput;
             writer.Write(markdown);
@@ -229,18 +215,15 @@ public static class ClipboardExtensions
 
     private static bool CopyToClipboardLinux(string markdown)
     {
-        // Try wl-copy first (Wayland), then xclip (X11)
         var result = TryCopyToClipboardLinux(markdown, "wl-copy", "Wayland");
-        if (result)
-        {
-            return true;
-        }
+        if (result) return true;
 
         Logger.LogDebug("Wayland clipboard not available, trying xclip");
         return TryCopyToClipboardLinux(markdown, "xclip", "X11", "-selection", "clipboard");
     }
 
-    private static bool TryCopyToClipboardLinux(string markdown, string tool, string toolName, params string[] extraArgs)
+    private static bool TryCopyToClipboardLinux(string markdown, string tool, string toolName,
+        params string[] extraArgs)
     {
         try
         {
@@ -256,16 +239,10 @@ public static class ClipboardExtensions
                 CreateNoWindow = true
             };
 
-            foreach (var arg in extraArgs)
-            {
-                psi.ArgumentList.Add(arg);
-            }
+            foreach (var arg in extraArgs) psi.ArgumentList.Add(arg);
 
             using var process = Process.Start(psi);
-            if (process == null)
-            {
-                return false;
-            }
+            if (process == null) return false;
 
             using var writer = process.StandardInput;
             writer.Write(markdown);
@@ -292,16 +269,10 @@ public static class ClipboardExtensions
             CreateNoWindow = true
         };
 
-        foreach (var argument in arguments)
-        {
-            psi.ArgumentList.Add(argument);
-        }
+        foreach (var argument in arguments) psi.ArgumentList.Add(argument);
 
         using var process = Process.Start(psi);
-        if (process == null)
-        {
-            return -1;
-        }
+        if (process == null) return -1;
 
         process.WaitForExit();
         return process.ExitCode;
@@ -311,15 +282,12 @@ public static class ClipboardExtensions
     private static void PrintStats(this string _, string target, FileContent[] contents)
     {
         long totalBytes = 0;
-        for (var i = 0; i < contents.Length; i++)
-        {
-            totalBytes += contents[i].Size;
-        }
+        for (var i = 0; i < contents.Length; i++) totalBytes += contents[i].Size;
 
         var tokens = totalBytes / 4;
         var sizeStr = totalBytes < 1024 ? $"{totalBytes} B" :
-            totalBytes < 1048576 ? $"{(totalBytes / 1024.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} KB" :
-            $"{(totalBytes / 1048576.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} MB";
+            totalBytes < 1048576 ? $"{(totalBytes / 1024.0).ToString("F2", CultureInfo.InvariantCulture)} KB" :
+            $"{(totalBytes / 1048576.0).ToString("F2", CultureInfo.InvariantCulture)} MB";
 
         Console.ForegroundColor = ConsoleColor.Green;
         Console.Write("[OK] ");

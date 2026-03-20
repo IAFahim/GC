@@ -20,8 +20,10 @@ curl -sSL https://raw.githubusercontent.com/IAFahim/gc/main/install.sh | bash
 ### Windows (PowerShell)
 
 ```powershell
-Invoke-WebRequest -Uri https://raw.githubusercontent.com/IAFahim/gc/main/install.ps1 | Invoke-Expression
+powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/IAFahim/gc/main/install.ps1 | iex"
 ```
+
+**Note**: The `-ExecutionPolicy Bypass` flag ensures the script runs even if your default execution policy restricts script execution.
 
 ### Nautilus Integration (GNOME)
 

@@ -4,19 +4,11 @@ using gc.Utilities;
 
 namespace gc.Data;
 
-/// <summary>
-///     Loads and merges GC configuration from multiple sources.
-///     Configuration cascade: System → User → Project → Built-in Defaults
-///     CLI arguments have highest priority and override all config files.
-/// </summary>
 public static class ConfigurationLoader
 {
     private static GcConfiguration? _cachedConfiguration;
     private static readonly object _cacheLock = new();
 
-    /// <summary>
-    ///     Get the configuration directory for the current platform.
-    /// </summary>
     public static string GetConfigDirectory()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -32,9 +24,6 @@ public static class ConfigurationLoader
             "gc");
     }
 
-    /// <summary>
-    ///     Get the system configuration directory for the current platform.
-    /// </summary>
     public static string GetSystemConfigDirectory()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -45,10 +34,6 @@ public static class ConfigurationLoader
         return "/etc/gc";
     }
 
-    /// <summary>
-    ///     Load configuration from all sources and merge with proper priority.
-    ///     Cascade: System → User → Project → Built-in Defaults
-    /// </summary>
     public static GcConfiguration LoadConfiguration(bool useCache = true)
     {
         if (useCache && _cachedConfiguration != null) return _cachedConfiguration;
@@ -121,10 +106,6 @@ public static class ConfigurationLoader
         return config;
     }
 
-    /// <summary>
-    ///     Search upward from current directory for .gc/config.json.
-    ///     Stops at .git root or filesystem root.
-    /// </summary>
     public static string? FindProjectConfig()
     {
         var currentDir = Directory.GetCurrentDirectory();
@@ -156,9 +137,6 @@ public static class ConfigurationLoader
         return null;
     }
 
-    /// <summary>
-    ///     Find the .git root directory.
-    /// </summary>
     private static string? FindGitRoot(string startDir)
     {
         var currentDir = startDir;
@@ -173,9 +151,6 @@ public static class ConfigurationLoader
         return null;
     }
 
-    /// <summary>
-    ///     Load configuration from a specific file.
-    /// </summary>
     public static GcConfiguration? LoadConfigFromFile(string filePath)
     {
         if (!File.Exists(filePath))
@@ -205,10 +180,6 @@ public static class ConfigurationLoader
         }
     }
 
-    /// <summary>
-    ///     Merge source configuration into target configuration.
-    ///     Source has higher priority and overrides target values.
-    /// </summary>
     private static void MergeConfiguration(GcConfiguration target, GcConfiguration source, string sourceName)
     {
         Logger.LogDebug($"Merging {sourceName} configuration...");
@@ -313,9 +284,6 @@ public static class ConfigurationLoader
         target.IncludeTimestamps = source.IncludeTimestamps;
     }
 
-    /// <summary>
-    ///     Clear the configuration cache.
-    /// </summary>
     public static void ClearCache()
     {
         lock (_cacheLock)
@@ -326,9 +294,6 @@ public static class ConfigurationLoader
         Logger.LogDebug("Configuration cache cleared");
     }
 
-    /// <summary>
-    ///     Get all configuration file paths for the current environment.
-    /// </summary>
     public static ConfigPaths GetConfigPaths()
     {
         return new ConfigPaths

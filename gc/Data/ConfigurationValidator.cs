@@ -2,15 +2,8 @@ using System.Text;
 
 namespace gc.Data;
 
-/// <summary>
-///     Validates GC configuration objects and files.
-///     Provides detailed error reporting for invalid configurations.
-/// </summary>
 public static class ConfigurationValidator
 {
-    /// <summary>
-    ///     Validate a complete configuration object.
-    /// </summary>
     public static ValidationResult ValidateConfiguration(GcConfiguration? config)
     {
         var result = new ValidationResult { IsValid = true };
@@ -211,9 +204,6 @@ public static class ConfigurationValidator
         }
     }
 
-    /// <summary>
-    ///     Validate memory size format (e.g., "100MB", "1GB").
-    /// </summary>
     public static bool ValidateMemorySize(string? size)
     {
         if (string.IsNullOrWhiteSpace(size))

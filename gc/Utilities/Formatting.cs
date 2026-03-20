@@ -4,11 +4,6 @@ namespace gc.Utilities;
 
 public static class Formatting
 {
-    /// <summary>
-    ///     Formats a byte count into a human-readable string (B, KB, or MB).
-    /// </summary>
-    /// <param name="bytes">The number of bytes to format.</param>
-    /// <returns>A formatted string representation of the size.</returns>
     public static string FormatSize(long bytes)
     {
         return bytes < 1024 ? $"{bytes} B" :

@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   benchmark:
@@ -37,7 +38,7 @@ jobs:
 
     - name: Update BENCHMARK.md
       run: |
-        echo '# 📊 Real Performance Data' > BENCHMARK.md
+        echo '# Real Performance Data' > BENCHMARK.md
         echo '' >> BENCHMARK.md
         echo 'Latest benchmark results from automated testing:' >> BENCHMARK.md
         echo '' >> BENCHMARK.md
@@ -49,10 +50,19 @@ jobs:
         echo '' >> BENCHMARK.md
         echo "*Last updated: ${{ steps.metrics.outputs.timestamp }}*" >> BENCHMARK.md
 
-    - name: Commit Updated BENCHMARK.md
-      run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
-        git add BENCHMARK.md || true
-        git diff --quiet && git diff --staged --quiet || git commit -m "📊 Update benchmark data - ${{ steps.metrics.outputs.timestamp }}"
-        git push || echo "No changes to commit"
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v7
+      with:
+        branch: benchmark-report-${{ github.run_number }}
+        title: "Benchmark Report - ${{ steps.metrics.outputs.timestamp }}"
+        body: |
+          Automated benchmark results report.
+
+          ## Metrics
+          - Discovery Time: ${{ steps.metrics.outputs.discovery_time }} ms
+          - File Read Time: ${{ steps.metrics.outputs.read_time }} ms
+          - Total Time: ${{ steps.metrics.outputs.total_time }} ms
+
+          *Last updated: ${{ steps.metrics.outputs.timestamp }}*
+        commit-message: "Update benchmark data - ${{ steps.metrics.outputs.timestamp }}"
+        delete-branch: true

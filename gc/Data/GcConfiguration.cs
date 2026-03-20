@@ -19,10 +19,6 @@ public partial class GcJsonSerializerContext : JsonSerializerContext
 {
 }
 
-/// <summary>
-///     Main configuration class for GC tool.
-///     Supports cascading configuration from system, user, and project levels.
-/// </summary>
 public class GcConfiguration
 {
     public string Version { get; set; } = "1.0.0";
@@ -36,9 +32,6 @@ public class GcConfiguration
     public LoggingConfiguration Logging { get; set; } = new();
 }
 
-/// <summary>
-///     Memory and file size limits configuration.
-/// </summary>
 public class LimitsConfiguration
 {
     public string MaxFileSize { get; set; } = "1MB";
@@ -96,9 +89,6 @@ public class LimitsConfiguration
     }
 }
 
-/// <summary>
-///     File discovery mode configuration.
-/// </summary>
 public class DiscoveryConfiguration
 {
     public string Mode { get; set; } = "auto";
@@ -106,27 +96,18 @@ public class DiscoveryConfiguration
     public bool FollowSymlinks { get; set; } = false;
 }
 
-/// <summary>
-///     File filtering configuration.
-/// </summary>
 public class FiltersConfiguration
 {
     public string[] SystemIgnoredPatterns { get; set; } = Array.Empty<string>();
     public string[] AdditionalExtensions { get; set; } = Array.Empty<string>();
 }
 
-/// <summary>
-///     Preset configuration for file extensions.
-/// </summary>
 public class PresetConfiguration
 {
     public string[] Extensions { get; set; } = Array.Empty<string>();
     public string Description { get; set; } = string.Empty;
 }
 
-/// <summary>
-///     Markdown formatting configuration.
-/// </summary>
 public class MarkdownConfiguration
 {
     public string Fence { get; set; } = "```";
@@ -135,9 +116,6 @@ public class MarkdownConfiguration
     public string LanguageDetection { get; set; } = "extension";
 }
 
-/// <summary>
-///     Output configuration.
-/// </summary>
 public class OutputConfiguration
 {
     public string DefaultFormat { get; set; } = "markdown";
@@ -145,9 +123,6 @@ public class OutputConfiguration
     public bool SortByPath { get; set; } = true;
 }
 
-/// <summary>
-///     Logging configuration.
-/// </summary>
 public class LoggingConfiguration
 {
     public string Level { get; set; } = "normal";

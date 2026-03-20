@@ -1,10 +1,5 @@
 namespace gc.Data;
 
-/// <summary>
-///     Built-in presets and language mappings.
-///     These serve as defaults when no configuration files are present.
-///     Migrated from Constants.cs to support external configuration.
-/// </summary>
 public static class BuiltInPresets
 {
     public static readonly string[] PresetWeb =
@@ -64,9 +59,6 @@ public static class BuiltInPresets
         ["rakefile"] = "ruby"
     };
 
-    /// <summary>
-    ///     Get all built-in presets as a dictionary.
-    /// </summary>
     public static Dictionary<string, PresetConfiguration> GetAllPresets()
     {
         return new Dictionary<string, PresetConfiguration>(StringComparer.OrdinalIgnoreCase)
@@ -129,9 +121,6 @@ public static class BuiltInPresets
         };
     }
 
-    /// <summary>
-    ///     Get built-in default configuration.
-    /// </summary>
     public static GcConfiguration GetDefaultConfiguration()
     {
         return new GcConfiguration

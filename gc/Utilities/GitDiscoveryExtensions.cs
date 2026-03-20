@@ -120,7 +120,7 @@ public static class GitDiscoveryExtensions
 
     private static string[] DiscoverWithGitInternal(CliArguments args)
     {
-        var gitArgs = "ls-files -z --cached --others --exclude-standard";
+        var gitArgs = "ls-files -z --cached";
         Logger.LogDebug($"Executing: git {gitArgs}");
 
         var psi = new ProcessStartInfo

@@ -22,7 +22,7 @@ jobs:
 
     - name: Run Benchmark
       run: |
-        dotnet run --project gc/gc.csproj -- --benchmark 2>&1 | tee benchmark_results.txt
+        dotnet run --project src/gc.CLI/gc.CLI.csproj -- --benchmark 2>&1 | tee benchmark_results.txt
 
     - name: Extract Metrics
       id: metrics

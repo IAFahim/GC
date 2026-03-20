@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for gc (Git Copy)
-# Simple version without Native AOT for better compatibility
+# Native AOT build for optimized performance and smaller image size
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
@@ -12,17 +12,19 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy project files
-COPY gc/gc.csproj gc/
+COPY src/gc.CLI/gc.CLI.csproj gc/
 COPY gc/Data/ gc/Data/
 COPY gc/Utilities/ gc/Utilities/
 COPY gc/Program.cs gc/
 
-# Restore and build (without AOT for Docker compatibility)
-RUN dotnet restore "gc/gc.csproj"
-RUN dotnet publish "gc/gc.csproj" -c Release -o /app/publish
+# Restore and build with Native AOT for static executable
+RUN dotnet restore "src/gc.CLI/gc.CLI.csproj"
+RUN dotnet publish "src/gc.CLI/gc.CLI.csproj" -c Release -o /app/publish \
+    -p:PublishAot=true \
+    -p:StaticExecutable=true
 
-# Runtime image (smaller)
-FROM mcr.microsoft.com/dotnet/runtime:10.0
+# Runtime image (Native AOT produces self-contained executable, no runtime needed)
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0
 WORKDIR /app
 
 # Install git
@@ -31,5 +33,5 @@ RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 # Copy published files
 COPY --from=build /app/publish .
 
-# Test entry point
-ENTRYPOINT ["dotnet", "gc.dll"]
+# Native AOT produces a native executable, not a DLL
+ENTRYPOINT ["./gc"]

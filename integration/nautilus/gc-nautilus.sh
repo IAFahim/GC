@@ -24,10 +24,11 @@ send_notification() {
     fi
 }
 
-# URL decode function
+# URL decode function (safe from format string vulnerabilities)
 url_decode() {
     local url_encoded="${1//+/ }"
-    printf '%b' "${url_encoded//%/\\x}"
+    python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.argv[1]))" "$url_encoded" 2>/dev/null || \
+    perl -pe 's/%([0-9a-f]{2})/chr(hex($1))/eig' <<< "$url_encoded"
 }
 
 
@@ -64,66 +65,84 @@ while IFS= read -r path; do
     fi
 done <<< "$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS"
 
-# Resolve git root for the first selected item
-# This is important when files are selected from search results or deep subdirectories
-FIRST_PATH="${TARGET_PATHS[0]}"
-GIT_ROOT=""
-
-# Try to find git root starting from the file/directory
-if [ -f "$FIRST_PATH" ]; then
-    SEARCH_DIR=$(dirname "$FIRST_PATH")
-else
-    SEARCH_DIR="$FIRST_PATH"
-fi
-
-# Walk up the directory tree to find .git
-CURRENT_DIR="$SEARCH_DIR"
-while [ "$CURRENT_DIR" != "/" ]; do
-    if [ -d "$CURRENT_DIR/.git" ]; then
-        GIT_ROOT="$CURRENT_DIR"
-        break
+# Helper function to find git root for a given path
+find_git_root() {
+    local path="$1"
+    local search_dir
+    
+    if [ -f "$path" ]; then
+        search_dir=$(dirname "$path")
+    else
+        search_dir="$path"
     fi
-    CURRENT_DIR=$(dirname "$CURRENT_DIR")
+    
+    local current_dir="$search_dir"
+    while [ "$current_dir" != "/" ]; do
+        if [ -d "$current_dir/.git" ]; then
+            echo "$current_dir"
+            return 0
+        fi
+        current_dir=$(dirname "$current_dir")
+    done
+    
+    # No git root found, return the search dir itself
+    echo "$search_dir"
+    return 1
+}
+
+# Group paths by git repository
+declare -A REPO_PATHS
+for path in "${TARGET_PATHS[@]}"; do
+    git_root=$(find_git_root "$path")
+    if [ -z "${REPO_PATHS[$git_root]}" ]; then
+        REPO_PATHS[$git_root]="$path"
+    else
+        REPO_PATHS[$git_root]="${REPO_PATHS[$git_root]}"$'\n'"$path"
+    fi
+    echo "Path '$path' -> Repository: $git_root" >> "$LOG_FILE"
 done
 
-# Set working directory
-if [ -n "$GIT_ROOT" ]; then
-    WORKING_DIR="$GIT_ROOT"
-    echo "Git root found: $GIT_ROOT" >> "$LOG_FILE"
-elif [ -d "$FIRST_PATH" ]; then
-    WORKING_DIR="$FIRST_PATH"
-else
-    WORKING_DIR=$(dirname "$FIRST_PATH")
-fi
+# Process each repository separately
+COMBINED_OUTPUT=""
+COMBINED_EXIT_CODE=0
 
-echo "Working directory: $WORKING_DIR" >> "$LOG_FILE"
-cd "$WORKING_DIR" || exit 1
+for repo_root in "${!REPO_PATHS[@]}"; do
+    echo "Processing repository: $repo_root" >> "$LOG_FILE"
+    cd "$repo_root" || continue
+    
+    # Get paths for this repository
+    mapfile -t repo_paths <<< "${REPO_PATHS[$repo_root]}"
+    
+    echo "Running: gc --paths -- \"${repo_paths[@]}\"" >> "$LOG_FILE"
+    
+    # Run gc for this repository
+    OUTPUT=$(gc --paths -- "${repo_paths[@]}" 2>&1)
+    EXIT_CODE=$?
+    
+    echo "Exit code: $EXIT_CODE" >> "$LOG_FILE"
+    echo "Output: $OUTPUT" >> "$LOG_FILE"
+    
+    COMBINED_OUTPUT+="$OUTPUT"$'\n'
+    if [ $EXIT_CODE -ne 0 ]; then
+        COMBINED_EXIT_CODE=$EXIT_CODE
+    fi
+done
 
-# Run gc
-echo "Running: gc --paths -- \"${TARGET_PATHS[@]}\"" >> "$LOG_FILE"
-
-# Capture output and exit code
-# Pass the array to the command to preserve quoting
-OUTPUT=$(gc --paths -- "${TARGET_PATHS[@]}" 2>&1)
-EXIT_CODE=$?
-
-echo "Exit code: $EXIT_CODE" >> "$LOG_FILE"
-echo "Output: $OUTPUT" >> "$LOG_FILE"
-
-if [ $EXIT_CODE -eq 0 ]; then
+# Show notification based on combined results
+if [ $COMBINED_EXIT_CODE -eq 0 ]; then
     # Extract stats from output if possible
     # Remove [OK] prefix and ANSI color codes if any
-    STATS=$(echo "$OUTPUT" | grep "Exported to" | sed 's/\[OK\] //g' | sed 's/\x1b\[[0-9;]*m//g')
+    STATS=$(echo "$COMBINED_OUTPUT" | grep "Exported to" | sed 's/\[OK\] //g' | sed 's/\x1b\[[0-9;]*m//g')
     if [ -z "$STATS" ]; then
         STATS="Contents copied to clipboard successfully."
     fi
-    send_notification "gc" "$STATS" "checkbox-checked-symbolic"
+    send_notification "gc" "${STATS}" "checkbox-checked-symbolic"
 else
     # Show error message
     # Remove [ERROR] prefix and ANSI color codes
-    ERROR_MSG=$(echo "$OUTPUT" | grep "\[ERROR\]" | head -n 1 | sed 's/\[ERROR\] //g' | sed 's/\x1b\[[0-9;]*m//g')
+    ERROR_MSG=$(echo "$COMBINED_OUTPUT" | grep "\[ERROR\]" | head -n 1 | sed 's/\[ERROR\] //g' | sed 's/\x1b\[[0-9;]*m//g')
     if [ -z "$ERROR_MSG" ]; then
-        ERROR_MSG=$(echo "$OUTPUT" | head -n 1)
+        ERROR_MSG=$(echo "$COMBINED_OUTPUT" | head -n 1)
     fi
-    send_notification "gc" "Error: $ERROR_MSG" "error"
+    send_notification "gc" "Error: ${ERROR_MSG}" "error"
 fi

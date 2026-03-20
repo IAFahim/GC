@@ -56,7 +56,7 @@ fi
 
 # Create a copy with the absolute gc path hardcoded
 echo -e "${YELLOW}Injecting absolute gc path into script...${NC}"
-sed "s|^gc |$GC_PATH |g" "$SOURCE_SCRIPT" > "$TARGET_SCRIPT"
+sed "s|OUTPUT=\$(gc |OUTPUT=\$($GC_PATH |g" "$SOURCE_SCRIPT" > "$TARGET_SCRIPT"
 chmod +x "$TARGET_SCRIPT"
 
 echo -e "${GREEN}✅ Success: 'gc' is now integrated with Nautilus!${NC}"

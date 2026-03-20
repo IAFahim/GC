@@ -18,7 +18,7 @@ mkdir -p "$INSTALL_DIR"
 
 # Publish as a single-file executable
 echo -e "${GREEN}Publishing gc as single-file executable...${NC}"
-dotnet publish ./gc/gc.csproj -c Release -o "$INSTALL_DIR" \
+dotnet publish ./src/gc.CLI/gc.CLI.csproj -c Release -o "$INSTALL_DIR" \
     -p:PublishSingleFile=true \
     --runtime linux-x64 \
     --self-contained true

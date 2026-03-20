@@ -7,7 +7,7 @@ services:
     volumes:
       - .:/workspace
     working_dir: /workspace
-    command: ["dotnet", "run", "--project", "gc/gc.csproj", "--", "--help"]
+    command: ["dotnet", "run", "--project", "src/gc.CLI/gc.CLI.csproj", "--", "--help"]
 
   gc-test:
     build:
@@ -17,7 +17,7 @@ services:
     volumes:
       - .:/workspace
     working_dir: /workspace
-    command: ["dotnet", "test", "gc.tests/gc.tests.csproj"]
+    command: ["dotnet", "test", "tests/gc.Tests/gc.Tests.csproj"]
 
   gc-bash:
     build:

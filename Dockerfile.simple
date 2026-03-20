@@ -14,8 +14,8 @@ RUN apt-get update && \
 COPY . .
 
 # Restore dependencies
-RUN dotnet restore gc/gc.csproj
+RUN dotnet restore src/gc.CLI/gc.CLI.csproj
 
 # Run gc --help by default
-ENTRYPOINT ["dotnet", "run", "--project", "gc/gc.csproj", "--"]
+ENTRYPOINT ["dotnet", "run", "--project", "src/gc.CLI/gc.CLI.csproj", "--"]
 CMD ["--help"]

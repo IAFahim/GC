@@ -82,7 +82,7 @@ View our [latest automated benchmarks](BENCHMARK.md).
 ### Build from source
 ```bash
 # Build native AOT binary
-dotnet publish gc/gc.csproj -c Release -r <your-platform-id> --self-contained -p:PublishAot=true
+dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -r <your-platform-id> --self-contained -p:PublishAot=true
 ```
 
 ## License

@@ -78,6 +78,27 @@ if ! curl -L -o "$TEMP_DIR/${ARCHIVE_NAME}" "$DOWNLOAD_URL"; then
     exit 1
 fi
 
+# Download and verify checksum
+CHECKSUM_URL="https://github.com/${REPO_NAME}/releases/download/${LATEST_VERSION}/checksums.txt"
+echo -e "${GREEN}Downloading checksums for verification...${NC}"
+if ! curl -L -o "$TEMP_DIR/checksums.txt" "$CHECKSUM_URL"; then
+    echo -e "${RED}Error: Failed to download checksums${NC}"
+    echo -e "${RED}Security: Cannot verify binary integrity. Aborting installation.${NC}"
+    exit 1
+fi
+
+# Verify checksum
+echo -e "${GREEN}Verifying checksum...${NC}"
+cd "$TEMP_DIR"
+if ! sha256sum -c checksums.txt --ignore-missing 2>/dev/null | grep -q "${ARCHIVE_NAME}: OK"; then
+    echo -e "${RED}Error: Checksum verification failed!${NC}"
+    echo -e "${RED}Security: Binary integrity check failed. Aborting installation.${NC}"
+    echo -e "${YELLOW}This could indicate a corrupted download or potential security issue.${NC}"
+    exit 1
+fi
+echo -e "${GREEN}Checksum verified successfully${NC}"
+cd - > /dev/null
+
 # Extract archive
 echo -e "${GREEN}Extracting archive...${NC}"
 INSTALL_DIR="$HOME/.local/bin"

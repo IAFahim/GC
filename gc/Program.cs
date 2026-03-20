@@ -8,6 +8,17 @@ public static class Program
 {
     public static void Main(string[] args)
     {
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (sender, e) =>
+        {
+            e.Cancel = true; // Prevent immediate termination
+            cts.Cancel();
+            Console.Error.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.Error.WriteLine("[Cancelled] Operation interrupted by user (Ctrl+C)");
+            Console.ResetColor();
+        };
+
         try
         {
             if (args == null) throw new ArgumentNullException(nameof(args));
@@ -78,7 +89,7 @@ public static class Program
             if (!string.IsNullOrEmpty(cliArgs.OutputFile))
             {
                 using var outputStream = File.Create(cliArgs.OutputFile);
-                var (fileCount, totalBytes) = filteredFiles.ReadContentsLazy(cliArgs)
+                var (fileCount, totalBytes) = filteredFiles.ReadContentsLazy(cliArgs, cts.Token)
                     .GenerateMarkdownStreaming(outputStream, cliArgs);
 
                 var tokens = totalBytes / 4;
@@ -93,12 +104,37 @@ public static class Program
             }
             else
             {
-                var fileContents = filteredFiles.ReadContents(cliArgs);
+                var fileContents = filteredFiles.ReadContents(cliArgs, cts.Token);
                 var markdown = fileContents.GenerateMarkdown(cliArgs);
                 markdown.HandleOutput(cliArgs, fileContents);
             }
         }
-        catch (Exception ex)
+        catch (OperationCanceledException)
+        {
+            // Gracefully handle cancellation without error message (already printed in CancelKeyPress handler)
+            Environment.Exit(130); // Standard exit code for SIGINT
+        }
+        catch (IOException ex)
+        {
+            Console.ResetColor();
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"[FATAL ERROR] {ex.Message}");
+
+            if (Environment.GetEnvironmentVariable("GC_DEBUG") == "1") Console.Error.WriteLine(ex.StackTrace);
+
+            Environment.Exit(1);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Console.ResetColor();
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"[FATAL ERROR] {ex.Message}");
+
+            if (Environment.GetEnvironmentVariable("GC_DEBUG") == "1") Console.Error.WriteLine(ex.StackTrace);
+
+            Environment.Exit(1);
+        }
+        catch (ArgumentException ex)
         {
             Console.ResetColor();
             Console.ForegroundColor = ConsoleColor.Red;

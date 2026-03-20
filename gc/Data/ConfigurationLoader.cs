@@ -158,7 +158,12 @@ public static class ConfigurationLoader
 
         try
         {
-            var json = File.ReadAllText(filePath);
+            string json;
+            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var reader = new StreamReader(fs))
+            {
+                json = reader.ReadToEnd();
+            }
 
             var typeInfo = GcJsonSerializerContext.Default.GcConfiguration;
 

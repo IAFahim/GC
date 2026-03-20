@@ -14,11 +14,20 @@ NC='\033[0m'
 echo -e "${YELLOW}🚀 Setting up 'gc' Nautilus integration...${NC}"
 
 # Check if gc is installed
-if ! command -v gc &> /dev/null; then
+GC_PATH=""
+if command -v gc &> /dev/null; then
+    GC_PATH=$(which gc)
+elif [ -f "$HOME/.local/bin/gc" ]; then
+    # Fallback for fresh install where terminal hasn't been reloaded
+    GC_PATH="$HOME/.local/bin/gc"
+    echo -e "${YELLOW}⚠️  Found gc at $GC_PATH (terminal PATH not yet updated)${NC}"
+else
     echo -e "${RED}❌ Error: 'gc' is not installed or not in your PATH.${NC}"
     echo -e "Please install gc first (e.g., using the main install.sh script)."
     exit 1
 fi
+
+echo -e "Using gc at: $GC_PATH"
 
 # Locate the integration script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,18 +43,21 @@ chmod +x "$SOURCE_SCRIPT"
 
 # Target location for Nautilus scripts
 NAUTILUS_SCRIPTS_DIR="$HOME/.local/share/nautilus/scripts"
-TARGET_LINK="$NAUTILUS_SCRIPTS_DIR/gc"
+TARGET_SCRIPT="$NAUTILUS_SCRIPTS_DIR/gc"
 
 # Create directory if it doesn't exist
 mkdir -p "$NAUTILUS_SCRIPTS_DIR"
 
-# Create symbolic link
-if [ -L "$TARGET_LINK" ] || [ -f "$TARGET_LINK" ]; then
-    echo -e "${YELLOW}⚠️  Existing link/file found at $TARGET_LINK. Overwriting...${NC}"
-    rm -f "$TARGET_LINK"
+# Remove existing file/link
+if [ -L "$TARGET_SCRIPT" ] || [ -f "$TARGET_SCRIPT" ]; then
+    echo -e "${YELLOW}⚠️  Existing file found at $TARGET_SCRIPT. Overwriting...${NC}"
+    rm -f "$TARGET_SCRIPT"
 fi
 
-ln -s "$SOURCE_SCRIPT" "$TARGET_LINK"
+# Create a copy with the absolute gc path hardcoded
+echo -e "${YELLOW}Injecting absolute gc path into script...${NC}"
+sed "s|^gc |$GC_PATH |g" "$SOURCE_SCRIPT" > "$TARGET_SCRIPT"
+chmod +x "$TARGET_SCRIPT"
 
 echo -e "${GREEN}✅ Success: 'gc' is now integrated with Nautilus!${NC}"
 echo -e "\n${YELLOW}Usage:${NC}"

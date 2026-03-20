@@ -28,7 +28,16 @@ public static class FileFilterExtensions
                 var fileName = Path.GetFileName(path).ToLowerInvariant();
                 var languageKey = string.IsNullOrEmpty(extension) ? fileName : extension;
                 var language = languageKey.ResolveLanguage(args);
-                return new FileEntry(path, extension, language);
+                long size = 0;
+                try
+                {
+                    if (File.Exists(path))
+                        size = new FileInfo(path).Length;
+                }
+                catch
+                {
+                }
+                return new FileEntry(path, extension, language, size);
             })
             .ToArray();
 
@@ -102,6 +111,11 @@ public static class FileFilterExtensions
         {
             var fullPath = Path.GetFullPath(path);
             var currentDir = Path.GetFullPath(Directory.GetCurrentDirectory());
+            
+            // Append trailing separator to prevent C:\repo matching C:\repo_secrets
+            if (!currentDir.EndsWith(Path.DirectorySeparatorChar.ToString()))
+                currentDir += Path.DirectorySeparatorChar;
+            
             if (!fullPath.StartsWith(currentDir, StringComparison.OrdinalIgnoreCase)) return false;
         }
         catch
@@ -187,10 +201,9 @@ public static class FileFilterExtensions
 
     private static string GetFullExtension(string path)
     {
-        var fileName = Path.GetFileName(path);
-        var firstDotIndex = fileName.IndexOf('.');
-        if (firstDotIndex >= 0 && firstDotIndex < fileName.Length - 1) return fileName.Substring(firstDotIndex + 1);
-        return string.Empty;
+        var extension = Path.GetExtension(path);
+        if (string.IsNullOrEmpty(extension)) return string.Empty;
+        return extension.TrimStart('.');
     }
 
     private static bool MatchesExtensions(this string path, HashSet<string> activeExtensions)

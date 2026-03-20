@@ -5,9 +5,31 @@
 # It allows right-clicking on folders/files to copy their contents as markdown.
 
 # Dependencies:
-# - gc (must be in PATH)
+# - gc (must be in PATH or absolute path)
 # - libnotify-bin (for notify-send, optional)
 # - xclip or wl-clipboard (for clipboard support)
+
+# Notification function with fallbacks
+send_notification() {
+    local title="$1"
+    local message="$2"
+    local icon="${3:-info}"
+    
+    if command -v notify-send &> /dev/null; then
+        notify-send "$title" "$message" -i "$icon"
+    elif command -v zenity &> /dev/null; then
+        zenity --notification --text="$title: $message" 2>/dev/null || true
+    elif command -v kdialog &> /dev/null; then
+        kdialog --passivepopup "$title: $message" 5 2>/dev/null || true
+    fi
+}
+
+# URL decode function
+url_decode() {
+    local url_encoded="${1//+/ }"
+    printf '%b' "${url_encoded//%/\\x}"
+}
+
 
 # Log file for debugging
 LOG_FILE="/tmp/gc-nautilus.log"
@@ -15,7 +37,7 @@ echo "--- $(date) ---" > "$LOG_FILE"
 
 # Nautilus passes selected paths via environment variable
 if [ -z "$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS" ]; then
-    notify-send "gc" "No files or folders selected." -i info
+    send_notification "gc" "No files or folders selected." "info"
     echo "No paths selected" >> "$LOG_FILE"
     exit 0
 fi
@@ -25,7 +47,15 @@ TARGET_PATHS=()
 # Process NAUTILUS_SCRIPT_SELECTED_FILE_PATHS line by line
 while IFS= read -r path; do
     if [ -n "$path" ]; then
-        # The paths might be absolute or relative depending on Nautilus version/context
+        # Handle file:// URIs and URL-encoded paths
+        if [[ "$path" == file://* ]]; then
+            path="${path#file://}"
+        fi
+        
+        # URL decode the path (handles spaces and special characters)
+        path=$(url_decode "$path")
+        
+        # Make absolute if relative
         if [[ "$path" != /* ]]; then
             path="$(pwd)/$path"
         fi
@@ -34,10 +64,33 @@ while IFS= read -r path; do
     fi
 done <<< "$NAUTILUS_SCRIPT_SELECTED_FILE_PATHS"
 
-# Set working directory to the parent of the first selected item
-# This helps 'gc' find the git root if it exists
+# Resolve git root for the first selected item
+# This is important when files are selected from search results or deep subdirectories
 FIRST_PATH="${TARGET_PATHS[0]}"
-if [ -d "$FIRST_PATH" ]; then
+GIT_ROOT=""
+
+# Try to find git root starting from the file/directory
+if [ -f "$FIRST_PATH" ]; then
+    SEARCH_DIR=$(dirname "$FIRST_PATH")
+else
+    SEARCH_DIR="$FIRST_PATH"
+fi
+
+# Walk up the directory tree to find .git
+CURRENT_DIR="$SEARCH_DIR"
+while [ "$CURRENT_DIR" != "/" ]; do
+    if [ -d "$CURRENT_DIR/.git" ]; then
+        GIT_ROOT="$CURRENT_DIR"
+        break
+    fi
+    CURRENT_DIR=$(dirname "$CURRENT_DIR")
+done
+
+# Set working directory
+if [ -n "$GIT_ROOT" ]; then
+    WORKING_DIR="$GIT_ROOT"
+    echo "Git root found: $GIT_ROOT" >> "$LOG_FILE"
+elif [ -d "$FIRST_PATH" ]; then
     WORKING_DIR="$FIRST_PATH"
 else
     WORKING_DIR=$(dirname "$FIRST_PATH")
@@ -64,7 +117,7 @@ if [ $EXIT_CODE -eq 0 ]; then
     if [ -z "$STATS" ]; then
         STATS="Contents copied to clipboard successfully."
     fi
-    notify-send "gc" "$STATS" -i checkbox-checked-symbolic
+    send_notification "gc" "$STATS" "checkbox-checked-symbolic"
 else
     # Show error message
     # Remove [ERROR] prefix and ANSI color codes
@@ -72,5 +125,5 @@ else
     if [ -z "$ERROR_MSG" ]; then
         ERROR_MSG=$(echo "$OUTPUT" | head -n 1)
     fi
-    notify-send "gc" "Error: $ERROR_MSG" -i error
+    send_notification "gc" "Error: $ERROR_MSG" "error"
 fi

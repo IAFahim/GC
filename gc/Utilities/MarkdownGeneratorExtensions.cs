@@ -20,11 +20,12 @@ public static class MarkdownGeneratorExtensions
 
         Logger.LogDebug("Sorted files by path");
 
-        using var writer = new StringWriter();
+        var builder = new StringBuilder();
+        using var writer = new StringWriter(builder);
         WriteMarkdownToStream(writer, sortedContents, args);
         writer.Flush();
 
-        var result = writer.ToString();
+        var result = builder.ToString();
         Logger.LogVerbose($"Generated markdown: {result.Length} characters");
 
         return result;

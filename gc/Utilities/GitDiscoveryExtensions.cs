@@ -200,95 +200,91 @@ public static class GitDiscoveryExtensions
     private static string[] EnumerateFiles(string rootPath)
     {
         var files = new List<string>(1024);
-        var ignoredPatterns = BuiltInPresets.SystemIgnoredPatterns.ToList();
-
-        var gitignorePath = Path.Combine(rootPath, ".gitignore");
-        if (File.Exists(gitignorePath))
-            try
-            {
-                var lines = File.ReadAllLines(gitignorePath);
-                foreach (var line in lines)
-                {
-                    var trimmed = line.Trim();
-                    if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#")) continue;
-
-                    if (trimmed.StartsWith("/")) trimmed = trimmed.Substring(1);
-                    ignoredPatterns.Add(trimmed);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.LogDebug($"Failed to read .gitignore: {ex.Message}");
-            }
-
-        var ignoredDirs = new[]
+        
+        var ignoredDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "node_modules", ".git", ".svn", ".hg", "bin", "obj", "dist", "build",
             "target", "out", ".vs", ".idea", "coverage", ".next", ".nuxt",
             "__pycache__", "venv", ".env", ".env.local", "node_modules_cache"
         };
 
-        try
+        var visitedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<string>();
+        queue.Enqueue(rootPath);
+
+        while (queue.Count > 0)
         {
-            foreach (var file in Directory.EnumerateFiles(rootPath, "*.*", SearchOption.AllDirectories))
+            var currentDir = queue.Dequeue();
+            
+            var realPath = Path.GetFullPath(currentDir);
+            if (!visitedPaths.Add(realPath))
             {
-                var relativePath = Path.GetRelativePath(rootPath, file);
-
-                var pathParts = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                if (pathParts.Any(part => ignoredDirs.Contains(part, StringComparer.OrdinalIgnoreCase)))
-                {
-                    Logger.LogDebug($"Skipping ignored directory: {relativePath}");
-                    continue;
-                }
-
-                if (ShouldIgnoreFile(relativePath, ignoredPatterns))
-                {
-                    Logger.LogDebug($"Skipping ignored file: {relativePath}");
-                    continue;
-                }
-
-                files.Add(relativePath.Replace('\\', '/'));
+                Logger.LogDebug($"Skipping already visited path: {currentDir}");
+                continue;
             }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError($"Error enumerating files: {ex.Message}");
+
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(currentDir, "*", SearchOption.TopDirectoryOnly))
+                {
+                    var relativePath = Path.GetRelativePath(rootPath, file).Replace('\\', '/');
+                    
+                    if (!ShouldIgnoreFile(relativePath, rootPath))
+                    {
+                        files.Add(relativePath);
+                    }
+                }
+
+                foreach (var dir in Directory.EnumerateDirectories(currentDir, "*", SearchOption.TopDirectoryOnly))
+                {
+                    var dirName = Path.GetFileName(dir);
+                    if (!ignoredDirs.Contains(dirName))
+                    {
+                        queue.Enqueue(dir);
+                    }
+                    else
+                    {
+                        Logger.LogDebug($"Skipping ignored directory: {dirName}");
+                    }
+                }
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Logger.LogDebug($"Access denied to {currentDir}: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug($"Error enumerating {currentDir}: {ex.Message}");
+            }
         }
 
         return files.ToArray();
     }
 
-    private static bool ShouldIgnoreFile(string path, List<string> ignoredPatterns)
+    private static bool ShouldIgnoreFile(string relativePath, string rootPath)
     {
-        var normalizedPath = path.Replace('\\', '/').ToLowerInvariant();
-
-        foreach (var pattern in ignoredPatterns)
+        try
         {
-            var normalizedPattern = pattern.Replace('\\', '/').ToLowerInvariant();
-
-            if (normalizedPattern.EndsWith("/"))
+            var psi = new ProcessStartInfo
             {
-                var dirPattern = normalizedPattern.TrimEnd('/');
-                var pathParts = normalizedPath.Split('/');
+                FileName = "git",
+                Arguments = $"check-ignore -q \"{relativePath}\"",
+                WorkingDirectory = rootPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
-                if (pathParts.Contains(dirPattern)) return true;
-            }
-            else
-            {
-                var fileName = Path.GetFileName(normalizedPath);
+            using var process = Process.Start(psi);
+            if (process == null) return false;
 
-                if (normalizedPattern == fileName) return true;
-
-                if (normalizedPattern.StartsWith("*") && fileName.EndsWith(normalizedPattern.Substring(1))) return true;
-
-                if (normalizedPattern.EndsWith("*") &&
-                    fileName.StartsWith(normalizedPattern.Substring(0, normalizedPattern.Length - 1))) return true;
-
-                if (normalizedPattern.StartsWith("*.") && fileName.EndsWith(normalizedPattern.Substring(1)))
-                    return true;
-            }
+            process.WaitForExit();
+            return process.ExitCode == 0;
         }
-
-        return false;
+        catch
+        {
+            return false;
+        }
     }
 }

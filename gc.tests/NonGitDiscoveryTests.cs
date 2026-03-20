@@ -13,8 +13,14 @@ public class NonGitDiscoveryTests : IDisposable
     {
         _output = output;
         
+        // Create isolated test directory first to avoid global state conflicts
+        _testDir = Path.Combine(Path.GetTempPath(), $"gc_nongit_test_{Guid.NewGuid()}");
+        Directory.CreateDirectory(_testDir);
+        
         // Find the project root by looking for the .sln file starting from the base directory
-        var current = AppContext.BaseDirectory;
+        // Use a local variable to avoid sharing state across parallel test instances
+        var searchStart = AppContext.BaseDirectory;
+        var current = searchStart;
         while (current != null && !File.Exists(Path.Combine(current, "gc.sln")))
         {
             current = Directory.GetParent(current)?.FullName;
@@ -30,9 +36,6 @@ public class NonGitDiscoveryTests : IDisposable
         {
             throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
         }
-        
-        _testDir = Path.Combine(Path.GetTempPath(), $"gc_nongit_test_{Guid.NewGuid()}");
-        Directory.CreateDirectory(_testDir);
     }
 
     [Fact]

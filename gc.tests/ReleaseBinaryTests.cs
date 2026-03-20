@@ -19,12 +19,19 @@ public class ReleaseBinaryTests : IDisposable
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, System.Threading.CancellationToken cancellationToken)
         {
-            var content = "{\"tag_name\": \"v1.0.0\", \"assets\": []}";
-            var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            // Intercept GitHub API calls to avoid hitting live API in CI
+            if (request.RequestUri != null && request.RequestUri.Host == "api.github.com")
             {
-                Content = new StringContent(content)
-            };
-            return Task.FromResult(response);
+                var content = "{\"tag_name\": \"v1.0.0\", \"assets\": [{\"name\": \"gc-linux-x64\", \"browser_download_url\": \"https://example.com/gc-linux-x64\"}]}";
+                var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json")
+                };
+                return Task.FromResult(response);
+            }
+            
+            // For non-GitHub URLs, return 404
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         }
     }
 
@@ -579,7 +586,7 @@ public class ReleaseBinaryTests : IDisposable
 
         File.WriteAllText(fullPath, content);
         RunCommand(repoDir, "git", "add", filename);
-        RunCommand(repoDir, "git", "commit", "-m", $"Add {filename}");
+        RunCommand(repoDir, "git", "-c", "user.name=Test User", "-c", "user.email=test@example.com", "commit", "-m", $"Add {filename}");
     }
 
     private void AddBinaryFileToRepository(string repoDir, string filename)
@@ -588,7 +595,7 @@ public class ReleaseBinaryTests : IDisposable
         var binaryContent = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04, 0x00 };
         File.WriteAllBytes(fullPath, binaryContent);
         RunCommand(repoDir, "git", "add", filename);
-        RunCommand(repoDir, "git", "commit", "-m", $"Add {filename}");
+        RunCommand(repoDir, "git", "-c", "user.name=Test User", "-c", "user.email=test@example.com", "commit", "-m", $"Add {filename}");
     }
 
     private void RunCommand(string directory, string command, params string[] args)

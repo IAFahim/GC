@@ -79,7 +79,8 @@ public static class ClipboardExtensions
             var psi = new ProcessStartInfo
             {
                 FileName = "pwsh",
-                Arguments = $"-Command Set-Clipboard -Value @(\"{markdown.Replace("\"", "`\"").Replace("$", "`$")}\")",
+                Arguments = "-Command $input | Out-String | Set-Clipboard",
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -92,6 +93,10 @@ public static class ClipboardExtensions
                 Logger.LogDebug("PowerShell 7+ not found, trying Windows PowerShell");
                 return CopyToClipboardWindowsLegacy(markdown);
             }
+
+            using var writer = process.StandardInput;
+            writer.Write(markdown);
+            writer.Close();
 
             process.WaitForExit();
             if (process.ExitCode == 0)
@@ -119,7 +124,8 @@ public static class ClipboardExtensions
             var psi = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = $"-Command Set-Clipboard -Value @(\"{markdown.Replace("\"", "`\"").Replace("$", "`$")}\")",
+                Arguments = "-Command $input | Out-String | Set-Clipboard",
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -132,6 +138,10 @@ public static class ClipboardExtensions
                 Logger.LogDebug("Windows PowerShell not found, trying clip.exe with chcp 65001");
                 return CopyToClipboardWindowsClipExe(markdown);
             }
+
+            using var writer = process.StandardInput;
+            writer.Write(markdown);
+            writer.Close();
 
             process.WaitForExit();
             if (process.ExitCode == 0)
@@ -159,16 +169,21 @@ public static class ClipboardExtensions
             var psi = new ProcessStartInfo
             {
                 FileName = "cmd.exe",
-                Arguments =
-                    $"/c chcp 65001 >nul 2>&1 && echo \"{markdown.Replace("\"", "^\"").Replace("&", "^&").Replace("<", "^<").Replace(">", "^>").Replace("|", "^|").Replace("%", "^%")}\" | clip.exe",
+                Arguments = "/c chcp 65001 >nul 2>&1 && clip.exe",
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                StandardInputEncoding = Encoding.UTF8
             };
 
             using var process = Process.Start(psi);
             if (process == null) return false;
+
+            using var writer = process.StandardInput;
+            writer.Write(markdown);
+            writer.Close();
 
             process.WaitForExit();
             return process.ExitCode == 0;
@@ -257,27 +272,6 @@ public static class ClipboardExtensions
             return false;
         }
     }
-
-    private static int RunProcess(this string fileName, params string[] arguments)
-    {
-        var psi = new ProcessStartInfo
-        {
-            FileName = fileName,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        foreach (var argument in arguments) psi.ArgumentList.Add(argument);
-
-        using var process = Process.Start(psi);
-        if (process == null) return -1;
-
-        process.WaitForExit();
-        return process.ExitCode;
-    }
-
 
     private static void PrintStats(this string _, string target, FileContent[] contents)
     {

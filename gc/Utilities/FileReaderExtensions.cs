@@ -6,37 +6,40 @@ namespace gc.Utilities;
 
 public static class FileReaderExtensions
 {
-    public static FileContent[] ReadContents(this FileEntry[] entries, CliArguments args)
+    public static FileContent[] ReadContents(this FileEntry[] entries, CliArguments args, CancellationToken cancellationToken = default)
     {
         if (entries == null) throw new ArgumentNullException(nameof(entries));
 
         using var _ = Logger.TimeOperation("File reading");
 
         var totalSize = entries.Sum(e => e.Size);
+        var estimatedMemorySize = totalSize * 2;
 
         Logger.LogVerbose($"Reading {entries.Length} files (total size: {Formatting.FormatSize(totalSize)})...");
 
-        if (totalSize > args.MaxMemoryBytes)
+        if (estimatedMemorySize > args.MaxMemoryBytes)
         {
             var maxSizeStr = Formatting.FormatSize(args.MaxMemoryBytes);
             var totalSizeStr = Formatting.FormatSize(totalSize);
+            var estimatedSizeStr = Formatting.FormatSize(estimatedMemorySize);
 
-            Logger.LogError($"Memory limit exceeded: {totalSizeStr} > {maxSizeStr}");
+            Logger.LogError($"Memory limit exceeded: {estimatedSizeStr} (UTF-16 overhead from {totalSizeStr} on disk) > {maxSizeStr}");
             Console.WriteLine("Use --max-memory to increase the limit (e.g., --max-memory 500MB)");
             Environment.Exit(1);
             return Array.Empty<FileContent>();
         }
 
-        if (totalSize > args.MaxMemoryBytes * 0.8)
+        if (estimatedMemorySize > args.MaxMemoryBytes * 0.8)
         {
             var maxSizeStr = Formatting.FormatSize(args.MaxMemoryBytes);
             var totalSizeStr = Formatting.FormatSize(totalSize);
-            var percentage = (totalSize * 100.0 / args.MaxMemoryBytes).ToString("F1", CultureInfo.InvariantCulture);
+            var estimatedSizeStr = Formatting.FormatSize(estimatedMemorySize);
+            var percentage = (estimatedMemorySize * 100.0 / args.MaxMemoryBytes).ToString("F1", CultureInfo.InvariantCulture);
 
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.Write("[WARNING] ");
             Console.ResetColor();
-            Console.WriteLine($"Approaching memory limit: {totalSizeStr} ({percentage}% of {maxSizeStr})");
+            Console.WriteLine($"Approaching memory limit: {estimatedSizeStr} (UTF-16 overhead from {totalSizeStr} on disk) ({percentage}% of {maxSizeStr})");
         }
 
         var processedCount = 0;
@@ -45,6 +48,7 @@ public static class FileReaderExtensions
 
         var results = entries
             .AsParallel()
+            .WithCancellation(cancellationToken)
             .WithDegreeOfParallelism(Environment.ProcessorCount)
             .Select(entry =>
                 TryReadFile(entry, ref processedCount, ref skippedCount, ref errorCount, entries.Length, args))
@@ -144,7 +148,10 @@ public static class FileReaderExtensions
 
             if (streamContent) return new FileContent(entry, null!, fileLength);
 
-            var text = File.ReadAllText(entry.Path, Encoding.UTF8);
+            // Read using stream-based approach instead of File.ReadAllText
+            using var fileStream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(fileStream, Encoding.UTF8);
+            var text = reader.ReadToEnd();
             return new FileContent(entry, text, fileLength);
         }
         catch (OutOfMemoryException)
@@ -160,7 +167,7 @@ public static class FileReaderExtensions
     }
 
 
-    public static IEnumerable<FileContent> ReadContentsLazy(this FileEntry[] entries, CliArguments args)
+    public static IEnumerable<FileContent> ReadContentsLazy(this FileEntry[] entries, CliArguments args, CancellationToken cancellationToken = default)
     {
         if (entries == null) throw new ArgumentNullException(nameof(entries));
 
@@ -176,6 +183,7 @@ public static class FileReaderExtensions
 
         foreach (var entry in entries)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var result = TryReadFile(entry, ref processedCount, ref skippedCount, ref errorCount, entries.Length, args,
                 true);
             if (result != null) yield return result.Value;

@@ -1,6 +1,4 @@
-﻿using System;
-using System.IO;
-using System.Text.Json;
+﻿using System.Text.Json;
 using gc.Data;
 using gc.Utilities;
 
@@ -89,8 +87,8 @@ public static class Program
                 // Print stats
                 var tokens = totalBytes / 4;
                 var sizeStr = totalBytes < 1024 ? $"{totalBytes} B" :
-                    totalBytes < 1048576 ? $"{totalBytes / 1024.0:F2} KB" :
-                    $"{totalBytes / 1048576.0:F2} MB";
+                    totalBytes < 1048576 ? $"{(totalBytes / 1024.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} KB" :
+                    $"{(totalBytes / 1048576.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} MB";
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.Write("[OK] ");
                 Console.ResetColor();
@@ -109,14 +107,18 @@ public static class Program
             Console.ResetColor();
             Console.ForegroundColor = ConsoleColor.Red;
             Console.Error.WriteLine($"[FATAL ERROR] {ex.Message}");
-            Console.ResetColor();
-            
+
             if (Environment.GetEnvironmentVariable("GC_DEBUG") == "1")
             {
                 Console.Error.WriteLine(ex.StackTrace);
             }
-            
+
             Environment.Exit(1);
+        }
+        finally
+        {
+            // Single console reset point - ensures colors are reset even on crashes
+            Console.ResetColor();
         }
     }
 

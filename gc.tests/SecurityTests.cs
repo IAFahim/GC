@@ -1,9 +1,5 @@
-using System;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace gc.Tests;
@@ -336,8 +332,30 @@ public class Test
             {
                 var psi = new ProcessStartInfo { FileName = "git", Arguments = "--version", UseShellExecute = false, CreateNoWindow = true };
                 using var p = Process.Start(psi);
-                p?.WaitForExit();
-                _gitAvailable = (p?.ExitCode == 0);
+                if (p != null)
+                {
+                    try
+                    {
+                        if (!p.HasExited)
+                        {
+                            p.WaitForExit();
+                        }
+                        _gitAvailable = (p.ExitCode == 0);
+                    }
+                    catch (InvalidOperationException)
+            {
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+            }
+                    {
+                        _gitAvailable = false;
+                    }
+                }
+                else
+                {
+                    _gitAvailable = false;
+                }
             }
             catch { _gitAvailable = false; }
         }
@@ -403,7 +421,25 @@ public class Test
         };
 
         using var process = Process.Start(processInfo);
-        process?.WaitForExit();
+        if (process != null)
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.WaitForExit();
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+            }
+            {
+                // Process already terminated or invalid state
+            }
+        }
     }
 
     private void chmod(string path, string permissions)
@@ -418,49 +454,95 @@ public class Test
         };
 
         using var process = Process.Start(processInfo);
-        process?.WaitForExit();
+        if (process != null)
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.WaitForExit();
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+            }
+            {
+                // Process already terminated or invalid state
+            }
+        }
     }
 
     public void Dispose()
     {
+        TryDeleteDirectory(_testDir);
+    }
+
+    private void TryDeleteDirectory(string path, int retryCount = 0)
+    {
+        if (!Directory.Exists(path)) return;
+
         try
         {
-            if (Directory.Exists(_testDir))
+            // Reset permissions to ensure delete works
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                // Reset permissions to ensure delete works
-                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                try
                 {
-                    try
+                    var psi = new ProcessStartInfo
                     {
-                        var psi = new ProcessStartInfo
+                        FileName = "chmod",
+                        Arguments = $"-R 777 \"{path}\"",
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var p = Process.Start(psi);
+                    if (p != null)
+                    {
+                        try
                         {
-                            FileName = "chmod",
-                            Arguments = $"-R 777 \"{_testDir}\"",
-                            UseShellExecute = false,
-                            CreateNoWindow = true
-                        };
-                        using var process = Process.Start(psi);
-                        process?.WaitForExit();
-                    }
-                    catch { }
-                }
-
-                // Also need to fix git readonly files
-                foreach (var file in Directory.GetFiles(_testDir, "*", SearchOption.AllDirectories))
-                {
-                    try
-                    {
-                        File.SetAttributes(file, FileAttributes.Normal);
-                    }
-                    catch { }
-                }
-
-                Directory.Delete(_testDir, true);
+                            if (!p.HasExited)
+                            {
+                                p.WaitForExit();
+                            }
+                        }
+                        catch (InvalidOperationException)
+            {
             }
+            catch (System.ComponentModel.Win32Exception)
+            {
+            }
+                        {
+                            // Process already terminated or invalid state
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Reset file attributes to Normal to ensure deletable
+            foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                }
+                catch { }
+            }
+
+            Directory.Delete(path, true);
+        }
+        catch when (retryCount < 3)
+        {
+            // Retry with exponential backoff
+            System.Threading.Thread.Sleep(100 * (retryCount + 1));
+            TryDeleteDirectory(path, retryCount + 1);
         }
         catch
         {
-            // Ignore cleanup errors
+            // Ignore cleanup errors after retries
         }
     }
 

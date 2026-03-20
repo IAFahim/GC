@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading;
 using gc.Data;
 
 namespace gc.Utilities;
@@ -18,13 +13,13 @@ public static class FileReaderExtensions
         // Calculate total size before reading
         long totalSize = entries.Sum(e => e.Size);
 
-        Logger.LogVerbose($"Reading {entries.Length} files (total size: {FormatSize(totalSize)})...");
+        Logger.LogVerbose($"Reading {entries.Length} files (total size: {Formatting.FormatSize(totalSize)})...");
 
         // Check against memory limit
         if (totalSize > args.MaxMemoryBytes)
         {
-            var maxSizeStr = FormatSize(args.MaxMemoryBytes);
-            var totalSizeStr = FormatSize(totalSize);
+            var maxSizeStr = Formatting.FormatSize(args.MaxMemoryBytes);
+            var totalSizeStr = Formatting.FormatSize(totalSize);
 
             Logger.LogError($"Memory limit exceeded: {totalSizeStr} > {maxSizeStr}");
             Console.WriteLine($"Use --max-memory to increase the limit (e.g., --max-memory 500MB)");
@@ -35,9 +30,9 @@ public static class FileReaderExtensions
         // Warning if approaching limit
         if (totalSize > args.MaxMemoryBytes * 0.8)
         {
-            var maxSizeStr = FormatSize(args.MaxMemoryBytes);
-            var totalSizeStr = FormatSize(totalSize);
-            var percentage = (totalSize * 100.0 / args.MaxMemoryBytes).ToString("F1");
+            var maxSizeStr = Formatting.FormatSize(args.MaxMemoryBytes);
+            var totalSizeStr = Formatting.FormatSize(totalSize);
+            var percentage = (totalSize * 100.0 / args.MaxMemoryBytes).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
 
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.Write($"[WARNING] ");
@@ -161,12 +156,6 @@ public static class FileReaderExtensions
         }
     }
 
-    private static string FormatSize(long bytes)
-    {
-        return bytes < 1024 ? $"{bytes} B" :
-            bytes < 1048576 ? $"{bytes / 1024.0:F2} KB" :
-            $"{bytes / 1048576.0:F2} MB";
-    }
 
     public static IEnumerable<FileContent> ReadContentsLazy(this FileEntry[] entries, CliArguments args)
     {
@@ -177,13 +166,13 @@ public static class FileReaderExtensions
         // Calculate total size before reading
         long totalSize = entries.Sum(e => e.Size);
 
-        Logger.LogVerbose($"Reading {entries.Length} files (total size: {FormatSize(totalSize)})...");
+        Logger.LogVerbose($"Reading {entries.Length} files (total size: {Formatting.FormatSize(totalSize)})...");
 
         // Check against memory limit
         if (totalSize > args.MaxMemoryBytes)
         {
-            var maxSizeStr = FormatSize(args.MaxMemoryBytes);
-            var totalSizeStr = FormatSize(totalSize);
+            var maxSizeStr = Formatting.FormatSize(args.MaxMemoryBytes);
+            var totalSizeStr = Formatting.FormatSize(totalSize);
 
             Logger.LogError($"Memory limit exceeded: {totalSizeStr} > {maxSizeStr}");
             Console.WriteLine($"Use --max-memory to increase the limit (e.g., --max-memory 500MB)");
@@ -194,9 +183,9 @@ public static class FileReaderExtensions
         // Warning if approaching limit
         if (totalSize > args.MaxMemoryBytes * 0.8)
         {
-            var maxSizeStr = FormatSize(args.MaxMemoryBytes);
-            var totalSizeStr = FormatSize(totalSize);
-            var percentage = (totalSize * 100.0 / args.MaxMemoryBytes).ToString("F1");
+            var maxSizeStr = Formatting.FormatSize(args.MaxMemoryBytes);
+            var totalSizeStr = Formatting.FormatSize(totalSize);
+            var percentage = (totalSize * 100.0 / args.MaxMemoryBytes).ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
 
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.Write("[WARNING] ");

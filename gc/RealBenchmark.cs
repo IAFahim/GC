@@ -1,8 +1,4 @@
-using System;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Threading;
 using gc.Data;
 using gc.Utilities;
 
@@ -83,7 +79,7 @@ public static class RealBenchmark
             var rawFiles = args.DiscoverFiles();
             discoveryWatch.Stop();
 
-            Console.WriteLine($"  • Files discovered: {rawFiles.Length:N0}");
+            Console.WriteLine($"  • Files discovered: {rawFiles.Length.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)}");
             Console.WriteLine($"  • Discovery time:   {discoveryWatch.ElapsedMilliseconds} ms");
 
             if (rawFiles.Length == 0)
@@ -94,7 +90,7 @@ public static class RealBenchmark
 
             // Calculate total size (only for existing files)
             long totalSize = rawFiles.Where(f => File.Exists(f)).Sum(f => new FileInfo(f).Length);
-            Console.WriteLine($"  • Total size:       {FormatSize(totalSize)}");
+            Console.WriteLine($"  • Total size:       {Formatting.FormatSize(totalSize)}");
             Console.WriteLine();
 
             // Benchmark 2: File Reading (Non-Streaming)
@@ -112,11 +108,11 @@ public static class RealBenchmark
             var currentMemory = process.WorkingSet64 / 1024 / 1024;
             var memoryUsed = currentMemory - initialMemory;
 
-            Console.WriteLine($"  • Files read:       {fileContents.Length:N0}");
+            Console.WriteLine($"  • Files read:       {fileContents.Length.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)}");
             Console.WriteLine($"  • Read time:        {readWatch.ElapsedMilliseconds} ms");
             Console.WriteLine($"  • Memory used:      {memoryUsed} MB");
             Console.WriteLine($"  • Throughput:       {FormatThroughput(fileContents.Length, readWatch.ElapsedMilliseconds)}");
-            Console.WriteLine($"  • Avg time/file:    {readWatch.ElapsedMilliseconds * 1000000.0 / fileContents.Length:F2} μs/file");
+            Console.WriteLine($"  • Avg time/file:    {(readWatch.ElapsedMilliseconds * 1000000.0 / fileContents.Length).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} μs/file");
             Console.WriteLine();
 
             // Benchmark 3: Markdown Generation
@@ -125,10 +121,10 @@ public static class RealBenchmark
             var markdown = fileContents.GenerateMarkdown(args);
             markdownWatch.Stop();
 
-            Console.WriteLine($"  • Markdown size:    {FormatSize(markdown.Length)}");
+            Console.WriteLine($"  • Markdown size:    {Formatting.FormatSize(markdown.Length)}");
             Console.WriteLine($"  • Generation time:  {markdownWatch.ElapsedMilliseconds} ms");
             var writeSpeed = (long)(markdown.Length / (markdownWatch.ElapsedMilliseconds / 1000.0));
-            Console.WriteLine($"  • Write speed:      {FormatSize(writeSpeed)}/sec");
+            Console.WriteLine($"  • Write speed:      {Formatting.FormatSize(writeSpeed)}/sec");
             Console.WriteLine();
 
             // Benchmark 4: Streaming Performance
@@ -150,7 +146,7 @@ public static class RealBenchmark
             var streamEndMemory = process.WorkingSet64 / 1024 / 1024;
             var streamMemoryUsed = streamEndMemory - streamStartMemory;
 
-            Console.WriteLine($"  • Files processed:  {streamedCount:N0}");
+            Console.WriteLine($"  • Files processed:  {streamedCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)}");
             Console.WriteLine($"  • Stream time:      {streamWatch.ElapsedMilliseconds} ms");
             Console.WriteLine($"  • Memory used:      {streamMemoryUsed} MB");
             Console.WriteLine($"  • Throughput:       {FormatThroughput(streamedCount, streamWatch.ElapsedMilliseconds)}");
@@ -164,7 +160,7 @@ public static class RealBenchmark
 
             Console.WriteLine($"  • Total time:       {totalTime} ms");
             Console.WriteLine($"  • Peak memory:      {Math.Max(memoryUsed, streamMemoryUsed)} MB");
-            Console.WriteLine($"  • Files/sec:        {fileContents.Length * 1000.0 / totalTime:F1}");
+            Console.WriteLine($"  • Files/sec:        {(fileContents.Length * 1000.0 / totalTime).ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}");
             Console.WriteLine($"  • Memory efficiency:{streamMemoryUsed} MB (streaming)");
 
             // Performance ratings
@@ -267,18 +263,12 @@ public static class RealBenchmark
         return string.Join("\n", lines);
     }
 
-    private static string FormatSize(long bytes)
-    {
-        return bytes < 1024 ? $"{bytes} B" :
-            bytes < 1048576 ? $"{bytes / 1024.0:F2} KB" :
-            $"{bytes / 1048576.0:F2} MB";
-    }
 
     private static string FormatThroughput(int items, long milliseconds)
     {
         if (milliseconds == 0) return "∞ items/sec";
         var itemsPerSec = items * 1000.0 / milliseconds;
-        return $"{itemsPerSec:F0} files/sec";
+        return $"{itemsPerSec.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)} files/sec";
     }
 
     private static string GetExtension(string path)

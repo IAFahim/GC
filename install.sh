@@ -80,24 +80,71 @@ fi
 
 # Extract archive
 echo -e "${GREEN}Extracting archive...${NC}"
-mkdir -p "$TEMP_DIR/gc_bin"
-tar -xzf "$TEMP_DIR/${ARCHIVE_NAME}" -C "$TEMP_DIR/gc_bin"
-
-# Install
 INSTALL_DIR="$HOME/.local/bin"
 mkdir -p "$INSTALL_DIR"
 
-if [ -f "$TEMP_DIR/gc_bin/gc" ]; then
-    mv "$TEMP_DIR/gc_bin/gc" "$INSTALL_DIR/gc"
-    chmod +x "$INSTALL_DIR/gc"
-    echo -e "${GREEN}Successfully installed gc to $INSTALL_DIR/gc${NC}"
-elif [ -f "$TEMP_DIR/gc_bin/gc.exe" ]; then
-    mv "$TEMP_DIR/gc_bin/gc.exe" "$INSTALL_DIR/gc"
+# Try extraction with --strip-components=1 first
+EXTRACT_SUCCESS=false
+EXTRACT_TEMP_DIR=$(mktemp -d "$TEMP_DIR/gc_extract_XXXXXX")
+
+if tar -xzf "$TEMP_DIR/${ARCHIVE_NAME}" -C "$EXTRACT_TEMP_DIR" --strip-components=1 2>/dev/null; then
+    # Check if binary exists at root level
+    if [ -f "$EXTRACT_TEMP_DIR/gc" ] || [ -f "$EXTRACT_TEMP_DIR/gc.exe" ]; then
+        EXTRACT_SUCCESS=true
+    fi
+fi
+
+# If strip-components failed or binary not found, try without it
+if [ "$EXTRACT_SUCCESS" = false ]; then
+    # Clean and retry without strip-components
+    rm -rf "$EXTRACT_TEMP_DIR"
+    EXTRACT_TEMP_DIR=$(mktemp -d "$TEMP_DIR/gc_extract_XXXXXX")
+
+    if tar -xzf "$TEMP_DIR/${ARCHIVE_NAME}" -C "$EXTRACT_TEMP_DIR" 2>/dev/null; then
+        # Find the actual gc binary (not text files like README_gc.txt)
+        # Search for exact filename match and validate it's an executable binary
+        GC_BINARY=""
+        for candidate in $(find "$EXTRACT_TEMP_DIR" -type f \( -name "gc" -o -name "gc.exe" \)); do
+            # Check if file is executable binary (ELF for Linux, Mach-O for macOS, PE for Windows)
+            if file "$candidate" | grep -qE '(ELF|Mach-O|PE32|PE32\+|executable)'; then
+                # Verify it's not a text file
+                if ! file "$candidate" | grep -q 'text'; then
+                    GC_BINARY="$candidate"
+                    break
+                fi
+            fi
+        done
+
+        if [ -n "$GC_BINARY" ]; then
+            # Move binary to a known location
+            mkdir -p "$EXTRACT_TEMP_DIR/final"
+            cp "$GC_BINARY" "$EXTRACT_TEMP_DIR/final/gc"
+            EXTRACT_SUCCESS=true
+        fi
+    fi
+fi
+
+# Install binary
+if [ "$EXTRACT_SUCCESS" = true ]; then
+    # Find the actual binary location
+    if [ -f "$EXTRACT_TEMP_DIR/gc" ]; then
+        BINARY_PATH="$EXTRACT_TEMP_DIR/gc"
+    elif [ -f "$EXTRACT_TEMP_DIR/gc.exe" ]; then
+        BINARY_PATH="$EXTRACT_TEMP_DIR/gc.exe"
+    elif [ -f "$EXTRACT_TEMP_DIR/final/gc" ]; then
+        BINARY_PATH="$EXTRACT_TEMP_DIR/final/gc"
+    else
+        echo -e "${RED}Error: Could not find 'gc' binary after extraction${NC}"
+        ls -R "$EXTRACT_TEMP_DIR"
+        exit 1
+    fi
+
+    # Move and set permissions
+    mv "$BINARY_PATH" "$INSTALL_DIR/gc"
     chmod +x "$INSTALL_DIR/gc"
     echo -e "${GREEN}Successfully installed gc to $INSTALL_DIR/gc${NC}"
 else
-    echo -e "${RED}Error: Could not find 'gc' binary in archive${NC}"
-    ls -R "$TEMP_DIR/gc_bin"
+    echo -e "${RED}Error: Failed to extract archive${NC}"
     exit 1
 fi
 

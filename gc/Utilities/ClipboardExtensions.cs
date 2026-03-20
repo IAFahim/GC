@@ -1,6 +1,4 @@
-using System;
 using System.Diagnostics;
-using System.IO;
 using System.Runtime.InteropServices;
 using gc.Data;
 
@@ -19,14 +17,14 @@ public static class ClipboardExtensions
         var markdownSize = System.Text.Encoding.UTF8.GetByteCount(markdown);
         var maxClipboardSize = args.Configuration?.Limits?.GetMaxClipboardSizeBytes() ?? 10485760; // 10MB default
 
-        Logger.LogVerbose($"Output size: {FormatSize(markdownSize)}");
+        Logger.LogVerbose($"Output size: {Formatting.FormatSize(markdownSize)}");
 
         if (string.IsNullOrEmpty(args.OutputFile) && markdownSize > maxClipboardSize)
         {
             var sizeStr = markdownSize < 1024 ? $"{markdownSize} B" :
-                markdownSize < 1048576 ? $"{markdownSize / 1024.0:F2} KB" :
-                $"{markdownSize / 1048576.0:F2} MB";
-            var maxSizeStr = $"{maxClipboardSize / 1048576.0:F2} MB";
+                markdownSize < 1048576 ? $"{(markdownSize / 1024.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} KB" :
+                $"{(markdownSize / 1048576.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} MB";
+            var maxSizeStr = $"{(maxClipboardSize / 1048576.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} MB";
 
             Logger.LogError($"Output size exceeds clipboard limit: {sizeStr} > {maxSizeStr}");
             Console.WriteLine($"Use -o <file> to save to a file instead.");
@@ -233,12 +231,6 @@ public static class ClipboardExtensions
         return process.ExitCode;
     }
 
-    private static string FormatSize(long bytes)
-    {
-        return bytes < 1024 ? $"{bytes} B" :
-            bytes < 1048576 ? $"{bytes / 1024.0:F2} KB" :
-            $"{bytes / 1048576.0:F2} MB";
-    }
 
     private static void PrintStats(this string _, string target, FileContent[] contents)
     {
@@ -250,8 +242,8 @@ public static class ClipboardExtensions
 
         var tokens = totalBytes / 4;
         var sizeStr = totalBytes < 1024 ? $"{totalBytes} B" :
-            totalBytes < 1048576 ? $"{totalBytes / 1024.0:F2} KB" :
-            $"{totalBytes / 1048576.0:F2} MB";
+            totalBytes < 1048576 ? $"{(totalBytes / 1024.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} KB" :
+            $"{(totalBytes / 1048576.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} MB";
 
         Console.ForegroundColor = ConsoleColor.Green;
         Console.Write("[OK] ");

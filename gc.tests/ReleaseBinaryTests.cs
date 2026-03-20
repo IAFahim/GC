@@ -1,11 +1,6 @@
-using System;
 using System.Diagnostics;
-using System.IO;
 using System.IO.Compression;
-using System.Net.Http;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace gc.Tests;
@@ -531,8 +526,30 @@ public class ReleaseBinaryTests : IDisposable
             {
                 var psi = new ProcessStartInfo { FileName = "git", Arguments = "--version", UseShellExecute = false, CreateNoWindow = true };
                 using var p = Process.Start(psi);
-                p?.WaitForExit();
-                _gitAvailable = (p?.ExitCode == 0);
+                if (p != null)
+                {
+                    try
+                    {
+                        if (!p.HasExited)
+                        {
+                            p.WaitForExit();
+                        }
+                        _gitAvailable = (p.ExitCode == 0);
+                    }
+                    catch (InvalidOperationException)
+            {
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+            }
+                    {
+                        _gitAvailable = false;
+                    }
+                }
+                else
+                {
+                    _gitAvailable = false;
+                }
             }
             catch { _gitAvailable = false; }
         }
@@ -603,16 +620,36 @@ public class ReleaseBinaryTests : IDisposable
     public void Dispose()
     {
         _httpClient?.Dispose();
+        TryDeleteDirectory(_testDir);
+    }
+
+    private void TryDeleteDirectory(string path, int retryCount = 0)
+    {
+        if (!Directory.Exists(path)) return;
+
         try
         {
-            if (Directory.Exists(_testDir))
+            // Reset file attributes to Normal to ensure deletable
+            foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
             {
-                Directory.Delete(_testDir, true);
+                try
+                {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                }
+                catch { }
             }
+
+            Directory.Delete(path, true);
+        }
+        catch when (retryCount < 3)
+        {
+            // Retry with exponential backoff
+            System.Threading.Thread.Sleep(100 * (retryCount + 1));
+            TryDeleteDirectory(path, retryCount + 1);
         }
         catch
         {
-            // Ignore cleanup errors
+            // Ignore cleanup errors after retries
         }
     }
 

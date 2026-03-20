@@ -1,8 +1,4 @@
-using System;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using Xunit;
 using Xunit.Abstractions;
 
 namespace gc.Tests;
@@ -86,7 +82,7 @@ public class PerformanceTests : IDisposable
         Assert.True(stopwatch.ElapsedMilliseconds < 5000, $"Medium repository took {stopwatch.ElapsedMilliseconds}ms (expected < 5000ms)");
 
         var throughput = 50.0 / stopwatch.ElapsedMilliseconds * 1000;
-        _output.WriteLine($"✅ Medium repository processed at {throughput:F0} files/sec");
+        _output.WriteLine($"✅ Medium repository processed at {throughput.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)} files/sec");
     }
 
     [Fact]
@@ -163,9 +159,9 @@ public class PerformanceTests : IDisposable
         Assert.Contains("[OK] Exported to", result.StandardOutput);
 
         var avgTimePerFile = stopwatch.ElapsedMilliseconds / 30.0;
-        _output.WriteLine($"Average time per file: {avgTimePerFile:F2}ms");
+        _output.WriteLine($"Average time per file: {avgTimePerFile.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}ms");
 
-        Assert.True(avgTimePerFile < 100, $"Average time per file too high: {avgTimePerFile:F2}ms");
+        Assert.True(avgTimePerFile < 100, $"Average time per file too high: {avgTimePerFile.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}ms");
 
         _output.WriteLine($"✅ Parallel processing provides good performance");
     }
@@ -261,7 +257,7 @@ public class PerformanceTests : IDisposable
         var mbPerSec = fileSize / 1024.0 / 1024.0 / (stopwatch.ElapsedMilliseconds / 1000.0);
 
         _output.WriteLine($"Generated {fileSize} bytes in {stopwatch.ElapsedMilliseconds}ms");
-        _output.WriteLine($"Speed: {mbPerSec:F2} MB/sec");
+        _output.WriteLine($"Speed: {mbPerSec.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} MB/sec");
 
         _output.WriteLine($"✅ Markdown generation is fast");
     }
@@ -326,21 +322,59 @@ public class PerformanceTests : IDisposable
         };
 
         using var process = Process.Start(processInfo);
-        process?.WaitForExit();
+        if (process != null)
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.WaitForExit();
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+            }
+            {
+                // Process already terminated or invalid state
+            }
+        }
     }
 
     public void Dispose()
     {
+        TryDeleteDirectory(_testDir);
+    }
+
+    private void TryDeleteDirectory(string path, int retryCount = 0)
+    {
+        if (!Directory.Exists(path)) return;
+
         try
         {
-            if (Directory.Exists(_testDir))
+            // Reset file attributes to Normal to ensure deletable
+            foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
             {
-                Directory.Delete(_testDir, true);
+                try
+                {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                }
+                catch { }
             }
+
+            Directory.Delete(path, true);
+        }
+        catch when (retryCount < 3)
+        {
+            // Retry with exponential backoff
+            System.Threading.Thread.Sleep(100 * (retryCount + 1));
+            TryDeleteDirectory(path, retryCount + 1);
         }
         catch
         {
-            // Ignore cleanup errors
+            // Ignore cleanup errors after retries
         }
     }
 

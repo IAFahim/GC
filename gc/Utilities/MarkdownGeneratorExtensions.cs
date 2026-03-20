@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text;
 using gc.Data;
 
@@ -24,14 +20,13 @@ public static class MarkdownGeneratorExtensions
 
         Logger.LogDebug("Sorted files by path");
 
-        // Use StringBuilder approach to avoid double memory allocation
-        var sb = new StringBuilder();
-        using var writer = new StringWriter(sb);
-
+        // Stream directly to StringWriter without StringBuilder intermediate buffer
+        // This avoids OOM by writing content directly to the output string
+        using var writer = new StringWriter();
         WriteMarkdownToStream(writer, sortedContents, args);
         writer.Flush();
 
-        var result = sb.ToString();
+        var result = writer.ToString();
         Logger.LogVerbose($"Generated markdown: {result.Length} characters");
 
         return result;

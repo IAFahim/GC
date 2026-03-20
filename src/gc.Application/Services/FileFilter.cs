@@ -68,12 +68,13 @@ public sealed class FileFilter
 
     private bool IsValidPath(string path, GcConfiguration config, IEnumerable<string> searchPaths, IEnumerable<string> excludePatterns, HashSet<string> extensions)
     {
-        // Add basic validation logic here (simplified for brevity, can be expanded)
+        // Check extension filter
         if (extensions.Count > 0 && !extensions.Contains(GetFullExtension(path))) return false;
         
+        // Check exclude patterns
         foreach (var exclude in excludePatterns)
         {
-            if (path.Contains(exclude, StringComparison.OrdinalIgnoreCase)) return true;
+            if (path.Contains(exclude, StringComparison.OrdinalIgnoreCase)) return false;
         }
 
         return true;

@@ -46,7 +46,11 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                     totalBytes += await StreamFileToOutputAsync(content.Entry.Path, writer.BaseStream, ct);
                 }
 
-                await writer.WriteLineAsync();
+                // Ensure trailing newline before fence to prevent corruption
+                if (content.Content == null)
+                {
+                    await writer.WriteLineAsync();
+                }
                 await writer.WriteLineAsync(fence);
                 await writer.WriteLineAsync();
 

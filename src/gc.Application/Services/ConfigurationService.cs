@@ -67,7 +67,7 @@ public sealed class ConfigurationService
         try
         {
             var json = JsonSerializer.Serialize(defaultConfig, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(configPath, json);
+            await File.WriteAllTextAsync(configPath, json, new System.Text.UTF8Encoding(false));
             _logger.Info($"✓ Configuration file created: {configPath}");
             return Result.Success();
         }

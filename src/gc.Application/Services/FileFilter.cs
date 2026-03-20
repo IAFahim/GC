@@ -70,7 +70,21 @@ public sealed class FileFilter
     {
         // Check extension filter
         if (extensions.Count > 0 && !extensions.Contains(GetFullExtension(path))) return false;
-        
+
+        // Check search paths
+        var searchPathsList = searchPaths.ToList();
+        if (searchPathsList.Count > 0)
+        {
+            var pathNormalized = path.Replace('\\', '/');
+            var matchesSearchPath = searchPathsList.Any(searchPath =>
+            {
+                var searchNormalized = searchPath.Replace('\\', '/');
+                return pathNormalized.StartsWith(searchNormalized, StringComparison.OrdinalIgnoreCase) ||
+                       pathNormalized.Contains("/" + searchNormalized, StringComparison.OrdinalIgnoreCase);
+            });
+            if (!matchesSearchPath) return false;
+        }
+
         // Check exclude patterns
         foreach (var exclude in excludePatterns)
         {

@@ -116,6 +116,9 @@ public class ReleaseBinaryTests : IDisposable
 
         var result = RunGC("--version");
 
+        _output.WriteLine($"DEBUG: ExitCode={result.ExitCode}, StdoutContainsGC={result.StandardOutput.Contains("gc")}");
+        _output.WriteLine($"DEBUG: Stdout='{result.StandardOutput}'");
+
         // Should either show version or run normally
         Assert.True(result.ExitCode == 0 || result.StandardOutput.Contains("gc"));
 
@@ -517,11 +520,12 @@ public class ReleaseBinaryTests : IDisposable
             return new ProcessResult(-1, "", "Failed to start process");
         }
 
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
+        Task.WaitAll(stdoutTask, stderrTask);
 
-        return new ProcessResult(process.ExitCode, stdout, stderr);
+        return new ProcessResult(process.ExitCode, stdoutTask.Result, stderrTask.Result);
     }
 
     private string CreateTestRepository(string[] files)

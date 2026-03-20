@@ -85,11 +85,21 @@ public class EdgeCaseTests : IDisposable
         RunGitCommand("commit", "-m", "Add nested file");
 
         var outputFile = Path.Combine(_testDir, "output_deep.md");
+        _output.WriteLine($"DEBUG: About to call RunGC with args: --output {outputFile}");
+        _output.WriteLine($"DEBUG: Working directory: {_repoDir}");
+        _output.WriteLine($"DEBUG: Binary path: {_binaryPath}");
+
         var result = RunGC($"--output {outputFile}");
+
+        _output.WriteLine($"DEBUG: RunGC returned. ExitCode={result.ExitCode}");
+        _output.WriteLine($"DEBUG: StdoutLength={result.StandardOutput.Length}");
+        _output.WriteLine($"DEBUG: StderrLength={result.StandardError.Length}");
+        _output.WriteLine($"DEBUG: Stdout='{result.StandardOutput}'");
+        _output.WriteLine($"DEBUG: Stderr='{result.StandardError}'");
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("[OK] Exported to", result.StandardOutput);
-        
+
         var outputContent = File.ReadAllText(outputFile);
         Assert.Contains("test.cs", outputContent);
 
@@ -310,7 +320,7 @@ public class Test
 
         // For non-git discovery, it should show no files found (since .bin is ignored by default)
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("No files match the specified filters", result.StandardError);
+        Assert.Contains("No files match the specified filters", result.StandardOutput);
 
         _output.WriteLine($"✅ Zero-byte files handled");
     }
@@ -414,7 +424,8 @@ public class Test
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            UseShellExecute = false
+            UseShellExecute = false,
+            CreateNoWindow = true
         };
 
         using var process = Process.Start(processInfo);
@@ -426,6 +437,10 @@ public class Test
         var stdout = process.StandardOutput.ReadToEnd();
         var stderr = process.StandardError.ReadToEnd();
         process.WaitForExit();
+
+        _output.WriteLine($"DEBUG: ExitCode={process.ExitCode}, StdoutLength={stdout.Length}, StderrLength={stderr.Length}");
+        _output.WriteLine($"DEBUG: Stdout='{stdout}'");
+        _output.WriteLine($"DEBUG: Stderr='{stderr}'");
 
         return new ProcessResult(process.ExitCode, stdout, stderr);
     }

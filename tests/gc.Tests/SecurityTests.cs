@@ -401,11 +401,12 @@ public class Test
             return new ProcessResult(-1, "", "Failed to start process");
         }
 
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         process.WaitForExit();
+        Task.WaitAll(stdoutTask, stderrTask);
 
-        return new ProcessResult(process.ExitCode, stdout, stderr);
+        return new ProcessResult(process.ExitCode, stdoutTask.Result, stderrTask.Result);
     }
 
     private void RunGitCommand(string command, params string[] args)

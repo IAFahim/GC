@@ -1,0 +1,71 @@
+╔════════════════════════════════════════════════════════════════╗
+║            GC (Git Copy) - Real Repository Benchmark            ║
+╚════════════════════════════════════════════════════════════════╝
+
+🔍 Testing against current repository...
+   Repository: /home/runner/work/GC/GC
+
+📊 Phase 1: File Discovery
+[DEBUG] Starting: File discovery
+[DEBUG] Checking if git is installed...
+[DEBUG] Checking if current directory is a git repository...
+[DEBUG] Executing: git ls-files -z --cached
+[VERBOSE] Discovered 56 files from git
+[DEBUG] Git discovery completed. Exit code: 0
+[DEBUG] Completed: File discovery in 18ms
+  • Files discovered: 56
+  • Discovery time:   18 ms
+  • Total size:       267.54 KB
+
+📊 Phase 2: File Reading (Non-Streaming)
+[DEBUG] Starting: File reading
+[VERBOSE] Reading 56 files (total size: 267.54 KB)...
+[VERBOSE] Successfully read 56 files (skipped: 0, errors: 0)
+[DEBUG] Completed: File reading in 22ms
+  • Files read:       56
+  • Read time:        24 ms
+  • Memory used:      0 MB
+  • Throughput:       2333 files/sec
+  • Avg time/file:    428571.43 μs/file
+
+📊 Phase 3: Markdown Generation
+[DEBUG] Starting: Markdown generation
+[VERBOSE] Generating markdown for 56 files...
+[DEBUG] Sorted files by path
+[DEBUG] Generated file content sections
+[VERBOSE] Generated markdown: 277307 characters
+[DEBUG] Completed: Markdown generation in 3ms
+  • Markdown size:    270.81 KB
+  • Generation time:  4 ms
+  • Write speed:      66.12 MB/sec
+
+📊 Phase 4: Streaming Performance
+[DEBUG] Starting: Markdown generation (streaming)
+[DEBUG] Starting: File reading (streaming)
+[VERBOSE] Streaming 56 files (total size: 267.54 KB)...
+[VERBOSE] Successfully read 56 files (skipped: 0, errors: 0)
+[DEBUG] Completed: File reading (streaming) in 3ms
+[VERBOSE] Generating markdown for 56 files to stream...
+[DEBUG] Generated file content sections
+[VERBOSE] Markdown generation complete
+[DEBUG] Completed: Markdown generation (streaming) in 15ms
+  • Files processed:  56
+  • Stream time:      16 ms
+  • Memory used:      0 MB
+  • Throughput:       3500 files/sec
+
+📊 Performance Summary
+  • Total time:       46 ms
+  • Peak memory:      0 MB
+  • Files/sec:        1217.4
+  • Memory efficiency:0 MB (streaming)
+
+🏆 Performance Ratings
+  • Discovery Speed:     ⚡⚡ Very Good
+  • Read Speed:     ⚡⚡ Very Good
+  • Memory Usage:     ⚡⚡⚡ Excellent
+  • Markdown Speed:     ⚡⚡⚡ Excellent
+
+╔════════════════════════════════════════════════════════════════╗
+║                    Benchmark Complete                            ║
+╚════════════════════════════════════════════════════════════════╝

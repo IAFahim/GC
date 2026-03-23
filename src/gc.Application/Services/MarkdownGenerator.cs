@@ -25,6 +25,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
             long totalBytes = 0;
             var fileList = new List<string>();
+            var maxMemoryBytes = config.Limits.GetMaxMemoryBytesValue();
+            var maxFileSize = config.Limits.GetMaxFileSizeBytes();
 
             foreach (var content in sortedContents)
             {
@@ -32,6 +34,30 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                 var fence = await GetSafeFenceAsync(content, ct);
                 var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
+
+                var headerBytes = Utf8NoBom.GetByteCount(header) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                var fenceLine = $"{fence}{content.Entry.Language}";
+                var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                var newlineBytes = Utf8NoBom.GetByteCount(Environment.NewLine);
+
+                long contentBytes = 0;
+                if (content.Content != null)
+                {
+                    contentBytes = Utf8NoBom.GetByteCount(content.Content);
+                }
+                else
+                {
+                    var fileInfo = new FileInfo(content.Entry.Path);
+                    contentBytes = fileInfo.Length;
+                }
+
+                var entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + newlineBytes + closingFenceBytes + newlineBytes;
+                
+                if (totalBytes + entryTotalBytes > maxMemoryBytes)
+                {
+                    return Result<long>.Failure($"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum memory limit ({maxMemoryBytes} bytes)");
+                }
 
                 await writer.WriteLineAsync(header);
                 await writer.WriteLineAsync($"{fence}{content.Entry.Language}");
@@ -43,7 +69,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                 else
                 {
                     await writer.FlushAsync();
-                    totalBytes += await StreamFileToOutputAsync(content.Entry.Path, writer.BaseStream, ct);
+                    totalBytes += await StreamFileToOutputAsync(content.Entry.Path, writer.BaseStream, maxFileSize, ct);
                 }
 
                 // Ensure trailing newline before fence to prevent corruption
@@ -60,6 +86,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                 {
                     totalBytes += Utf8NoBom.GetByteCount(content.Content);
                 }
+
+                totalBytes += entryTotalBytes - contentBytes;
             }
 
             await WriteProjectStructureAsync(writer, fileList, config);
@@ -117,10 +145,19 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         return "```";
     }
 
-    private async Task<long> StreamFileToOutputAsync(string path, Stream output, CancellationToken ct)
+    private async Task<long> StreamFileToOutputAsync(string path, Stream output, long maxFileSize, CancellationToken ct)
     {
         try
         {
+            var fileInfo = new FileInfo(path);
+            if (fileInfo.Length > maxFileSize)
+            {
+                var errorMsg = $"[File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes)]";
+                var errorBytes = Utf8NoBom.GetBytes(errorMsg);
+                await output.WriteAsync(errorBytes.AsMemory(0, errorBytes.Length), ct);
+                return errorBytes.Length;
+            }
+
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             await fs.CopyToAsync(output, ct);
             return fs.Length;

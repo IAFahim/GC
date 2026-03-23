@@ -49,7 +49,7 @@ public sealed class RealBenchmark
         var loader = new ConfigurationLoader(_logger);
         var reader = new FileReader(_logger);
         var generator = new MarkdownGenerator(_logger);
-        var filter = new FileFilter();
+        var filter = new FileFilter(_logger);
 
         var configResult = await loader.LoadConfigAsync();
         var config = configResult.Value!;

@@ -1,4 +1,5 @@
 using System.Globalization;
+using gc.Domain.Common;
 
 namespace gc.Domain.Models.Configuration;
 
@@ -11,50 +12,16 @@ public sealed record LimitsConfiguration
 
     public long GetMaxFileSizeBytes()
     {
-        return ParseMemorySize(MaxFileSize);
+        return MemorySizeParser.Parse(MaxFileSize);
     }
 
     public long GetMaxClipboardSizeBytes()
     {
-        return ParseMemorySize(MaxClipboardSize);
+        return MemorySizeParser.Parse(MaxClipboardSize);
     }
 
     public long GetMaxMemoryBytesValue()
     {
-        return ParseMemorySize(MaxMemoryBytes);
-    }
-
-    private static long ParseMemorySize(string size)
-    {
-        if (string.IsNullOrWhiteSpace(size))
-            return 104857600;
-
-        size = size.Trim().ToUpperInvariant();
-        long multiplier = 1;
-
-        if (size.EndsWith("KB", StringComparison.Ordinal))
-        {
-            multiplier = 1024;
-            size = size.Substring(0, size.Length - 2);
-        }
-        else if (size.EndsWith("MB", StringComparison.Ordinal))
-        {
-            multiplier = 1048576;
-            size = size.Substring(0, size.Length - 2);
-        }
-        else if (size.EndsWith("GB", StringComparison.Ordinal))
-        {
-            multiplier = 1073741824;
-            size = size.Substring(0, size.Length - 2);
-        }
-        else if (size.EndsWith("B", StringComparison.Ordinal))
-        {
-            size = size.Substring(0, size.Length - 1);
-        }
-
-        if (double.TryParse(size, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
-            return (long)(value * multiplier);
-
-        return 104857600;
+        return MemorySizeParser.Parse(MaxMemoryBytes);
     }
 }

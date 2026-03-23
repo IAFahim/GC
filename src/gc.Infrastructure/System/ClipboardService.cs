@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
+using gc.Domain.Models.Configuration;
 
 namespace gc.Infrastructure.System;
 
@@ -43,8 +44,59 @@ public sealed class ClipboardService : IClipboardService
         }
     }
 
+    public async Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, CancellationToken ct = default)
+    {
+        try
+        {
+            var maxClipboardSize = limits.GetMaxClipboardSizeBytes();
+            
+            if (stream.CanSeek)
+            {
+                if (stream.Length > maxClipboardSize)
+                {
+                    return Result.Failure($"Content size ({stream.Length} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
+                }
+            }
+
+            bool success;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                success = await CopyToWindowsAsync(stream, ct);
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                success = await CopyToMacAsync(stream, ct);
+            }
+            else
+            {
+                success = await CopyToLinuxAsync(stream, ct);
+            }
+
+            return success ? Result.Success() : Result.Failure("Failed to copy to clipboard.");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Clipboard copy failed", ex);
+            return Result.Failure(ex.Message);
+        }
+    }
+
     public async Task<Result> CopyToClipboardAsync(string content, CancellationToken ct = default)
     {
+        using var ms = new MemoryStream(Utf8NoBom.GetBytes(content));
+        return await CopyToClipboardAsync(ms, ct);
+    }
+
+    public async Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, CancellationToken ct = default)
+    {
+        var maxClipboardSize = limits.GetMaxClipboardSizeBytes();
+        var contentBytes = Utf8NoBom.GetByteCount(content);
+        
+        if (contentBytes > maxClipboardSize)
+        {
+            return Result.Failure($"Content size ({contentBytes} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
+        }
+
         using var ms = new MemoryStream(Utf8NoBom.GetBytes(content));
         return await CopyToClipboardAsync(ms, ct);
     }

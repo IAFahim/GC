@@ -2,11 +2,19 @@ using gc.Domain.Common;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
 using gc.Domain.Constants;
+using gc.Domain.Interfaces;
 
 namespace gc.Application.Services;
 
 public sealed class FileFilter
 {
+    private readonly ILogger _logger;
+
+    public FileFilter(ILogger logger)
+    {
+        _logger = logger;
+    }
+
     public Result<IEnumerable<FileEntry>> FilterFiles(IEnumerable<string> rawFiles, GcConfiguration config, IEnumerable<string> searchPaths, IEnumerable<string> excludePatterns, IEnumerable<string> extensionFilters)
     {
         var activeExtensions = ResolveActiveExtensions(extensionFilters, config);
@@ -40,8 +48,19 @@ public sealed class FileFilter
 
             return new FileEntry(path, extension, language, fileInfo.Length);
         }
-        catch
+        catch (IOException ex)
         {
+            _logger.Error($"Failed to access file info for {path} (file may be locked)", ex);
+            return null;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.Error($"Access denied to {path}", ex);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"Unexpected error creating file entry for {path}", ex);
             return null;
         }
     }

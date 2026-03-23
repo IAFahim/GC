@@ -36,7 +36,7 @@ public sealed class CliParser
         var validateConfig = false;
         var dumpConfig = false;
         var discoveryMode = ParseDiscoveryMode(configuration.Discovery.Mode);
-        var maxMemoryBytes = ParseMemorySize(configuration.Limits.MaxMemoryBytes);
+        var maxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes);
 
         var state = ParseState.None;
         var onlyPaths = false;
@@ -178,7 +178,7 @@ public sealed class CliParser
             case ParseState.Excludes: excludes.Add(arg.Replace('\\', '/')); break;
             case ParseState.Presets: presets.Add(arg.ToLowerInvariant()); break;
             case ParseState.Output: output = arg; break;
-            case ParseState.MaxMemory: maxMemoryBytes = ParseMemorySize(arg); break;
+            case ParseState.MaxMemory: maxMemoryBytes = MemorySizeParser.Parse(arg); break;
             case ParseState.Discovery: discoveryMode = ParseDiscoveryMode(arg); break;
         }
     }
@@ -211,25 +211,6 @@ public sealed class CliParser
         return false;
     }
 
-    private static long ParseMemorySize(string size)
-    {
-        if (string.IsNullOrWhiteSpace(size)) return 104857600;
-
-        size = size.Trim().ToUpperInvariant();
-        long multiplier = 1;
-
-        if (size.EndsWith("KB", StringComparison.Ordinal)) { multiplier = 1024; size = size[..^2]; }
-        else if (size.EndsWith("MB", StringComparison.Ordinal)) { multiplier = 1048576; size = size[..^2]; }
-        else if (size.EndsWith("GB", StringComparison.Ordinal)) { multiplier = 1073741824; size = size[..^2]; }
-        else if (size.EndsWith("B", StringComparison.Ordinal)) { size = size[..^1]; }
-
-        if (double.TryParse(size, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
-        {
-            return (long)(value * multiplier);
-        }
-
-        return 104857600;
-    }
 
     private static DiscoveryMode ParseDiscoveryMode(string mode)
     {

@@ -71,8 +71,19 @@ public sealed class FileDiscovery : IFileDiscovery
             await process.WaitForExitAsync(ct);
             return process.ExitCode == 0;
         }
-        catch
+        catch (IOException ex)
         {
+            _logger.Error("Git executable not found or failed to start", ex);
+            return false;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.Error($"Access denied when checking git repository in {rootPath}", ex);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"Unexpected error checking if {rootPath} is a git repository", ex);
             return false;
         }
     }

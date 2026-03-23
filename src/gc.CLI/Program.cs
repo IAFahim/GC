@@ -48,7 +48,7 @@ public static class Program
 
         // Setup UseCase
         var discovery = new FileDiscovery(logger);
-        var filter = new FileFilter();
+        var filter = new FileFilter(logger);
         var reader = new FileReader(logger);
         var generator = new MarkdownGenerator(logger);
         var clipboard = new ClipboardService(logger);

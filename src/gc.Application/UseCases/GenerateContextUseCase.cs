@@ -78,7 +78,7 @@ public sealed class GenerateContextUseCase
 
             ms.Position = 0;
             _logger.Info("Copying to clipboard...");
-            var clipResult = await _clipboard.CopyToClipboardAsync(ms, ct);
+            var clipResult = await _clipboard.CopyToClipboardAsync(ms, config.Limits, ct);
             if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
             _logger.Info($"[OK] Copied to clipboard. Size: {genResult.Value} bytes.");

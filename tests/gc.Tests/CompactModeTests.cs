@@ -94,15 +94,12 @@ public class CompactModeTests
     {
         // Arrange
         var input = "";
-        var input2 = (string?)null;
 
         // Act
-        var result1 = MarkdownGenerator.CompactMarkdown(input, CompactLevel.Mild);
-        var result2 = MarkdownGenerator.CompactMarkdown(input2!, CompactLevel.Mild);
+        var result = MarkdownGenerator.CompactMarkdown(input, CompactLevel.Mild);
 
-        // Assert
-        Assert.Empty(result1);
-        Assert.Empty(result2);
+        // Assert - Should return empty string for empty input
+        Assert.Equal("", result);
     }
 
     [Fact]

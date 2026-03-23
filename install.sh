@@ -11,7 +11,19 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}🚀 Installing gc (Git Copy)...${NC}"
+# Print welcome banner
+cat << 'EOF'
+
+╔════════════════════════════════════════════════════════════╗
+║         gc (Git Copy) - Installer                         ║
+║         Generate AI-ready markdown from codebases          ║
+╚════════════════════════════════════════════════════════════╝
+
+🚀 Starting installation process...
+
+EOF
+
+echo -e "${GREEN}[1/7]${NC} Detecting system configuration..."
 
 # Detect OS
 OS="$(uname -s)"
@@ -53,7 +65,7 @@ esac
 REPO_NAME="IAFahim/gc"
 
 # Get latest release version
-echo -e "${GREEN}Fetching latest release version...${NC}"
+echo -e "${GREEN}[2/7]${NC} Fetching latest release version..."
 LATEST_VERSION=$(curl -s https://api.github.com/repos/${REPO_NAME}/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
 
 if [ -z "$LATEST_VERSION" ]; then
@@ -71,7 +83,7 @@ TEMP_DIR=$(mktemp -d)
 trap "rm -rf $TEMP_DIR" EXIT
 
 # Download archive
-echo -e "${GREEN}Downloading gc ${LATEST_VERSION} for ${PLATFORM}...${NC}"
+echo -e "${GREEN}[3/7]${NC} Downloading gc ${LATEST_VERSION} for ${PLATFORM}..."
 if ! curl -L -o "$TEMP_DIR/${ARCHIVE_NAME}" "$DOWNLOAD_URL"; then
     echo -e "${RED}Error: Failed to download ${ARCHIVE_NAME}${NC}"
     echo -e "${YELLOW}Please download manually from: ${DOWNLOAD_URL}${NC}"
@@ -80,7 +92,7 @@ fi
 
 # Download and verify checksum
 CHECKSUM_URL="https://github.com/${REPO_NAME}/releases/download/${LATEST_VERSION}/checksums.txt"
-echo -e "${GREEN}Downloading checksums for verification...${NC}"
+echo -e "${GREEN}[4/7]${NC} Downloading checksums for verification..."
 if ! curl -L -o "$TEMP_DIR/checksums.txt" "$CHECKSUM_URL"; then
     echo -e "${RED}Error: Failed to download checksums${NC}"
     echo -e "${RED}Security: Cannot verify binary integrity. Aborting installation.${NC}"
@@ -88,7 +100,7 @@ if ! curl -L -o "$TEMP_DIR/checksums.txt" "$CHECKSUM_URL"; then
 fi
 
 # Verify checksum
-echo -e "${GREEN}Verifying checksum...${NC}"
+echo -e "${GREEN}[5/7]${NC} Verifying checksum integrity..."
 cd "$TEMP_DIR"
 if ! sha256sum -c checksums.txt --ignore-missing 2>/dev/null | grep -q "${ARCHIVE_NAME}: OK"; then
     echo -e "${RED}Error: Checksum verification failed!${NC}"
@@ -100,7 +112,7 @@ echo -e "${GREEN}Checksum verified successfully${NC}"
 cd - > /dev/null
 
 # Extract archive
-echo -e "${GREEN}Extracting archive...${NC}"
+echo -e "${GREEN}[6/7]${NC} Extracting archive and installing binary..."
 INSTALL_DIR="$HOME/.local/bin"
 mkdir -p "$INSTALL_DIR"
 
@@ -167,11 +179,63 @@ else
 fi
 
 # Check if installation directory is in PATH
+echo -e "${GREEN}[7/7]${NC} Verifying installation..."
+
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-    echo -e "${YELLOW}Warning: $INSTALL_DIR is not in your PATH.${NC}"
-    echo -e "${YELLOW}Please add the following to your ~/.bashrc or ~/.zshrc:${NC}"
-    echo -e "${YELLOW}export PATH=\"\$PATH:$INSTALL_DIR\"${NC}"
+    cat << 'EOF'
+
+⚠️  PATH Configuration Required
+
+The installation directory is not in your PATH. To use gc from anywhere,
+add the following to your shell configuration file:
+
+For Bash (~/.bashrc):
+    export PATH="$PATH:$HOME/.local/bin"
+
+For Zsh (~/.zshrc):
+    export PATH="$PATH:$HOME/.local/bin"
+
+For Fish (~/.config/fish/config.fish):
+    fish_add_path ~/.local/bin
+
+After adding, restart your terminal or run: source ~/.bashrc (or ~/.zshrc)
+
+EOF
+else
+    echo -e "${GREEN}✓${NC} Installation directory is in PATH"
 fi
 
-echo -e "\n${GREEN}✅ Installation complete! Run 'gc --help' to get started.${NC}"
-echo -e "${YELLOW}Git Copy (gc) is now ready to use.${NC}"
+# Print success message
+cat << 'EOF'
+
+╔════════════════════════════════════════════════════════════╗
+║              Installation Complete! ✅                      ║
+╚════════════════════════════════════════════════════════════╝
+
+🎉 gc (Git Copy) has been successfully installed!
+
+QUICK START:
+    gc                      # Copy current directory to clipboard
+    gc --output repo.md     # Save to file instead of clipboard
+    gc --help               # Show all options
+
+EXAMPLES:
+    gc src/                 # Only include src/ directory
+    gc -e .cs,.ts           # Only include .cs and .ts files
+    gc -x node_modules/     # Exclude node_modules/
+    gc --compact            # Reduce token usage (compact mode)
+
+FEATURES:
+    • Clipboard integration (auto-detects supported platforms)
+    • File filters (include/exclude patterns)
+    • Git-aware file discovery
+    • Compact mode for token optimization
+    • Append mode for incremental updates
+
+DOCUMENTATION:
+    GitHub: https://github.com/IAFahim/gc
+    Issues: https://github.com/IAFahim/gc/issues
+
+EOF
+
+echo -e "${GREEN}Installation successful! Run 'gc --help' to see all options.${NC}\n"

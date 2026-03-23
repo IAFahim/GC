@@ -78,6 +78,12 @@ public static class Program
             };
         }
 
+        // Override compact level if specified via CLI
+        if (cliArgs.Compact != gc.Domain.Models.Configuration.CompactLevel.None)
+        {
+            config = config with { Compact = cliArgs.Compact };
+        }
+
         var result = await useCase.ExecuteAsync(
             Directory.GetCurrentDirectory(),
             config,
@@ -85,6 +91,7 @@ public static class Program
             cliArgs.Excludes,
             cliArgs.Extensions,
             cliArgs.OutputFile,
+            cliArgs.Append,
             ct);
 
         if (!result.IsSuccess)

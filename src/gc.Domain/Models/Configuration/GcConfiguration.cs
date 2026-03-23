@@ -11,4 +11,5 @@ public sealed record GcConfiguration
     public MarkdownConfiguration Markdown { get; init; } = new();
     public OutputConfiguration Output { get; init; } = new();
     public LoggingConfiguration Logging { get; init; } = new();
+    public CompactLevel Compact { get; init; } = CompactLevel.None;
 }

@@ -35,7 +35,9 @@ public sealed class ClipboardService : IClipboardService
                 success = await CopyToLinuxAsync(stream, ct);
             }
 
-            return success ? Result.Success() : Result.Failure("Failed to copy to clipboard.");
+            return success
+                ? Result.Success()
+                : Result.Failure("Failed to copy to clipboard. Clipboard tools may not be available. Use --output file.md to save to a file instead.");
         }
         catch (Exception ex)
         {
@@ -72,7 +74,9 @@ public sealed class ClipboardService : IClipboardService
                 success = await CopyToLinuxAsync(stream, ct);
             }
 
-            return success ? Result.Success() : Result.Failure("Failed to copy to clipboard.");
+            return success
+                ? Result.Success()
+                : Result.Failure("Failed to copy to clipboard. Clipboard tools may not be available. Use --output file.md to save to a file instead.");
         }
         catch (Exception ex)
         {
@@ -154,8 +158,9 @@ public sealed class ClipboardService : IClipboardService
             await process.WaitForExitAsync(ct);
             return process.ExitCode == 0;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.Error($"Clipboard tool '{fileName}' not available or failed", ex);
             return false;
         }
     }

@@ -16,7 +16,9 @@ public sealed class CliParser
         Presets,
         Output,
         MaxMemory,
-        Discovery
+        Discovery,
+        Compact,
+        Append
     }
 
     public Result<CliArguments> Parse(string[] args, GcConfiguration configuration)
@@ -37,6 +39,8 @@ public sealed class CliParser
         var dumpConfig = false;
         var discoveryMode = ParseDiscoveryMode(configuration.Discovery.Mode);
         var maxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes);
+        var compactLevel = gc.Domain.Models.Configuration.CompactLevel.None;
+        var appendMode = false;
 
         var state = ParseState.None;
         var onlyPaths = false;
@@ -58,7 +62,7 @@ public sealed class CliParser
 
             if (IsFlag(arg, out var flagType))
             {
-                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig);
+                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref compactLevel, ref appendMode);
                 state = ParseState.None;
                 continue;
             }
@@ -71,7 +75,7 @@ public sealed class CliParser
 
             if (state != ParseState.None)
             {
-                ProcessStateArg(arg, state, paths, extensions, excludes, presets, ref output, ref discoveryMode, ref maxMemoryBytes);
+                ProcessStateArg(arg, state, paths, extensions, excludes, presets, ref output, ref discoveryMode, ref maxMemoryBytes, ref compactLevel);
                 if (IsSingleValueState(state))
                 {
                     state = ParseState.None;
@@ -110,6 +114,8 @@ public sealed class CliParser
             InitConfig = initConfig,
             ValidateConfig = validateConfig,
             DumpConfig = dumpConfig,
+            Compact = compactLevel,
+            Append = appendMode,
             Configuration = configuration
         });
     }
@@ -127,12 +133,14 @@ public sealed class CliParser
             "--init-config" => "init-config",
             "--validate-config" => "validate-config",
             "--dump-config" => "dump-config",
+            "--compact" => "compact",
+            "--append" => "append",
             _ => string.Empty
         };
         return !string.IsNullOrEmpty(flagType);
     }
 
-    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig)
+    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref gc.Domain.Models.Configuration.CompactLevel compactLevel, ref bool appendMode)
     {
         switch (flagType)
         {
@@ -145,6 +153,8 @@ public sealed class CliParser
             case "init-config": initConfig = true; break;
             case "validate-config": validateConfig = true; break;
             case "dump-config": dumpConfig = true; break;
+            case "compact": compactLevel = gc.Domain.Models.Configuration.CompactLevel.Mild; break;
+            case "append": appendMode = true; break;
         }
     }
 
@@ -159,6 +169,7 @@ public sealed class CliParser
             "-o" or "--output" => ParseState.Output,
             "--max-memory" => ParseState.MaxMemory,
             "-d" or "--discovery" => ParseState.Discovery,
+            "--compact-level" => ParseState.Compact,
             _ => ParseState.None
         };
         return state != ParseState.None;
@@ -169,7 +180,7 @@ public sealed class CliParser
         return state is ParseState.Output or ParseState.MaxMemory or ParseState.Discovery;
     }
 
-    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref DiscoveryMode discoveryMode, ref long maxMemoryBytes)
+    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref DiscoveryMode discoveryMode, ref long maxMemoryBytes, ref gc.Domain.Models.Configuration.CompactLevel compactLevel)
     {
         switch (state)
         {
@@ -180,6 +191,7 @@ public sealed class CliParser
             case ParseState.Output: output = arg; break;
             case ParseState.MaxMemory: maxMemoryBytes = MemorySizeParser.Parse(arg); break;
             case ParseState.Discovery: discoveryMode = ParseDiscoveryMode(arg); break;
+            case ParseState.Compact: compactLevel = ParseCompactLevel(arg); break;
         }
     }
 
@@ -220,6 +232,17 @@ public sealed class CliParser
             "git" => DiscoveryMode.Git,
             "filesystem" => DiscoveryMode.FileSystem,
             _ => DiscoveryMode.Auto
+        };
+    }
+
+    private static gc.Domain.Models.Configuration.CompactLevel ParseCompactLevel(string level)
+    {
+        return (level?.ToLowerInvariant()) switch
+        {
+            "mild" => gc.Domain.Models.Configuration.CompactLevel.Mild,
+            "aggressive" => gc.Domain.Models.Configuration.CompactLevel.Aggressive,
+            "none" => gc.Domain.Models.Configuration.CompactLevel.None,
+            _ => gc.Domain.Models.Configuration.CompactLevel.Mild
         };
     }
 }

@@ -81,17 +81,35 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                 await writer.WriteLineAsync();
 
                 fileList.Add(content.Entry.Path);
-                
-                if (content.Content != null)
-                {
-                    totalBytes += Utf8NoBom.GetByteCount(content.Content);
-                }
 
-                totalBytes += entryTotalBytes - contentBytes;
+                // Add structural bytes (header, fences, newlines) but not content bytes
+                // Content bytes are either added during streaming (line 72) or need to be added here (line 87)
+                if (content.Content == null)
+                {
+                    // Streaming case: content bytes already added in StreamFileToOutputAsync
+                    totalBytes += entryTotalBytes - contentBytes;
+                }
+                else
+                {
+                    // Non-streaming case: add both content bytes and structural bytes
+                    totalBytes += entryTotalBytes;
+                }
             }
 
             await WriteProjectStructureAsync(writer, fileList, config);
             await writer.FlushAsync();
+
+            // Add project structure bytes to total
+            var projectStructureBytes = Utf8NoBom.GetByteCount(config.Markdown.ProjectStructureHeader) + Utf8NoBom.GetByteCount(Environment.NewLine);
+            var structureFenceBytes = Utf8NoBom.GetByteCount($"{config.Markdown.Fence}text") + Utf8NoBom.GetByteCount(Environment.NewLine);
+            foreach (var path in fileList)
+            {
+                projectStructureBytes += Utf8NoBom.GetByteCount(path) + Utf8NoBom.GetByteCount(Environment.NewLine);
+            }
+            projectStructureBytes += Utf8NoBom.GetByteCount(config.Markdown.Fence) + Utf8NoBom.GetByteCount(Environment.NewLine);
+            // Add one more newline that's written after the closing fence
+            projectStructureBytes += Utf8NoBom.GetByteCount(Environment.NewLine);
+            totalBytes += projectStructureBytes;
 
             return Result<long>.Success(totalBytes);
         }
@@ -115,6 +133,13 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         ms.Position = 0;
         using var reader = new StreamReader(ms, Utf8NoBom);
         var markdown = await reader.ReadToEndAsync(ct);
+
+        // Apply compact mode if enabled
+        if (config.Compact != CompactLevel.None)
+        {
+            markdown = CompactMarkdown(markdown, config.Compact);
+        }
+
         return Result<string>.Success(markdown);
     }
 
@@ -183,5 +208,88 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         }
 
         await writer.WriteLineAsync(config.Markdown.Fence);
+    }
+
+    /// <summary>
+    /// Applies compression strategies based on CompactLevel to reduce token count.
+    /// </summary>
+    /// <param name="markdown">The markdown content to compress</param>
+    /// <param name="level">Compression level (None, Mild, Aggressive)</param>
+    /// <returns>Compressed markdown content</returns>
+    public static string CompactMarkdown(string markdown, CompactLevel level)
+    {
+        if (string.IsNullOrEmpty(markdown) || level == CompactLevel.None)
+            return markdown;
+
+        return level switch
+        {
+            CompactLevel.Mild => CompactMild(markdown),
+            CompactLevel.Aggressive => CompactAggressive(markdown),
+            _ => markdown
+        };
+    }
+
+    /// <summary>
+    /// Mild compression: removes empty lines and collapses consecutive whitespace.
+    /// </summary>
+    private static string CompactMild(string markdown)
+    {
+        if (string.IsNullOrEmpty(markdown))
+            return markdown;
+
+        // Remove empty lines (but preserve paragraph breaks)
+        var lines = markdown.Split('\n');
+        var nonEmptyLines = lines.Where(line => !string.IsNullOrWhiteSpace(line)).ToList();
+
+        // Collapse consecutive whitespace to single space
+        for (int i = 0; i < nonEmptyLines.Count; i++)
+        {
+            // Collapse multiple spaces to single space, but preserve indentation
+            var trimmed = nonEmptyLines[i].TrimEnd();
+            var leadingWhitespace = nonEmptyLines[i].Length - nonEmptyLines[i].TrimStart().Length;
+            var content = nonEmptyLines[i].TrimStart();
+
+            // Collapse internal whitespace
+            content = System.Text.RegularExpressions.Regex.Replace(content, @"\s+", " ");
+            nonEmptyLines[i] = new string(' ', leadingWhitespace) + content;
+        }
+
+        return string.Join('\n', nonEmptyLines);
+    }
+
+    /// <summary>
+    /// Aggressive compression: removes empty lines, collapses whitespace, truncates long comments, removes metadata.
+    /// </summary>
+    private static string CompactAggressive(string markdown)
+    {
+        if (string.IsNullOrEmpty(markdown))
+            return markdown;
+
+        // Apply mild compression first
+        var compressed = CompactMild(markdown);
+
+        // Truncate long comments (lines starting with //)
+        var lines = compressed.Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var trimmed = line.Trim();
+
+            // Truncate long comments (>80 chars) but keep code structure
+            if (trimmed.StartsWith("//") && trimmed.Length > 80)
+            {
+                var indentation = line.Length - line.TrimStart().Length;
+                lines[i] = new string(' ', indentation) + trimmed.Substring(0, 77) + "...";
+            }
+        }
+
+        // Remove code fence metadata (keep only the actual content)
+        var result = string.Join('\n', lines);
+
+        // Remove common markdown metadata patterns
+        result = System.Text.RegularExpressions.Regex.Replace(result, @"<!--.*?-->", ""); // HTML comments
+        result = System.Text.RegularExpressions.Regex.Replace(result, @"\[.*?\]:\s*$", ""); // Reference-style links
+
+        return result;
     }
 }

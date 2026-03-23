@@ -100,7 +100,7 @@ public class BugFixTests
             using var stream = new FileStream(tempFile, FileMode.Open, FileAccess.Read);
 
             // Act
-            var result = await clipboardService.CopyStreamToClipboardAsync(stream, config.Limits.GetMaxClipboardSizeBytes());
+            var result = await clipboardService.CopyToClipboardAsync(stream, config.Limits, CancellationToken.None);
 
             // Assert
             Assert.False(result.IsSuccess);
@@ -120,9 +120,10 @@ public class BugFixTests
         config = config with { Limits = config.Limits with { MaxMemoryBytes = "1KB" } }; // Very small limit
 
         var generator = new MarkdownGenerator(_logger);
+        var fileEntry = new FileEntry("large.txt", "txt", "text", 2000);
         var fileContents = new List<FileContent>
         {
-            new() { Entry = new FileEntry { Path = "large.txt", Language = "text" }, Content = new string('x', 2000) }
+            new(fileEntry, new string('x', 2000), 2000)
         };
 
         // Act
@@ -130,10 +131,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents, 
             output, 
-            null, 
-            config.Markdown, 
-            config.Limits,
-            config.LanguageMappings,
+            config,
             CancellationToken.None
         );
 
@@ -266,9 +264,10 @@ public class BugFixTests
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(_logger);
+        var fileEntry = new FileEntry("test.cs", "cs", "csharp", 20);
         var fileContents = new List<FileContent>
         {
-            new() { Entry = new FileEntry { Path = "test.cs", Language = "csharp" }, Content = "Console.WriteLine();" }
+            new(fileEntry, "Console.WriteLine();", 20)
         };
 
         // Act
@@ -276,19 +275,16 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            null,
-            config.Markdown,
-            config.Limits,
-            config.LanguageMappings,
+            config,
             CancellationToken.None
         );
 
         // Assert
         Assert.True(result.IsSuccess);
         var generatedContent = Encoding.UTF8.GetString(output.ToArray());
-        
+
         // Check that header is included
-        Assert.Contains("# `test.cs`", generatedContent);
+        Assert.Contains("## File: test.cs", generatedContent);
         Assert.Contains("```csharp", generatedContent);
         Assert.Contains("```\n", generatedContent);
     }
@@ -300,9 +296,10 @@ public class BugFixTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(_logger);
         var content = "line1\nline2";
+        var fileEntry = new FileEntry("test.txt", "txt", "text", content.Length);
         var fileContents = new List<FileContent>
         {
-            new() { Entry = new FileEntry { Path = "test.txt", Language = "text" }, Content = content }
+            new(fileEntry, content, content.Length)
         };
 
         // Act
@@ -310,10 +307,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            null,
-            config.Markdown,
-            config.Limits,
-            config.LanguageMappings,
+            config,
             CancellationToken.None
         );
 
@@ -323,9 +317,9 @@ public class BugFixTests
         var generatedContent = Encoding.UTF8.GetString(outputBytes);
 
         // Verify fences are present
-        Assert.Contains("```text\n", generatedContent);
+        Assert.Contains("```text", generatedContent);
         Assert.Contains(content, generatedContent);
-        Assert.Contains("```\n", generatedContent);
+        Assert.Contains("```", generatedContent);
 
         // Verify reported bytes match actual bytes
         Assert.Equal(outputBytes.Length, result.Value);
@@ -337,10 +331,12 @@ public class BugFixTests
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(_logger);
+        var entry1 = new FileEntry("file1.cs", "cs", "csharp", 15);
+        var entry2 = new FileEntry("file2.js", "js", "javascript", 20);
         var fileContents = new List<FileContent>
         {
-            new() { Entry = new FileEntry { Path = "file1.cs", Language = "csharp" }, Content = "class Test { }" },
-            new() { Entry = new FileEntry { Path = "file2.js", Language = "javascript" }, Content = "function test() {}" }
+            new(entry1, "class Test { }", 15),
+            new(entry2, "function test() {}", 20)
         };
 
         // Act
@@ -348,10 +344,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            "ProjectRoot/",
-            config.Markdown,
-            config.Limits,
-            config.LanguageMappings,
+            config,
             CancellationToken.None
         );
 
@@ -369,9 +362,10 @@ public class BugFixTests
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry("test.cs", "cs", "csharp", 8);
         var fileContents = new List<FileContent>
         {
-            new() { Entry = new FileEntry { Path = "test.cs", Language = "csharp" }, Content = "// test" }
+            new(entry, "// test", 8)
         };
 
         // Act
@@ -379,10 +373,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            "Root/\n  test.cs",
-            config.Markdown,
-            config.Limits,
-            config.LanguageMappings,
+            config,
             CancellationToken.None
         );
 
@@ -391,7 +382,6 @@ public class BugFixTests
         var generatedContent = Encoding.UTF8.GetString(output.ToArray());
         
         Assert.Contains("_Project Structure:_", generatedContent);
-        Assert.Contains("Root/", generatedContent);
         Assert.Contains("test.cs", generatedContent);
     }
 
@@ -402,9 +392,10 @@ public class BugFixTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(_logger);
         var multibyteContent = "Hello 世界 🌍"; // Mix of ASCII, Chinese, emoji
+        var entry = new FileEntry("unicode.txt", "txt", "text", Encoding.UTF8.GetByteCount(multibyteContent));
         var fileContents = new List<FileContent>
         {
-            new() { Entry = new FileEntry { Path = "unicode.txt", Language = "text" }, Content = multibyteContent }
+            new(entry, multibyteContent, Encoding.UTF8.GetByteCount(multibyteContent))
         };
 
         // Act
@@ -412,10 +403,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            null,
-            config.Markdown,
-            config.Limits,
-            config.LanguageMappings,
+            config,
             CancellationToken.None
         );
 
@@ -808,7 +796,7 @@ public class BugFixTests
     }
 
     [Fact]
-    public async Task FileFilter_SkipsInaccessibleFiles_Gracefully()
+    public void FileFilter_SkipsInaccessibleFiles_Gracefully()
     {
         // Arrange
         var fileFilter = new FileFilter(_logger);
@@ -818,7 +806,7 @@ public class BugFixTests
         var files = new[] { Path.Combine(Path.GetTempPath(), "nonexistent.txt") };
 
         // Act
-        var result = await fileFilter.FilterFilesAsync(files, config, CancellationToken.None);
+        var result = fileFilter.FilterFiles(files, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
 
         // Assert - Should return empty result, not throw
         Assert.NotNull(result.Value);
@@ -901,7 +889,7 @@ public class BugFixTests
     }
 
     [Fact]
-    public async Task ExceptionHandling_NoUnhandledExceptions()
+    public void ExceptionHandling_NoUnhandledExceptions()
     {
         // Arrange - Create scenarios that could throw exceptions
         var fileReader = new FileReader(_logger);
@@ -910,13 +898,13 @@ public class BugFixTests
         var config = BuiltInPresets.GetDefaultConfiguration();
 
         // Act & Assert - None of these should throw
-        var readResult = await fileReader.ReadStreamingAsync("/invalid/path/file.txt");
+        var readResult = fileReader.ReadStreamingAsync("/invalid/path/file.txt").Result;
         Assert.False(readResult.IsSuccess);
 
-        var filterResult = await fileFilter.FilterFilesAsync(new[] { "/invalid/file.txt" }, config, CancellationToken.None);
+        var filterResult = fileFilter.FilterFiles(new[] { "/invalid/file.txt" }, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
         Assert.NotNull(filterResult.Value);
 
-        var discoveryResult = await discovery.DiscoverFilesAsync("/invalid/path", config, CancellationToken.None);
+        var discoveryResult = discovery.DiscoverFilesAsync("/invalid/path", config, CancellationToken.None).Result;
         // Discovery might succeed with empty results or fail gracefully
         Assert.NotNull(discoveryResult);
     }

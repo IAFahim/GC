@@ -38,6 +38,7 @@ public sealed class GenerateContextUseCase
         IEnumerable<string> excludes,
         IEnumerable<string> extensions,
         string? outputFile,
+        bool appendMode = false,
         CancellationToken ct = default)
     {
         _logger.Info("Starting file discovery...");
@@ -62,11 +63,33 @@ public sealed class GenerateContextUseCase
 
         if (!string.IsNullOrEmpty(outputFile))
         {
-            using var fs = new FileStream(outputFile, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+            // Check if we should append to existing file
+            bool shouldAppend = appendMode && File.Exists(outputFile);
+            FileMode fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
+
+            if (shouldAppend)
+            {
+                bool withinWindow = await AppendStateManager.IsWithinAppendWindowAsync(rootPath);
+                if (!withinWindow)
+                {
+                    _logger.Info("Append mode specified but outside append window. Creating new file.");
+                    fileMode = FileMode.Create;
+                }
+                else
+                {
+                    _logger.Info($"Appending to existing file: {outputFile}");
+                }
+            }
+
+            using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
             var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, fs, config, ct);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
-            
-            _logger.Info($"[OK] Exported to {outputFile}. Size: {genResult.Value} bytes.");
+
+            // Save state for potential future append runs
+            await AppendStateManager.SaveStateAsync(rootPath);
+
+            string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
+            _logger.Info($"[OK] {action} {outputFile}. Size: {genResult.Value} bytes.");
             return Result.Success();
         }
         else

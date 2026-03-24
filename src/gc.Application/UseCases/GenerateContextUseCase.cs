@@ -41,22 +41,20 @@ public sealed class GenerateContextUseCase
         bool appendMode = false,
         CancellationToken ct = default)
     {
-        _logger.Info("Starting file discovery...");
         var discoveryResult = await _discovery.DiscoverFilesAsync(rootPath, config, ct);
         if (!discoveryResult.IsSuccess) return Result.Failure(discoveryResult.Error!);
 
-        _logger.Info($"Discovered {discoveryResult.Value!.Count()} files. Applying filters...");
         var filterResult = _filter.FilterFiles(discoveryResult.Value!, config, paths, excludes, extensions);
         if (!filterResult.IsSuccess) return Result.Failure(filterResult.Error!);
 
         var entries = filterResult.Value!.ToList();
         if (!entries.Any())
         {
-            _logger.Info("No files match the specified filters.");
+            _logger.Warning("No files match the specified filters.");
             return Result.Success();
         }
 
-        _logger.Info($"Processing {entries.Count} files...");
+        _logger.Warning("Processing...");
 
         // Stream contents lazily
         var contents = entries.Select(e => new FileContent(e, null, e.Size));
@@ -75,10 +73,6 @@ public sealed class GenerateContextUseCase
                     _logger.Info("Append mode specified but outside append window. Creating new file.");
                     fileMode = FileMode.Create;
                 }
-                else
-                {
-                    _logger.Info($"Appending to existing file: {outputFile}");
-                }
             }
 
             using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
@@ -88,8 +82,8 @@ public sealed class GenerateContextUseCase
             // Save state for potential future append runs
             await AppendStateManager.SaveStateAsync(rootPath);
 
-            string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-            _logger.Info($"[OK] {action} {outputFile}. Size: {genResult.Value} bytes.");
+            string action = shouldAppend && fileMode == FileMode.Append ? "Appended" : "Exported";
+            _logger.Warning($"✔ {action}: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
             return Result.Success();
         }
         else
@@ -100,11 +94,10 @@ public sealed class GenerateContextUseCase
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
             ms.Position = 0;
-            _logger.Info("Copying to clipboard...");
             var clipResult = await _clipboard.CopyToClipboardAsync(ms, config.Limits, ct);
             if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
-            _logger.Info($"[OK] Copied to clipboard. Size: {genResult.Value} bytes.");
+            _logger.Warning($"✔ Copied: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
             return Result.Success();
         }
     }

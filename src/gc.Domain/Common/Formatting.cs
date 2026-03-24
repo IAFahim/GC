@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace gc.Utilities;
+namespace gc.Domain.Common;
 
 public static class Formatting
 {

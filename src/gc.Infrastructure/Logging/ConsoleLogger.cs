@@ -14,8 +14,9 @@ public sealed class ConsoleLogger : ILogger
         {
             "debug" => LogLevel.Debug,
             "verbose" => LogLevel.Info,
-            "normal" => LogLevel.Info,
-            _ => LogLevel.Info
+            "info" => LogLevel.Info,
+            "normal" => LogLevel.Warning,
+            _ => LogLevel.Warning
         };
         _includeTimestamps = config?.IncludeTimestamps ?? false;
     }

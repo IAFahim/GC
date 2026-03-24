@@ -98,7 +98,7 @@ public class EdgeCaseTests : IDisposable
         _output.WriteLine($"DEBUG: Stderr='{result.StandardError}'");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
 
         var outputContent = File.ReadAllText(outputFile);
         Assert.Contains("test.cs", outputContent);
@@ -119,7 +119,7 @@ public class EdgeCaseTests : IDisposable
         var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
 
         _output.WriteLine($"✅ Unicode characters handled correctly");
     }
@@ -143,7 +143,7 @@ public class Test
         var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.Contains("special.cs", content);
@@ -163,7 +163,7 @@ public class Test
         var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.Contains("mixed.cs", content);
@@ -182,7 +182,7 @@ public class Test
         var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
 
         _output.WriteLine($"✅ Whitespace-only files handled");
     }
@@ -199,7 +199,7 @@ public class Test
         var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.Contains("longline.cs", content);
@@ -290,7 +290,7 @@ public class Test
             var result = RunGC($"--output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
             
             var content = File.ReadAllText(outputFile);
             Assert.Contains("readonly.cs", content);
@@ -348,7 +348,7 @@ public class Test
 
         // Should include file at exactly max size
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var outputContent = File.ReadAllText(outputFile);
         Assert.Contains("maxsize.txt", outputContent);
@@ -368,7 +368,7 @@ public class Test
         var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.Contains("dir1/test.cs", content);

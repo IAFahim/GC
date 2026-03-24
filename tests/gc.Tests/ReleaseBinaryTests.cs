@@ -198,7 +198,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, $"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.Contains("test.cs", content);
@@ -221,7 +221,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, $"--extension cs --output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.Contains("test.cs", content);
@@ -246,7 +246,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, $"--extension cs js --output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.Contains("test.cs", content);
@@ -270,7 +270,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, $"--exclude src/ --output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.DoesNotContain("src/test.cs", content);
@@ -292,7 +292,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, $"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         Assert.True(File.Exists(outputFile));
         Assert.Contains("test.cs", File.ReadAllText(outputFile));
 
@@ -329,7 +329,7 @@ public class ReleaseBinaryTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("[VERBOSE]", result.StandardError);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
 
         _output.WriteLine($"✅ Verbose logging works");
     }
@@ -347,7 +347,7 @@ public class ReleaseBinaryTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("[DEBUG]", result.StandardError);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
 
         _output.WriteLine($"✅ Debug logging works");
     }
@@ -366,7 +366,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, $"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.DoesNotContain("test.bin", content);
@@ -389,7 +389,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, $"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.DoesNotContain("large.txt", content);
@@ -418,7 +418,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, $"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
 
         _output.WriteLine($"✅ Special characters in paths handled correctly");
     }
@@ -438,7 +438,7 @@ public class ReleaseBinaryTests : IDisposable
         var result = RunGCInDirectory(testRepo, $"--preset backend --output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.Contains("test.py", content);

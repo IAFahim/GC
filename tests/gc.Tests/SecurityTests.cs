@@ -97,7 +97,7 @@ public class Test
         var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
 
         // Verify markdown is properly formed
         if (File.Exists(outputFile))
@@ -130,7 +130,7 @@ public class Test
         var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.Contains("normal.cs", content);
@@ -160,7 +160,7 @@ public class Test
         var result = RunGC($"--output {outputFile}");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         
         var content = File.ReadAllText(outputFile);
         Assert.Contains("normal.cs", content);
@@ -246,7 +246,7 @@ public class Test
 
             // Should not crash, should skip the file
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
             
             var content = File.ReadAllText(outputFile);
             Assert.DoesNotContain("unreadable.cs", content);
@@ -317,7 +317,7 @@ public class Test
         Assert.True(result.ExitCode == 0 || result.ExitCode != 0);
         if (result.ExitCode == 0)
         {
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
         }
 
         _output.WriteLine($"✅ Special path characters handled appropriately");

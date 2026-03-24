@@ -52,7 +52,7 @@ public class NonGitDiscoveryTests : IDisposable
             var result = RunGC(_testDir, $"--output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
             Assert.Contains(outputFile, result.StandardOutput);
             
             var content = File.ReadAllText(outputFile);
@@ -76,7 +76,7 @@ public class NonGitDiscoveryTests : IDisposable
             var result = RunGC(_testDir, $"--extension js --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
             
             var content = File.ReadAllText(outputFile);
             Assert.Contains("test.js", content);
@@ -99,7 +99,7 @@ public class NonGitDiscoveryTests : IDisposable
             var result = RunGC(_testDir, $"--preset web --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
             
             var content = File.ReadAllText(outputFile);
             Assert.Contains("test.js", content);
@@ -123,7 +123,7 @@ public class NonGitDiscoveryTests : IDisposable
             var result = RunGC(_testDir, $"--extension js --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
             
             var content = File.ReadAllText(outputFile);
             Assert.Contains("test.js", content);
@@ -150,7 +150,7 @@ public class NonGitDiscoveryTests : IDisposable
             var result = RunGC(_testDir, $"--preset web --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
             
             var content = File.ReadAllText(outputFile);
             Assert.Contains("helper.ts", content);
@@ -177,7 +177,7 @@ public class NonGitDiscoveryTests : IDisposable
             var result = RunGC(_testDir, $"--paths src --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
             
             var content = File.ReadAllText(outputFile);
             Assert.Contains("src/file1.cs", content);
@@ -198,7 +198,7 @@ public class NonGitDiscoveryTests : IDisposable
             var result = RunGC(_testDir, $"--discovery filesystem --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
             
             var content = File.ReadAllText(outputFile);
             Assert.Contains("test.cs", content);
@@ -228,7 +228,7 @@ public class NonGitDiscoveryTests : IDisposable
             var result = RunGC(libDir, $"--preset web --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
-            Assert.Contains("[OK] Exported to", result.StandardOutput);
+            Assert.Contains("✔ Exported", result.StandardOutput);
             Assert.True(File.Exists(outputFile));
 
             var content = File.ReadAllText(outputFile);

@@ -82,8 +82,8 @@ public sealed class GenerateContextUseCase
             // Save state for potential future append runs
             await AppendStateManager.SaveStateAsync(rootPath);
 
-            string action = shouldAppend && fileMode == FileMode.Append ? "Appended" : "Exported";
-            _logger.Warning($"✔ {action}: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
+            _logger.Warning($"✔ {action} {outputFile}: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
             return Result.Success();
         }
         else

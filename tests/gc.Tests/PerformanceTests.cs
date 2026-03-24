@@ -55,7 +55,7 @@ public class PerformanceTests : IDisposable
         stopwatch.Stop();
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         Assert.True(stopwatch.ElapsedMilliseconds < 2000, $"Small repository took {stopwatch.ElapsedMilliseconds}ms (expected < 2000ms)");
 
         _output.WriteLine($"✅ Small repository processed in {stopwatch.ElapsedMilliseconds}ms");
@@ -78,7 +78,7 @@ public class PerformanceTests : IDisposable
         stopwatch.Stop();
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         Assert.True(stopwatch.ElapsedMilliseconds < 5000, $"Medium repository took {stopwatch.ElapsedMilliseconds}ms (expected < 5000ms)");
 
         var throughput = 50.0 / stopwatch.ElapsedMilliseconds * 1000;
@@ -102,7 +102,7 @@ public class PerformanceTests : IDisposable
         stopwatch.Stop();
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
         Assert.True(stopwatch.ElapsedMilliseconds < 10000, $"Large repository took {stopwatch.ElapsedMilliseconds}ms (expected < 10000ms)");
 
         _output.WriteLine($"✅ Large repository processed in {stopwatch.ElapsedMilliseconds}ms");
@@ -156,7 +156,7 @@ public class PerformanceTests : IDisposable
         stopwatch.Stop();
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("[OK] Exported to", result.StandardOutput);
+        Assert.Contains("✔ Exported", result.StandardOutput);
 
         var avgTimePerFile = stopwatch.ElapsedMilliseconds / 30.0;
         _output.WriteLine($"Average time per file: {avgTimePerFile.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}ms");
@@ -192,8 +192,8 @@ public class PerformanceTests : IDisposable
 
         Assert.Equal(0, coldResult.ExitCode);
         Assert.Equal(0, warmResult.ExitCode);
-        Assert.Contains("[OK] Exported to", coldResult.StandardOutput);
-        Assert.Contains("[OK] Exported to", warmResult.StandardOutput);
+        Assert.Contains("✔ Exported to", coldResult.StandardOutput);
+        Assert.Contains("✔ Exported to", warmResult.StandardOutput);
 
         _output.WriteLine($"Cold start: {coldStopwatch.ElapsedMilliseconds}ms");
         _output.WriteLine($"Warm start: {warmStopwatch.ElapsedMilliseconds}ms");

@@ -832,8 +832,9 @@ public class BugFixTests
             // Act - Try git discovery in non-git directory
             var result = await discovery.DiscoverFilesAsync(tempDir, config, CancellationToken.None);
 
-            // Assert - Should fall back gracefully
-            Assert.True(result.IsSuccess);
+            // Assert - Should fail in explicit git mode
+            Assert.False(result.IsSuccess);
+            Assert.Contains("not a git repository", result.Error.ToLowerInvariant());
         }
         finally
         {

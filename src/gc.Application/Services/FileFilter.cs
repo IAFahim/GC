@@ -90,14 +90,19 @@ public sealed class FileFilter
         // Check extension filter
         if (extensions.Count > 0 && !extensions.Contains(GetFullExtension(path))) return false;
 
+        // Pre-normalize path once
+        var pathNormalized = path.Replace('\\', '/');
+
         // Check system ignored patterns from config
         if (config.Filters?.SystemIgnoredPatterns != null)
         {
-            var pathNormalized = path.Replace('\\', '/');
-            foreach (var ignoredPattern in config.Filters.SystemIgnoredPatterns)
+            // Pre-normalize patterns once (cache this if called frequently)
+            var normalizedPatterns = config.Filters.SystemIgnoredPatterns
+                .Select(p => p.Replace('\\', '/'))
+                .ToList();
+            
+            foreach (var patternNormalized in normalizedPatterns)
             {
-                var patternNormalized = ignoredPattern.Replace('\\', '/');
-
                 // Check if path matches ignored pattern
                 if (pathNormalized.Contains(patternNormalized, StringComparison.OrdinalIgnoreCase))
                 {
@@ -112,16 +117,17 @@ public sealed class FileFilter
             }
         }
 
-        // Check search paths
+        // Check search paths (path already normalized above)
         var searchPathsList = searchPaths.ToList();
         if (searchPathsList.Count > 0)
         {
-            var pathNormalized = path.Replace('\\', '/');
             var matchesSearchPath = searchPathsList.Any(searchPath =>
             {
-                var searchNormalized = searchPath.Replace('\\', '/');
-                return pathNormalized.StartsWith(searchNormalized, StringComparison.OrdinalIgnoreCase) ||
-                       pathNormalized.Contains("/" + searchNormalized, StringComparison.OrdinalIgnoreCase);
+                var searchNormalized = searchPath.Replace('\\', '/').TrimEnd('/');
+                // Exact match or directory prefix match with path separator boundary
+                return pathNormalized.Equals(searchNormalized, StringComparison.OrdinalIgnoreCase) ||
+                       pathNormalized.StartsWith(searchNormalized + "/", StringComparison.OrdinalIgnoreCase) ||
+                       pathNormalized.Contains("/" + searchNormalized + "/", StringComparison.OrdinalIgnoreCase);
             });
             if (!matchesSearchPath) return false;
         }

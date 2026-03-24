@@ -48,7 +48,7 @@ public sealed class RealBenchmark
         var discovery = new FileDiscovery(_logger);
         var loader = new ConfigurationLoader(_logger);
         var reader = new FileReader(_logger);
-        var generator = new MarkdownGenerator(_logger);
+        var generator = new MarkdownGenerator(_logger, reader);
         var filter = new FileFilter(_logger);
 
         var configResult = await loader.LoadConfigAsync();

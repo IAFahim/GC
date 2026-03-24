@@ -5,6 +5,7 @@ using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
 using gc.Infrastructure.Logging;
+using gc.Infrastructure.IO;
 using Xunit;
 
 namespace gc.Tests.FeatureTests;
@@ -28,17 +29,14 @@ public class CompactModeTests
     }
 
     [Fact]
-    public void CompactMild_CollapsesWhitespace()
+    public void CompactMild_PreservesWhitespace()
     {
-        // Arrange
+        // Arrange - CompactMild now only removes empty lines to avoid destroying string literals and tabs
         var input = "line1    with     spaces";
         var result = MarkdownGenerator.CompactMarkdown(input, CompactLevel.Mild);
 
-        // Assert - Should collapse multiple spaces but preserve structure
-        Assert.Contains("line1", result);
-        Assert.Contains("with", result);
-        Assert.Contains("spaces", result);
-        Assert.DoesNotContain("    ", result); // Should not have 4+ consecutive spaces
+        // Assert - Should NOT collapse whitespace (prevents semantic destruction)
+        Assert.Equal(input, result); // No transformation happens for single-line content with no empty lines
     }
 
     [Fact]
@@ -129,7 +127,7 @@ public class CompactModeTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         config = config with { Compact = CompactLevel.Mild };
 
-        var generator = new MarkdownGenerator(_logger);
+        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
         var fileEntry = new FileEntry("test.cs", "cs", "csharp", 20);
         var content = "line1\n\nline2\n\nline3"; // Content with empty lines
         var fileContents = new List<FileContent>
@@ -155,7 +153,7 @@ public class CompactModeTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         config = config with { Compact = CompactLevel.None };
 
-        var generator = new MarkdownGenerator(_logger);
+        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
         var fileEntry = new FileEntry("test.cs", "cs", "csharp", 20);
         var content = "line1\n\nline2\n\nline3"; // Content with empty lines
         var fileContents = new List<FileContent>

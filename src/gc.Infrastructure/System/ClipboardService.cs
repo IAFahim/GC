@@ -109,8 +109,9 @@ public sealed class ClipboardService : IClipboardService
     {
         // Try pwsh first, then powershell
         var success = await RunClipboardProcessAsync("pwsh", "-Command \"$input | Out-String | Set-Clipboard\"", stream, ct);
-        if (!success)
+        if (!success && stream.CanSeek)
         {
+            stream.Position = 0; // Reset stream for fallback
             success = await RunClipboardProcessAsync("powershell.exe", "-Command \"$input | Out-String | Set-Clipboard\"", stream, ct);
         }
         return success;
@@ -125,8 +126,9 @@ public sealed class ClipboardService : IClipboardService
     {
         // Try wl-copy (Wayland), then xclip (X11)
         var success = await RunClipboardProcessAsync("wl-copy", "", stream, ct);
-        if (!success)
+        if (!success && stream.CanSeek)
         {
+            stream.Position = 0; // Reset stream for fallback
             success = await RunClipboardProcessAsync("xclip", "-selection clipboard", stream, ct);
         }
         return success;

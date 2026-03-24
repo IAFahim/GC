@@ -9,11 +9,13 @@ namespace gc.Application.Services;
 public sealed class MarkdownGenerator : IMarkdownGenerator
 {
     private readonly ILogger _logger;
+    private readonly IFileReader _reader;
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
-    public MarkdownGenerator(ILogger logger)
+    public MarkdownGenerator(ILogger logger, IFileReader reader)
     {
         _logger = logger;
+        _reader = reader;
     }
 
     public async Task<Result<long>> GenerateMarkdownStreamingAsync(IEnumerable<FileContent> contents, Stream outputStream, GcConfiguration config, CancellationToken ct = default)
@@ -21,7 +23,11 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         try
         {
             using var writer = new StreamWriter(outputStream, Utf8NoBom, bufferSize: 8192, leaveOpen: true);
-            var sortedContents = contents.OrderBy(c => c.Entry.Path, StringComparer.OrdinalIgnoreCase);
+            
+            // Sort by path only if configured to do so
+            var sortedContents = config.Output.SortByPath 
+                ? contents.OrderBy(c => c.Entry.Path, StringComparer.OrdinalIgnoreCase)
+                : contents;
 
             long totalBytes = 0;
             var fileList = new List<string>();
@@ -77,7 +83,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                 
                 if (totalBytes + entryTotalBytes > maxMemoryBytes)
                 {
-                    return Result<long>.Failure($"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum memory limit ({maxMemoryBytes} bytes)");
+                    return Result<long>.Failure($"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes). Note: This limit applies to total output size, not RAM usage during streaming.");
                 }
 
                 await writer.WriteLineAsync(header);
@@ -200,6 +206,16 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     {
         try
         {
+            // Check if file is binary first
+            var isBinary = await _reader.IsBinaryFileAsync(path, ct);
+            if (isBinary)
+            {
+                var errorMsg = $"[Skipping binary file: {path}]";
+                var errorBytes = Utf8NoBom.GetBytes(errorMsg);
+                await output.WriteAsync(errorBytes.AsMemory(0, errorBytes.Length), ct);
+                return errorBytes.Length;
+            }
+
             var fileInfo = new FileInfo(path);
             if (fileInfo.Length > maxFileSize)
             {
@@ -257,29 +273,17 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     }
 
     /// <summary>
-    /// Mild compression: removes empty lines and collapses consecutive whitespace.
+    /// Mild compression: removes empty lines but preserves code structure.
+    /// Does NOT collapse whitespace inside lines to avoid destroying string literals and indentation.
     /// </summary>
     private static string CompactMild(string markdown)
     {
         if (string.IsNullOrEmpty(markdown))
             return markdown;
 
-        // Remove empty lines (but preserve paragraph breaks)
+        // Remove empty lines only
         var lines = markdown.Split('\n');
         var nonEmptyLines = lines.Where(line => !string.IsNullOrWhiteSpace(line)).ToList();
-
-        // Collapse consecutive whitespace to single space
-        for (int i = 0; i < nonEmptyLines.Count; i++)
-        {
-            // Collapse multiple spaces to single space, but preserve indentation
-            var trimmed = nonEmptyLines[i].TrimEnd();
-            var leadingWhitespace = nonEmptyLines[i].Length - nonEmptyLines[i].TrimStart().Length;
-            var content = nonEmptyLines[i].TrimStart();
-
-            // Collapse internal whitespace
-            content = System.Text.RegularExpressions.Regex.Replace(content, @"\s+", " ");
-            nonEmptyLines[i] = new string(' ', leadingWhitespace) + content;
-        }
 
         return string.Join('\n', nonEmptyLines);
     }
@@ -314,7 +318,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         var result = string.Join('\n', lines);
 
         // Remove common markdown metadata patterns
-        result = System.Text.RegularExpressions.Regex.Replace(result, @"<!--.*?-->", ""); // HTML comments
+        result = System.Text.RegularExpressions.Regex.Replace(result, @"<!--.*?-->", "", System.Text.RegularExpressions.RegexOptions.Singleline); // HTML comments (multiline)
         result = System.Text.RegularExpressions.Regex.Replace(result, @"\[.*?\]:\s*$", ""); // Reference-style links
 
         return result;

@@ -141,9 +141,17 @@ public sealed class FileDiscovery : IFileDiscovery
                     }
                 }
 
+                // Handle remaining partial data
                 if (start < totalBytes)
                 {
                     var remaining = totalBytes - start;
+                    // Prevent buffer overflow: if remaining data is too large, we have a problem
+                    if (remaining >= buffer.Length)
+                    {
+                        // This should never happen, but guard against it
+                        _logger.Error($"Buffer overflow detected in git ls-files parsing. Remaining: {remaining}, Buffer: {buffer.Length}");
+                        break;
+                    }
                     Array.Copy(buffer, start, buffer, 0, remaining);
                     position = remaining;
                 }
@@ -218,6 +226,21 @@ public sealed class FileDiscovery : IFileDiscovery
                         var dirName = Path.GetFileName(dir);
                         if (!ignoredDirs.Contains(dirName))
                         {
+                            // Skip symlinks when FollowSymlinks is false to prevent infinite loops
+                            if (!config.FollowSymlinks)
+                            {
+                                try
+                                {
+                                    var dirInfo = new DirectoryInfo(dir);
+                                    if ((dirInfo.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
+                                    {
+                                        // This is a symlink, skip it
+                                        continue;
+                                    }
+                                }
+                                catch { }
+                            }
+                            
                             queue.Enqueue((dir, depth + 1));
                         }
                     }

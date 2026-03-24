@@ -91,6 +91,12 @@ public sealed class CliParser
             }
         }
 
+        // Validate final parser state: if a SINGLE-VALUE flag is still waiting for its value, that's an error
+        if (state != ParseState.None && IsSingleValueState(state))
+        {
+            return Result<CliArguments>.Failure($"Missing value for argument: {StateToFlagName(state)}");
+        }
+
         // If unknown flag found, show help
         if (unknownFlagFound)
         {
@@ -237,6 +243,22 @@ public sealed class CliParser
             "aggressive" => gc.Domain.Models.Configuration.CompactLevel.Aggressive,
             "none" => gc.Domain.Models.Configuration.CompactLevel.None,
             _ => gc.Domain.Models.Configuration.CompactLevel.Mild
+        };
+    }
+    
+    private static string StateToFlagName(ParseState state)
+    {
+        return state switch
+        {
+            ParseState.Paths => "--paths",
+            ParseState.Extensions => "--ext",
+            ParseState.Excludes => "--exclude",
+            ParseState.Presets => "--preset",
+            ParseState.Output => "--output",
+            ParseState.MaxMemory => "--max-memory",
+            ParseState.Compact => "--compact",
+            ParseState.Depth => "--depth",
+            _ => "unknown"
         };
     }
 }

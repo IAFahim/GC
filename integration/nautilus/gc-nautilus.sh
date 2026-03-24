@@ -33,12 +33,23 @@ log_warn() {
 
 # Check if gc is installed
 check_gc_installed() {
-    if ! command -v gc &> /dev/null; then
+    # Try to find gc in common locations
+    local gc_path=""
+    if [ -f "$HOME/.local/bin/gc" ]; then
+        gc_path="$HOME/.local/bin/gc"
+    elif command -v gc &> /dev/null; then
+        gc_path=$(command -v gc)
+    fi
+    
+    if [ -z "$gc_path" ]; then
         log_error "gc is not installed or not in PATH"
         log_info "Install gc from: https://github.com/yourusername/gc"
         notify-send --icon=error "gc Not Found" "gc is not installed. Please install gc first."
         exit 1
     fi
+    
+    # Export for use in main function
+    GC_PATH="$gc_path"
 }
 
 # Main function - process selected directory
@@ -66,9 +77,9 @@ main() {
     # Show a notification that processing is starting
     notify-send --icon=document-save "gc Processing" "Generating markdown from: $(basename "$target_dir")"
 
-    # Run gc from the target directory
+    # Run gc from the target directory using absolute path
     local output
-    if cd "$target_dir" && output=$(gc 2>&1); then
+    if cd "$target_dir" && output=$("$GC_PATH" 2>&1); then
         log_info "Successfully generated markdown"
         notify-send --icon=dialog-ok "gc Success" "Copied to clipboard: $(basename "$target_dir")"
     else

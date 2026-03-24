@@ -147,7 +147,7 @@ public sealed class FileReader : IFileReader
         }
     }
 
-    private async Task<bool> IsBinaryFileAsync(string path, CancellationToken ct)
+    public async Task<bool> IsBinaryFileAsync(string path, CancellationToken ct)
     {
         try
         {

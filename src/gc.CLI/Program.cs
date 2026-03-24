@@ -50,7 +50,7 @@ public static class Program
         var discovery = new FileDiscovery(logger);
         var filter = new FileFilter(logger);
         var reader = new FileReader(logger);
-        var generator = new MarkdownGenerator(logger);
+        var generator = new MarkdownGenerator(logger, reader);
         var clipboard = new ClipboardService(logger);
         var validator = new ConfigurationValidator();
         var configService = new ConfigurationService(logger, validator);

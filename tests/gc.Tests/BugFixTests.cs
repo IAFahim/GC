@@ -119,7 +119,7 @@ public class BugFixTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         config = config with { Limits = config.Limits with { MaxMemoryBytes = "1KB" } }; // Very small limit
 
-        var generator = new MarkdownGenerator(_logger);
+        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
         var fileEntry = new FileEntry("large.txt", "txt", "text", 2000);
         var fileContents = new List<FileContent>
         {
@@ -137,7 +137,7 @@ public class BugFixTests
 
         // Assert
         Assert.False(result.IsSuccess);
-        Assert.Contains("exceed maximum memory limit", result.Error);
+        Assert.Contains("exceed maximum output limit", result.Error);
     }
 
     [Fact]
@@ -263,7 +263,7 @@ public class BugFixTests
     {
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
-        var generator = new MarkdownGenerator(_logger);
+        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
         var fileEntry = new FileEntry("test.cs", "cs", "csharp", 20);
         var fileContents = new List<FileContent>
         {
@@ -294,7 +294,7 @@ public class BugFixTests
     {
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
-        var generator = new MarkdownGenerator(_logger);
+        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
         var content = "line1\nline2";
         var fileEntry = new FileEntry("test.txt", "txt", "text", content.Length);
         var fileContents = new List<FileContent>
@@ -330,7 +330,7 @@ public class BugFixTests
     {
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
-        var generator = new MarkdownGenerator(_logger);
+        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
         var entry1 = new FileEntry("file1.cs", "cs", "csharp", 15);
         var entry2 = new FileEntry("file2.js", "js", "javascript", 20);
         var fileContents = new List<FileContent>
@@ -361,7 +361,7 @@ public class BugFixTests
     {
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
-        var generator = new MarkdownGenerator(_logger);
+        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
         var entry = new FileEntry("test.cs", "cs", "csharp", 8);
         var fileContents = new List<FileContent>
         {
@@ -390,7 +390,7 @@ public class BugFixTests
     {
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
-        var generator = new MarkdownGenerator(_logger);
+        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
         var multibyteContent = "Hello 世界 🌍"; // Mix of ASCII, Chinese, emoji
         var entry = new FileEntry("unicode.txt", "txt", "text", Encoding.UTF8.GetByteCount(multibyteContent));
         var fileContents = new List<FileContent>

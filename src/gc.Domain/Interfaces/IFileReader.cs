@@ -7,4 +7,5 @@ public interface IFileReader
 {
     Task<Result<Stream>> ReadStreamingAsync(string path, CancellationToken ct = default);
     Task<Result<FileContent>> ReadAsync(FileEntry entry, CancellationToken ct = default);
+    Task<bool> IsBinaryFileAsync(string path, CancellationToken ct = default);
 }

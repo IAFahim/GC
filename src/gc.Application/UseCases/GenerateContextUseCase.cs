@@ -61,19 +61,19 @@ public sealed class GenerateContextUseCase
 
         if (!string.IsNullOrEmpty(outputFile))
         {
+            // Ensure parent directory exists
+            var outputDir = Path.GetDirectoryName(outputFile);
+            if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
+            {
+                Directory.CreateDirectory(outputDir);
+            }
+
             // Check if we should append to existing file
             bool shouldAppend = appendMode && File.Exists(outputFile);
             FileMode fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
 
-            if (shouldAppend)
-            {
-                bool withinWindow = await AppendStateManager.IsWithinAppendWindowAsync(rootPath);
-                if (!withinWindow)
-                {
-                    _logger.Info("Append mode specified but outside append window. Creating new file.");
-                    fileMode = FileMode.Create;
-                }
-            }
+            // Note: When user explicitly passes --append (appendMode=true), we honor it.
+            // Time window checks are NOT applied when user explicitly requests append mode.
 
             using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
             var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, fs, config, ct);

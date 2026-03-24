@@ -11,17 +11,23 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy project files
-COPY src/gc.CLI/gc.CLI.csproj gc/
-COPY gc/Data/ gc/Data/
-COPY gc/Utilities/ gc/Utilities/
-COPY gc/Program.cs gc/
+# Copy solution and project files
+COPY gc.sln .
+COPY src/gc.CLI/gc.CLI.csproj src/gc.CLI/
+COPY src/gc.Application/gc.Application.csproj src/gc.Application/
+COPY src/gc.Domain/gc.Domain.csproj src/gc.Domain/
+COPY src/gc.Infrastructure/gc.Infrastructure.csproj src/gc.Infrastructure/
 
-# Restore and build with Native AOT for static executable
-RUN dotnet restore "src/gc.CLI/gc.CLI.csproj"
+# Restore dependencies
+RUN dotnet restore "gc.sln"
+
+# Copy source code
+COPY src/ src/
+
+# Build and publish with Native AOT
 RUN dotnet publish "src/gc.CLI/gc.CLI.csproj" -c Release -o /app/publish \
     -p:PublishAot=true \
-    -p:StaticExecutable=true
+    -p:StripSymbols=true
 
 # Runtime image (Native AOT produces self-contained executable, no runtime needed)
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0

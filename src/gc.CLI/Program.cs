@@ -78,6 +78,17 @@ public static class Program
             };
         }
 
+        if (cliArgs.Force)
+        {
+            config = config with
+            {
+                Discovery = config.Discovery with
+                {
+                    Mode = "filesystem"
+                }
+            };
+        }
+
         if (cliArgs.Depth.HasValue)
         {
             config = config with
@@ -123,6 +134,7 @@ OPTIONS:
     -e, --extension <ext>      Filter by extension
     -x, --exclude <path>       Exclude folder, path or pattern
     -o, --output <file>        Save output to file instead of clipboard
+    -f, --force                Force filesystem discovery (ignore git)
     -d, --depth <number>       Maximum directory depth to penetrate
     -D, --discovery <mode>     Discovery mode (auto, git, filesystem)
     -v, --verbose              Enable verbose logging

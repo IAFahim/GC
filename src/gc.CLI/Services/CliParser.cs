@@ -42,6 +42,7 @@ public sealed class CliParser
         var maxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes);
         var compactLevel = gc.Domain.Models.Configuration.CompactLevel.None;
         var appendMode = false;
+        var force = false;
         int? depth = configuration.Discovery.MaxDepth;
 
         var state = ParseState.None;
@@ -64,7 +65,7 @@ public sealed class CliParser
 
             if (IsFlag(arg, out var flagType))
             {
-                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref compactLevel, ref appendMode);
+                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref compactLevel, ref appendMode, ref force);
                 state = ParseState.None;
                 continue;
             }
@@ -118,6 +119,7 @@ public sealed class CliParser
             DumpConfig = dumpConfig,
             Compact = compactLevel,
             Append = appendMode,
+            Force = force,
             Depth = depth,
             Configuration = configuration
         });
@@ -138,12 +140,13 @@ public sealed class CliParser
             "--dump-config" or "--Dump-Config" => "dump-config",
             "--compact" or "--Compact" => "compact",
             "--append" or "--Append" => "append",
+            "-f" or "--force" or "--Force" => "force",
             _ => string.Empty
         };
         return !string.IsNullOrEmpty(flagType);
     }
 
-    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref gc.Domain.Models.Configuration.CompactLevel compactLevel, ref bool appendMode)
+    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref gc.Domain.Models.Configuration.CompactLevel compactLevel, ref bool appendMode, ref bool force)
     {
         switch (flagType)
         {
@@ -158,6 +161,7 @@ public sealed class CliParser
             case "dump-config": dumpConfig = true; break;
             case "compact": compactLevel = gc.Domain.Models.Configuration.CompactLevel.Mild; break;
             case "append": appendMode = true; break;
+            case "force": force = true; break;
         }
     }
 

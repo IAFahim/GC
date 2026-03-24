@@ -194,4 +194,20 @@ public class CliParserTests
         Assert.True(result.IsSuccess);
         Assert.Equal(DiscoveryMode.Git, result.Value.DiscoveryMode);
     }
+
+    [Fact]
+    public void Parse_ForceFlag_SetsForce()
+    {
+        // Arrange
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new[] { "-f" };
+
+        // Act
+        var result = parser.Parse(args, config);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value.Force);
+    }
 }

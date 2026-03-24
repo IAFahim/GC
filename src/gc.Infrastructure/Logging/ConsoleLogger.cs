@@ -15,8 +15,8 @@ public sealed class ConsoleLogger : ILogger
             "debug" => LogLevel.Debug,
             "verbose" => LogLevel.Info,
             "info" => LogLevel.Info,
-            "normal" => LogLevel.Warning,
-            _ => LogLevel.Warning
+            "normal" => LogLevel.Success,
+            _ => LogLevel.Success
         };
         _includeTimestamps = config?.IncludeTimestamps ?? false;
     }
@@ -29,6 +29,7 @@ public sealed class ConsoleLogger : ILogger
         var levelPrefix = level switch
         {
             LogLevel.Debug => "[DEBUG] ",
+            LogLevel.Success => "",
             LogLevel.Warning => "[WARNING] ",
             LogLevel.Error => "[ERROR] ",
             _ => ""

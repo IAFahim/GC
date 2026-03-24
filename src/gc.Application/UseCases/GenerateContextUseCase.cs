@@ -50,11 +50,11 @@ public sealed class GenerateContextUseCase
         var entries = filterResult.Value!.ToList();
         if (!entries.Any())
         {
-            _logger.Warning("No files match the specified filters.");
+            _logger.Success("No files match the specified filters.");
             return Result.Success();
         }
 
-        _logger.Warning("Processing...");
+        _logger.Success("Processing...");
 
         // Stream contents lazily
         var contents = entries.Select(e => new FileContent(e, null, e.Size));
@@ -83,7 +83,7 @@ public sealed class GenerateContextUseCase
             await AppendStateManager.SaveStateAsync(rootPath);
 
             string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-            _logger.Warning($"✔ {action} {outputFile}: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            _logger.Success($"✔ {action} {outputFile}: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
             return Result.Success();
         }
         else
@@ -97,7 +97,7 @@ public sealed class GenerateContextUseCase
             var clipResult = await _clipboard.CopyToClipboardAsync(ms, config.Limits, ct);
             if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
-            _logger.Warning($"✔ Copied: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            _logger.Success($"✔ Copied: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
             return Result.Success();
         }
     }

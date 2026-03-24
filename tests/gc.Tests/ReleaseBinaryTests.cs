@@ -159,12 +159,16 @@ public class ReleaseBinaryTests : IDisposable
         // Create a temp directory without git
         var noGitDir = Path.Combine(_testDir, "no_git_repo");
         Directory.CreateDirectory(noGitDir);
+        File.WriteAllText(Path.Combine(noGitDir, "test.txt"), "test content");
 
         // Force git discovery so it fails
-        var result = RunGCInDirectory(noGitDir, "--discovery git");
+        // Note: Default discovery is 'auto', which falls back to filesystem.
+        // We want to test a scenario where it's NOT a git repo but we might expect it to be.
+        // Since we removed --discovery git, we'll just check behavior in non-git dir.
+        var result = RunGCInDirectory(noGitDir, "");
 
-        Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("git", result.StandardError.ToLower());
+        Assert.Equal(0, result.ExitCode); // Should now succeed because it falls back to filesystem
+        Assert.Contains("✔ Copied", result.StandardOutput);
 
         _output.WriteLine($"✅ Correctly handles missing git repository");
     }

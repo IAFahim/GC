@@ -188,14 +188,14 @@ public class NonGitDiscoveryTests : IDisposable
     }
 
     [Fact]
-    public void NonGitDiscovery_ExplicitFileSystemMode_Works()
+    public void NonGitDiscovery_ExplicitForceMode_Works()
     {
-        _output.WriteLine("Testing explicit filesystem discovery mode...");
+        _output.WriteLine("Testing explicit force discovery mode...");
 
         File.WriteAllText(Path.Combine(_testDir, "test.cs"), "public class Test { }");
 
             var outputFile = Path.Combine(_testDir, "output.md");
-            var result = RunGC(_testDir, $"--discovery filesystem --output {outputFile}");
+            var result = RunGC(_testDir, $"--force --output {outputFile}");
 
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("✔ Exported", result.StandardOutput);
@@ -203,7 +203,7 @@ public class NonGitDiscoveryTests : IDisposable
             var content = File.ReadAllText(outputFile);
             Assert.Contains("test.cs", content);
 
-            _output.WriteLine($"✅ Explicit filesystem mode works");
+            _output.WriteLine($"✅ Explicit force mode works");
     }
 
     [Fact]

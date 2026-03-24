@@ -13,7 +13,6 @@ public sealed record CliArguments
     public bool ShowVersion { get; init; }
     public bool RunTests { get; init; }
     public bool RunRealBenchmark { get; init; }
-    public DiscoveryMode DiscoveryMode { get; init; }
     public long MaxMemoryBytes { get; init; }
     public bool Verbose { get; init; }
     public bool Debug { get; init; }

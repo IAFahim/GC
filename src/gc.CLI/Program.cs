@@ -66,18 +66,6 @@ public static class Program
         if (cliArgs.ValidateConfig) return configService.ValidateConfig(config).IsSuccess ? 0 : 1;
         if (cliArgs.DumpConfig) return configService.DumpConfig(config).IsSuccess ? 0 : 1;
 
-        // Update config with CLI args
-        if (cliArgs.DiscoveryMode != gc.CLI.Models.DiscoveryMode.Auto)
-        {
-            config = config with
-            {
-                Discovery = config.Discovery with
-                {
-                    Mode = cliArgs.DiscoveryMode.ToString().ToLowerInvariant()
-                }
-            };
-        }
-
         if (cliArgs.Force)
         {
             config = config with
@@ -136,7 +124,6 @@ OPTIONS:
     -o, --output <file>        Save output to file instead of clipboard
     -f, --force                Force filesystem discovery (ignore git)
     -d, --depth <number>       Maximum directory depth to penetrate
-    -D, --discovery <mode>     Discovery mode (auto, git, filesystem)
     -v, --verbose              Enable verbose logging
     --init-config               Initialize configuration
     --validate-config           Validate configuration

@@ -16,7 +16,6 @@ public sealed class CliParser
         Presets,
         Output,
         MaxMemory,
-        Discovery,
         Compact,
         Append,
         Depth
@@ -38,7 +37,6 @@ public sealed class CliParser
         var initConfig = false;
         var validateConfig = false;
         var dumpConfig = false;
-        var discoveryMode = ParseDiscoveryMode(configuration.Discovery.Mode);
         var maxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes);
         var compactLevel = gc.Domain.Models.Configuration.CompactLevel.None;
         var appendMode = false;
@@ -78,7 +76,7 @@ public sealed class CliParser
 
             if (state != ParseState.None)
             {
-                ProcessStateArg(arg, state, paths, extensions, excludes, presets, ref output, ref discoveryMode, ref maxMemoryBytes, ref compactLevel, ref depth);
+                ProcessStateArg(arg, state, paths, extensions, excludes, presets, ref output, ref maxMemoryBytes, ref compactLevel, ref depth);
                 if (IsSingleValueState(state))
                 {
                     state = ParseState.None;
@@ -110,7 +108,6 @@ public sealed class CliParser
             ShowVersion = showVersion,
             RunTests = runTests,
             RunRealBenchmark = runRealBenchmark,
-            DiscoveryMode = discoveryMode,
             MaxMemoryBytes = maxMemoryBytes,
             Verbose = verbose,
             Debug = debug,
@@ -175,7 +172,6 @@ public sealed class CliParser
             "--preset" or "--presets" or "--Preset" or "--Presets" => ParseState.Presets,
             "-o" or "--output" or "--Output" => ParseState.Output,
             "--max-memory" or "--Max-Memory" => ParseState.MaxMemory,
-            "-D" or "--discovery" or "--Discovery" => ParseState.Discovery,
             "-d" or "--depth" or "--Depth" => ParseState.Depth,
             "--compact-level" or "--Compact-Level" => ParseState.Compact,
             _ => ParseState.None
@@ -185,10 +181,10 @@ public sealed class CliParser
 
     private static bool IsSingleValueState(ParseState state)
     {
-        return state is ParseState.Output or ParseState.MaxMemory or ParseState.Discovery or ParseState.Depth;
+        return state is ParseState.Output or ParseState.MaxMemory or ParseState.Depth;
     }
 
-    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref DiscoveryMode discoveryMode, ref long maxMemoryBytes, ref gc.Domain.Models.Configuration.CompactLevel compactLevel, ref int? depth)
+    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref long maxMemoryBytes, ref gc.Domain.Models.Configuration.CompactLevel compactLevel, ref int? depth)
     {
         switch (state)
         {
@@ -198,7 +194,6 @@ public sealed class CliParser
             case ParseState.Presets: presets.Add(arg.ToLowerInvariant()); break;
             case ParseState.Output: output = arg; break;
             case ParseState.MaxMemory: maxMemoryBytes = MemorySizeParser.Parse(arg); break;
-            case ParseState.Discovery: discoveryMode = ParseDiscoveryMode(arg); break;
             case ParseState.Compact: compactLevel = ParseCompactLevel(arg); break;
             case ParseState.Depth: 
                 if (int.TryParse(arg, out var d)) depth = d;
@@ -232,18 +227,6 @@ public sealed class CliParser
 
         // Unknown flag (starts with - but wasn't recognized)
         return false;
-    }
-
-
-    private static DiscoveryMode ParseDiscoveryMode(string mode)
-    {
-        return (mode?.ToLowerInvariant()) switch
-        {
-            "auto" => DiscoveryMode.Auto,
-            "git" => DiscoveryMode.Git,
-            "filesystem" => DiscoveryMode.FileSystem,
-            _ => DiscoveryMode.Auto
-        };
     }
 
     private static gc.Domain.Models.Configuration.CompactLevel ParseCompactLevel(string level)

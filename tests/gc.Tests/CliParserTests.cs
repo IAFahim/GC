@@ -180,22 +180,6 @@ public class CliParserTests
     }
 
     [Fact]
-    public void Parse_DiscoveryFlag_SetsDiscoveryMode()
-    {
-        // Arrange
-        var parser = new CliParser();
-        var config = BuiltInPresets.GetDefaultConfiguration();
-        var args = new[] { "-D", "git" };
-
-        // Act
-        var result = parser.Parse(args, config);
-
-        // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Equal(DiscoveryMode.Git, result.Value.DiscoveryMode);
-    }
-
-    [Fact]
     public void Parse_ForceFlag_SetsForce()
     {
         // Arrange

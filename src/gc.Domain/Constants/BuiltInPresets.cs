@@ -8,7 +8,7 @@ public static class BuiltInPresets
         ["html", "htm", "css", "scss", "sass", "less", "js", "jsx", "ts", "tsx", "json", "svg", "vue", "svelte"];
 
     public static readonly string[] PresetBackend =
-        ["py", "rb", "php", "pl", "go", "rs", "java", "cs", "cpp", "h", "c", "hpp", "swift", "kt", "ex", "exs", "sh"];
+        ["py", "rb", "php", "pl", "go", "rs", "java", "cs", "cpp", "cc", "cxx", "h", "c", "hpp", "hxx", "swift", "kt", "ex", "exs", "sh"];
 
     public static readonly string[] PresetDotnet = ["cs", "razor", "csproj", "json", "http", "xaml"];
 

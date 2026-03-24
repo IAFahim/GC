@@ -52,7 +52,28 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                     contentBytes = fileInfo.Length;
                 }
 
-                var entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + newlineBytes + closingFenceBytes + newlineBytes;
+                // Calculate total bytes
+                long entryTotalBytes;
+                if (content.Content != null)
+                {
+                    // For in-memory content, add conditional newline if content doesn't end with \n
+                    bool needsTrailingNewline = !content.Content.EndsWith('\n');
+                    if (needsTrailingNewline)
+                    {
+                        // header\n + fence+lang\n + content + \n + fence\n + \n
+                        entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + newlineBytes + closingFenceBytes + newlineBytes;
+                    }
+                    else
+                    {
+                        // header\n + fence+lang\n + content (already has \n) + fence\n + \n
+                        entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + closingFenceBytes + newlineBytes;
+                    }
+                }
+                else
+                {
+                    // header\n + fence+lang\n + content + \n + fence\n + \n
+                    entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + newlineBytes + closingFenceBytes + newlineBytes;
+                }
                 
                 if (totalBytes + entryTotalBytes > maxMemoryBytes)
                 {
@@ -65,6 +86,11 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                 if (content.Content != null)
                 {
                     await writer.WriteAsync(content.Content);
+                    // Ensure newline after content before closing fence
+                    if (!content.Content.EndsWith('\n'))
+                    {
+                        await writer.WriteLineAsync();
+                    }
                 }
                 else
                 {
@@ -72,7 +98,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                     totalBytes += await StreamFileToOutputAsync(content.Entry.Path, writer.BaseStream, maxFileSize, ct);
                 }
 
-                // Ensure trailing newline before fence to prevent corruption
+                // Ensure trailing newline before fence to prevent corruption (for streaming content)
                 if (content.Content == null)
                 {
                     await writer.WriteLineAsync();
@@ -101,7 +127,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
             // Add project structure bytes to total
             var projectStructureBytes = Utf8NoBom.GetByteCount(config.Markdown.ProjectStructureHeader) + Utf8NoBom.GetByteCount(Environment.NewLine);
-            var structureFenceBytes = Utf8NoBom.GetByteCount($"{config.Markdown.Fence}text") + Utf8NoBom.GetByteCount(Environment.NewLine);
+            projectStructureBytes += Utf8NoBom.GetByteCount($"{config.Markdown.Fence}text") + Utf8NoBom.GetByteCount(Environment.NewLine);
             foreach (var path in fileList)
             {
                 projectStructureBytes += Utf8NoBom.GetByteCount(path) + Utf8NoBom.GetByteCount(Environment.NewLine);
@@ -208,6 +234,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         }
 
         await writer.WriteLineAsync(config.Markdown.Fence);
+        await writer.WriteLineAsync(); // Final blank line
     }
 
     /// <summary>

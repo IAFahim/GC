@@ -162,4 +162,36 @@ public class CliParserTests
         Assert.True(result.IsSuccess);
         Assert.Equal(CompactLevel.Mild, result.Value.Compact); // CLI flag wins
     }
+
+    [Fact]
+    public void Parse_DepthFlag_SetsDepth()
+    {
+        // Arrange
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new[] { "-d", "5" };
+
+        // Act
+        var result = parser.Parse(args, config);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(5, result.Value.Depth);
+    }
+
+    [Fact]
+    public void Parse_DiscoveryFlag_SetsDiscoveryMode()
+    {
+        // Arrange
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new[] { "-D", "git" };
+
+        // Act
+        var result = parser.Parse(args, config);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(DiscoveryMode.Git, result.Value.DiscoveryMode);
+    }
 }

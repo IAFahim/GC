@@ -78,6 +78,17 @@ public static class Program
             };
         }
 
+        if (cliArgs.Depth.HasValue)
+        {
+            config = config with
+            {
+                Discovery = config.Discovery with
+                {
+                    MaxDepth = cliArgs.Depth
+                }
+            };
+        }
+
         // Override compact level if specified via CLI
         if (cliArgs.Compact != gc.Domain.Models.Configuration.CompactLevel.None)
         {
@@ -112,6 +123,8 @@ OPTIONS:
     -e, --extension <ext>      Filter by extension
     -x, --exclude <path>       Exclude folder, path or pattern
     -o, --output <file>        Save output to file instead of clipboard
+    -d, --depth <number>       Maximum directory depth to penetrate
+    -D, --discovery <mode>     Discovery mode (auto, git, filesystem)
     -v, --verbose              Enable verbose logging
     --init-config               Initialize configuration
     --validate-config           Validate configuration

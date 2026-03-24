@@ -18,7 +18,8 @@ public sealed class CliParser
         MaxMemory,
         Discovery,
         Compact,
-        Append
+        Append,
+        Depth
     }
 
     public Result<CliArguments> Parse(string[] args, GcConfiguration configuration)
@@ -41,6 +42,7 @@ public sealed class CliParser
         var maxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes);
         var compactLevel = gc.Domain.Models.Configuration.CompactLevel.None;
         var appendMode = false;
+        int? depth = configuration.Discovery.MaxDepth;
 
         var state = ParseState.None;
         var onlyPaths = false;
@@ -75,7 +77,7 @@ public sealed class CliParser
 
             if (state != ParseState.None)
             {
-                ProcessStateArg(arg, state, paths, extensions, excludes, presets, ref output, ref discoveryMode, ref maxMemoryBytes, ref compactLevel);
+                ProcessStateArg(arg, state, paths, extensions, excludes, presets, ref output, ref discoveryMode, ref maxMemoryBytes, ref compactLevel, ref depth);
                 if (IsSingleValueState(state))
                 {
                     state = ParseState.None;
@@ -116,25 +118,26 @@ public sealed class CliParser
             DumpConfig = dumpConfig,
             Compact = compactLevel,
             Append = appendMode,
+            Depth = depth,
             Configuration = configuration
         });
     }
 
     private static bool IsFlag(string arg, out string flagType)
     {
-        flagType = arg.ToLowerInvariant() switch
+        flagType = arg switch
         {
-            "-h" or "--help" => "help",
-            "--version" => "version",
-            "--test" => "test",
-            "--benchmark" => "benchmark",
-            "-v" or "--verbose" => "verbose",
-            "--debug" => "debug",
-            "--init-config" => "init-config",
-            "--validate-config" => "validate-config",
-            "--dump-config" => "dump-config",
-            "--compact" => "compact",
-            "--append" => "append",
+            "-h" or "--help" or "--Help" => "help",
+            "--version" or "--Version" => "version",
+            "--test" or "--Test" => "test",
+            "--benchmark" or "--Benchmark" => "benchmark",
+            "-v" or "--verbose" or "--Verbose" => "verbose",
+            "--debug" or "--Debug" => "debug",
+            "--init-config" or "--Init-Config" => "init-config",
+            "--validate-config" or "--Validate-Config" => "validate-config",
+            "--dump-config" or "--Dump-Config" => "dump-config",
+            "--compact" or "--Compact" => "compact",
+            "--append" or "--Append" => "append",
             _ => string.Empty
         };
         return !string.IsNullOrEmpty(flagType);
@@ -160,16 +163,17 @@ public sealed class CliParser
 
     private static bool TryGetNewState(string arg, out ParseState state)
     {
-        state = arg.ToLowerInvariant() switch
+        state = arg switch
         {
-            "-p" or "--paths" => ParseState.Paths,
-            "-e" or "--extension" or "--extensions" => ParseState.Extensions,
-            "-x" or "--exclude" or "--excludes" => ParseState.Excludes,
-            "--preset" or "--presets" => ParseState.Presets,
-            "-o" or "--output" => ParseState.Output,
-            "--max-memory" => ParseState.MaxMemory,
-            "-d" or "--discovery" => ParseState.Discovery,
-            "--compact-level" => ParseState.Compact,
+            "-p" or "--paths" or "--Paths" => ParseState.Paths,
+            "-e" or "--extension" or "--extensions" or "--Extension" or "--Extensions" => ParseState.Extensions,
+            "-x" or "--exclude" or "--excludes" or "--Exclude" or "--Excludes" => ParseState.Excludes,
+            "--preset" or "--presets" or "--Preset" or "--Presets" => ParseState.Presets,
+            "-o" or "--output" or "--Output" => ParseState.Output,
+            "--max-memory" or "--Max-Memory" => ParseState.MaxMemory,
+            "-D" or "--discovery" or "--Discovery" => ParseState.Discovery,
+            "-d" or "--depth" or "--Depth" => ParseState.Depth,
+            "--compact-level" or "--Compact-Level" => ParseState.Compact,
             _ => ParseState.None
         };
         return state != ParseState.None;
@@ -177,10 +181,10 @@ public sealed class CliParser
 
     private static bool IsSingleValueState(ParseState state)
     {
-        return state is ParseState.Output or ParseState.MaxMemory or ParseState.Discovery;
+        return state is ParseState.Output or ParseState.MaxMemory or ParseState.Discovery or ParseState.Depth;
     }
 
-    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref DiscoveryMode discoveryMode, ref long maxMemoryBytes, ref gc.Domain.Models.Configuration.CompactLevel compactLevel)
+    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref DiscoveryMode discoveryMode, ref long maxMemoryBytes, ref gc.Domain.Models.Configuration.CompactLevel compactLevel, ref int? depth)
     {
         switch (state)
         {
@@ -192,6 +196,9 @@ public sealed class CliParser
             case ParseState.MaxMemory: maxMemoryBytes = MemorySizeParser.Parse(arg); break;
             case ParseState.Discovery: discoveryMode = ParseDiscoveryMode(arg); break;
             case ParseState.Compact: compactLevel = ParseCompactLevel(arg); break;
+            case ParseState.Depth: 
+                if (int.TryParse(arg, out var d)) depth = d;
+                break;
         }
     }
 

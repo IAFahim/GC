@@ -29,12 +29,12 @@ public sealed class FileDiscovery : IFileDiscovery
                     return Result<IEnumerable<string>>.Failure("Not a git repository. git discovery mode requires a git repository.");
                 }
 
-                return await DiscoverWithGitAsync(rootPath, ct);
+                return await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
             }
 
             if (mode == "auto" && await IsGitRepositoryAsync(rootPath, ct))
             {
-                var gitFiles = await DiscoverWithGitAsync(rootPath, ct);
+                var gitFiles = await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
                 if (gitFiles.IsSuccess)
                 {
                     return gitFiles;
@@ -88,7 +88,7 @@ public sealed class FileDiscovery : IFileDiscovery
         }
     }
 
-    private async Task<Result<IEnumerable<string>>> DiscoverWithGitAsync(string rootPath, CancellationToken ct)
+    private async Task<Result<IEnumerable<string>>> DiscoverWithGitAsync(string rootPath, DiscoveryConfiguration config, CancellationToken ct)
     {
         try
         {
@@ -124,7 +124,18 @@ public sealed class FileDiscovery : IFileDiscovery
                         var fileName = Encoding.UTF8.GetString(buffer, start, i - start);
                         if (!string.IsNullOrEmpty(fileName))
                         {
-                            files.Add(fileName);
+                            if (config.MaxDepth.HasValue)
+                            {
+                                var depth = fileName.Count(c => c == '/' || c == '\\');
+                                if (depth <= config.MaxDepth.Value)
+                                {
+                                    files.Add(fileName);
+                                }
+                            }
+                            else
+                            {
+                                files.Add(fileName);
+                            }
                         }
                         start = i + 1;
                     }
@@ -168,13 +179,13 @@ public sealed class FileDiscovery : IFileDiscovery
         };
 
         var visitedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var queue = new Queue<string>();
-        queue.Enqueue(rootPath);
+        var queue = new Queue<(string Path, int Depth)>();
+        queue.Enqueue((rootPath, 0));
 
         while (queue.Count > 0)
         {
             ct.ThrowIfCancellationRequested();
-            var currentDir = queue.Dequeue();
+            var (currentDir, depth) = queue.Dequeue();
             
             var realPath = Path.GetFullPath(currentDir);
             if (config.FollowSymlinks)
@@ -200,12 +211,15 @@ public sealed class FileDiscovery : IFileDiscovery
                     files.Add(Path.GetRelativePath(rootPath, file).Replace('\\', '/'));
                 }
 
-                foreach (var dir in Directory.EnumerateDirectories(currentDir, "*", SearchOption.TopDirectoryOnly))
+                if (!config.MaxDepth.HasValue || depth < config.MaxDepth.Value)
                 {
-                    var dirName = Path.GetFileName(dir);
-                    if (!ignoredDirs.Contains(dirName))
+                    foreach (var dir in Directory.EnumerateDirectories(currentDir, "*", SearchOption.TopDirectoryOnly))
                     {
-                        queue.Enqueue(dir);
+                        var dirName = Path.GetFileName(dir);
+                        if (!ignoredDirs.Contains(dirName))
+                        {
+                            queue.Enqueue((dir, depth + 1));
+                        }
                     }
                 }
             }

@@ -22,5 +22,6 @@ public sealed record CliArguments
     public bool DumpConfig { get; init; }
     public CompactLevel Compact { get; init; }
     public bool Append { get; init; }
+    public int? Depth { get; init; }
     public GcConfiguration? Configuration { get; init; }
 }

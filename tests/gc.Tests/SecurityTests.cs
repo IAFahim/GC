@@ -59,7 +59,7 @@ public class SecurityTests : IDisposable
             RunGitCommand("add", fileName);
             RunGitCommand("commit", "-m", "Add test file");
 
-            var result = RunGC("");
+            var result = RunGC("--output out.md");
 
             // Should either handle gracefully or skip the file
             Assert.True(result.ExitCode == 0 || result.ExitCode == 1);
@@ -179,10 +179,10 @@ public class Test
         var largeContent = new string('A', 1024 * 1024); // 1MB
         AddTestFile("large.cs", largeContent);
 
-        var result = RunGC("--max-memory 100KB");
+        var result = RunGC("--max-memory 100KB --output out.md");
 
         Assert.NotEqual(0, result.ExitCode);
-        Assert.Contains("memory", result.StandardError, StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.StandardError.Contains("output limit", StringComparison.OrdinalIgnoreCase) || result.StandardOutput.Contains("output limit", StringComparison.OrdinalIgnoreCase), "Output should contain limit error");
 
         _output.WriteLine($"✅ Memory limits are properly enforced");
     }
@@ -193,7 +193,7 @@ public class Test
         _output.WriteLine("Testing input validation for dangling arguments...");
         if (!_gitAvailable) return;
 
-        var result = RunGC("--extension");
+        var result = RunGC("--output");
 
         // Should either handle gracefully or show error
         Assert.True(result.ExitCode != 0 || result.StandardOutput.Contains("help") || result.StandardError.Length > 0);
@@ -209,7 +209,7 @@ public class Test
 
         AddTestFile("test.cs", "public class Test { }");
 
-        var result = RunGC("--max-memory invalid");
+        var result = RunGC("--max-memory invalid --output out.md");
 
         // Should use default or show error, but not crash
         Assert.True(result.ExitCode == 0 || result.ExitCode != 0);
@@ -249,7 +249,8 @@ public class Test
             Assert.Contains("✔ Exported", result.StandardOutput);
             
             var content = File.ReadAllText(outputFile);
-            Assert.DoesNotContain("unreadable.cs", content);
+            Assert.Contains("Error reading file", content);
+            Assert.Contains("unreadable.cs", content);
 
             _output.WriteLine($"✅ Permission errors are handled gracefully");
         }
@@ -342,12 +343,7 @@ public class Test
                         }
                         _gitAvailable = (p.ExitCode == 0);
                     }
-                    catch (InvalidOperationException)
-            {
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-            }
+                    catch
                     {
                         _gitAvailable = false;
                     }
@@ -431,12 +427,7 @@ public class Test
                     process.WaitForExit();
                 }
             }
-            catch (InvalidOperationException)
-            {
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-            }
+            catch
             {
                 // Process already terminated or invalid state
             }
@@ -464,12 +455,7 @@ public class Test
                     process.WaitForExit();
                 }
             }
-            catch (InvalidOperationException)
-            {
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-            }
+            catch
             {
                 // Process already terminated or invalid state
             }
@@ -509,12 +495,7 @@ public class Test
                                 p.WaitForExit();
                             }
                         }
-                        catch (InvalidOperationException)
-            {
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-            }
+                        catch
                         {
                             // Process already terminated or invalid state
                         }

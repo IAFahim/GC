@@ -38,93 +38,122 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             {
                 ct.ThrowIfCancellationRequested();
 
-                var fence = await GetSafeFenceAsync(content, ct);
-                var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
-
-                var headerBytes = Utf8NoBom.GetByteCount(header) + Utf8NoBom.GetByteCount(Environment.NewLine);
-                var fenceLine = $"{fence}{content.Entry.Language}";
-                var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + Utf8NoBom.GetByteCount(Environment.NewLine);
-                var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + Utf8NoBom.GetByteCount(Environment.NewLine);
-                var newlineBytes = Utf8NoBom.GetByteCount(Environment.NewLine);
-
-                long contentBytes = 0;
                 if (content.Content != null)
                 {
-                    contentBytes = Utf8NoBom.GetByteCount(content.Content);
-                }
-                else
-                {
-                    var fileInfo = new FileInfo(content.Entry.Path);
-                    contentBytes = fileInfo.Length;
-                }
+                    // In-memory content processing
+                    var fence = "```";
+                    if (content.Content.Contains("`````")) fence = "``````````";
+                    else if (content.Content.Contains("````")) fence = "``````";
 
-                // Calculate total bytes
-                long entryTotalBytes;
-                if (content.Content != null)
-                {
-                    // For in-memory content, add conditional newline if content doesn't end with \n
+                    var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
+                    var headerBytes = Utf8NoBom.GetByteCount(header) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                    var fenceLine = $"{fence}{content.Entry.Language}";
+                    var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                    var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                    var newlineBytes = Utf8NoBom.GetByteCount(Environment.NewLine);
+                    var contentBytes = Utf8NoBom.GetByteCount(content.Content);
+
                     bool needsTrailingNewline = !content.Content.EndsWith('\n');
-                    if (needsTrailingNewline)
-                    {
-                        // header\n + fence+lang\n + content + \n + fence\n + \n
-                        entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + newlineBytes + closingFenceBytes + newlineBytes;
-                    }
-                    else
-                    {
-                        // header\n + fence+lang\n + content (already has \n) + fence\n + \n
-                        entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + closingFenceBytes + newlineBytes;
-                    }
-                }
-                else
-                {
-                    // header\n + fence+lang\n + content + \n + fence\n + \n
-                    entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + newlineBytes + closingFenceBytes + newlineBytes;
-                }
-                
-                if (totalBytes + entryTotalBytes > maxMemoryBytes)
-                {
-                    return Result<long>.Failure($"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes). Note: This limit applies to total output size, not RAM usage during streaming.");
-                }
+                    long entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + closingFenceBytes + newlineBytes;
+                    if (needsTrailingNewline) entryTotalBytes += newlineBytes;
 
-                await writer.WriteLineAsync(header);
-                await writer.WriteLineAsync($"{fence}{content.Entry.Language}");
+                    if (totalBytes + entryTotalBytes > maxMemoryBytes)
+                    {
+                        return Result<long>.Failure($"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes). Note: This limit applies to total output size, not RAM usage during streaming.");
+                    }
 
-                if (content.Content != null)
-                {
+                    await writer.WriteLineAsync(header);
+                    await writer.WriteLineAsync(fenceLine);
                     await writer.WriteAsync(content.Content);
-                    // Ensure newline after content before closing fence
-                    if (!content.Content.EndsWith('\n'))
-                    {
-                        await writer.WriteLineAsync();
-                    }
-                }
-                else
-                {
-                    await writer.FlushAsync();
-                    totalBytes += await StreamFileToOutputAsync(content.Entry.Path, writer.BaseStream, maxFileSize, ct);
-                }
-
-                // Ensure trailing newline before fence to prevent corruption (for streaming content)
-                if (content.Content == null)
-                {
+                    if (needsTrailingNewline) await writer.WriteLineAsync();
+                    await writer.WriteLineAsync(fence);
                     await writer.WriteLineAsync();
-                }
-                await writer.WriteLineAsync(fence);
-                await writer.WriteLineAsync();
 
-                fileList.Add(content.Entry.Path);
-
-                // Add structural bytes (header, fences, newlines) but not content bytes
-                // Content bytes are either added during streaming (line 72) or need to be added here (line 87)
-                if (content.Content == null)
-                {
-                    // Streaming case: content bytes already added in StreamFileToOutputAsync
-                    totalBytes += entryTotalBytes - contentBytes;
+                    fileList.Add(content.Entry.Path);
+                    totalBytes += entryTotalBytes;
                 }
                 else
                 {
-                    // Non-streaming case: add both content bytes and structural bytes
-                    totalBytes += entryTotalBytes;
+                    // Streaming processing - open file ONCE
+                    var fileInfo = new FileInfo(content.Entry.Path);
+                    if (fileInfo.Length > maxFileSize)
+                    {
+                        var errorMsg = $"[File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes)]";
+                        await writer.WriteLineAsync(errorMsg);
+                        totalBytes += Utf8NoBom.GetByteCount(errorMsg) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                        continue;
+                    }
+
+                    try
+                    {
+                        using var fs = new FileStream(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        
+                        var buffer = new byte[8192];
+                        var bytesRead = await fs.ReadAsync(buffer.AsMemory(0, buffer.Length), ct);
+                        
+                        // Check binary
+                        bool isBinary = false;
+                        int checkLen = Math.Min(bytesRead, 4096);
+                        for (int i = 0; i < checkLen; i++)
+                        {
+                            if (buffer[i] == 0) { isBinary = true; break; }
+                        }
+
+                        if (isBinary)
+                        {
+                            var errorMsg = $"[Skipping binary file: {content.Entry.Path}]";
+                            await writer.WriteLineAsync(errorMsg);
+                            totalBytes += Utf8NoBom.GetByteCount(errorMsg) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                            continue;
+                        }
+
+                        // Check safe fence
+                        var sample = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                        var fence = "```";
+                        if (sample.Contains("`````")) fence = "``````````";
+                        else if (sample.Contains("````")) fence = "``````";
+
+                        // Calculate bytes
+                        var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
+                        var headerBytes = Utf8NoBom.GetByteCount(header) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                        var fenceLine = $"{fence}{content.Entry.Language}";
+                        var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                        var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                        var newlineBytes = Utf8NoBom.GetByteCount(Environment.NewLine);
+                        var contentBytes = fileInfo.Length;
+
+                        long entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + newlineBytes + closingFenceBytes + newlineBytes;
+
+                        if (totalBytes + entryTotalBytes > maxMemoryBytes)
+                        {
+                            return Result<long>.Failure($"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes). Note: This limit applies to total output size, not RAM usage during streaming.");
+                        }
+
+                        await writer.WriteLineAsync(header);
+                        await writer.WriteLineAsync(fenceLine);
+                        await writer.FlushAsync();
+
+                        if (bytesRead > 0)
+                        {
+                            await writer.BaseStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
+                        }
+                        
+                        await fs.CopyToAsync(writer.BaseStream, ct);
+
+                        await writer.WriteLineAsync();
+                        await writer.WriteLineAsync(fence);
+                        await writer.WriteLineAsync();
+
+                        fileList.Add(content.Entry.Path);
+                        totalBytes += entryTotalBytes;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error($"Failed to stream file {content.Entry.Path}", ex);
+                        var errorMsg = $"[Error reading file: {ex.Message}]";
+                        await writer.WriteLineAsync(errorMsg);
+                        totalBytes += Utf8NoBom.GetByteCount(errorMsg) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                    }
                 }
             }
 
@@ -156,89 +185,6 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         }
     }
 
-    public async Task<Result<string>> GenerateMarkdownAsync(IEnumerable<FileContent> contents, GcConfiguration config, CancellationToken ct = default)
-    {
-        using var ms = new MemoryStream();
-        var result = await GenerateMarkdownStreamingAsync(contents, ms, config, ct);
-        if (!result.IsSuccess) return Result<string>.Failure(result.Error!);
-
-        ms.Position = 0;
-        using var reader = new StreamReader(ms, Utf8NoBom);
-        var markdown = await reader.ReadToEndAsync(ct);
-
-        // Apply compact mode if enabled
-        if (config.Compact != CompactLevel.None)
-        {
-            markdown = CompactMarkdown(markdown, config.Compact);
-        }
-
-        return Result<string>.Success(markdown);
-    }
-
-    private async Task<string> GetSafeFenceAsync(FileContent content, CancellationToken ct)
-    {
-        if (content.Content != null)
-        {
-            if (content.Content.Contains("`````")) return "``````````";
-            if (content.Content.Contains("````")) return "````````";
-            if (content.Content.Contains("```")) return "``````";
-            return "```";
-        }
-
-        // Streaming mode: check first few KB
-        try
-        {
-            using var fs = new FileStream(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            var buffer = new byte[8192];
-            var bytesRead = await fs.ReadAsync(buffer.AsMemory(0, buffer.Length), ct);
-            var sample = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-
-            if (sample.Contains("`````")) return "``````````";
-            if (sample.Contains("````")) return "````````";
-            if (sample.Contains("```")) return "``````";
-        }
-        catch { }
-
-        return "```";
-    }
-
-    private async Task<long> StreamFileToOutputAsync(string path, Stream output, long maxFileSize, CancellationToken ct)
-    {
-        try
-        {
-            // Check if file is binary first
-            var isBinary = await _reader.IsBinaryFileAsync(path, ct);
-            if (isBinary)
-            {
-                var errorMsg = $"[Skipping binary file: {path}]";
-                var errorBytes = Utf8NoBom.GetBytes(errorMsg);
-                await output.WriteAsync(errorBytes.AsMemory(0, errorBytes.Length), ct);
-                return errorBytes.Length;
-            }
-
-            var fileInfo = new FileInfo(path);
-            if (fileInfo.Length > maxFileSize)
-            {
-                var errorMsg = $"[File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes)]";
-                var errorBytes = Utf8NoBom.GetBytes(errorMsg);
-                await output.WriteAsync(errorBytes.AsMemory(0, errorBytes.Length), ct);
-                return errorBytes.Length;
-            }
-
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            await fs.CopyToAsync(output, ct);
-            return fs.Length;
-        }
-        catch (Exception ex)
-        {
-            _logger.Error($"Failed to stream file {path}", ex);
-            var errorMsg = $"[Error reading file: {ex.Message}]";
-            var errorBytes = Utf8NoBom.GetBytes(errorMsg);
-            await output.WriteAsync(errorBytes.AsMemory(0, errorBytes.Length), ct);
-            return errorBytes.Length;
-        }
-    }
-
     private async Task WriteProjectStructureAsync(StreamWriter writer, IEnumerable<string> filePaths, GcConfiguration config)
     {
         await writer.WriteLineAsync(config.Markdown.ProjectStructureHeader);
@@ -251,76 +197,5 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
         await writer.WriteLineAsync(config.Markdown.Fence);
         await writer.WriteLineAsync(); // Final blank line
-    }
-
-    /// <summary>
-    /// Applies compression strategies based on CompactLevel to reduce token count.
-    /// </summary>
-    /// <param name="markdown">The markdown content to compress</param>
-    /// <param name="level">Compression level (None, Mild, Aggressive)</param>
-    /// <returns>Compressed markdown content</returns>
-    public static string CompactMarkdown(string markdown, CompactLevel level)
-    {
-        if (string.IsNullOrEmpty(markdown) || level == CompactLevel.None)
-            return markdown;
-
-        return level switch
-        {
-            CompactLevel.Mild => CompactMild(markdown),
-            CompactLevel.Aggressive => CompactAggressive(markdown),
-            _ => markdown
-        };
-    }
-
-    /// <summary>
-    /// Mild compression: removes empty lines but preserves code structure.
-    /// Does NOT collapse whitespace inside lines to avoid destroying string literals and indentation.
-    /// </summary>
-    private static string CompactMild(string markdown)
-    {
-        if (string.IsNullOrEmpty(markdown))
-            return markdown;
-
-        // Remove empty lines only
-        var lines = markdown.Split('\n');
-        var nonEmptyLines = lines.Where(line => !string.IsNullOrWhiteSpace(line)).ToList();
-
-        return string.Join('\n', nonEmptyLines);
-    }
-
-    /// <summary>
-    /// Aggressive compression: removes empty lines, collapses whitespace, truncates long comments, removes metadata.
-    /// </summary>
-    private static string CompactAggressive(string markdown)
-    {
-        if (string.IsNullOrEmpty(markdown))
-            return markdown;
-
-        // Apply mild compression first
-        var compressed = CompactMild(markdown);
-
-        // Truncate long comments (lines starting with //)
-        var lines = compressed.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
-        {
-            var line = lines[i];
-            var trimmed = line.Trim();
-
-            // Truncate long comments (>80 chars) but keep code structure
-            if (trimmed.StartsWith("//") && trimmed.Length > 80)
-            {
-                var indentation = line.Length - line.TrimStart().Length;
-                lines[i] = new string(' ', indentation) + trimmed.Substring(0, 77) + "...";
-            }
-        }
-
-        // Remove code fence metadata (keep only the actual content)
-        var result = string.Join('\n', lines);
-
-        // Remove common markdown metadata patterns
-        result = System.Text.RegularExpressions.Regex.Replace(result, @"<!--.*?-->", "", System.Text.RegularExpressions.RegexOptions.Singleline); // HTML comments (multiline)
-        result = System.Text.RegularExpressions.Regex.Replace(result, @"\[.*?\]:\s*$", ""); // Reference-style links
-
-        return result;
     }
 }

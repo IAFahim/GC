@@ -15,6 +15,7 @@ public static class MemorySizeParser
         long multiplier = 1;
         bool hasValidUnit = false;
         bool isKB = false;
+        bool isB = false;
 
         if (size.EndsWith("KB", StringComparison.Ordinal))
         {
@@ -39,6 +40,7 @@ public static class MemorySizeParser
         {
             size = size[..^1];
             hasValidUnit = true;
+            isB = true;
         }
 
         // If no valid unit suffix was found, return default
@@ -50,7 +52,7 @@ public static class MemorySizeParser
             // Check for unreasonably large numeric inputs before even multiplying
             // Different thresholds for different units: KB can go higher (1M KB = 1GB is ok)
             // but MB/GB with huge numbers suggest errors (1M MB = 976GB is too much)
-            double threshold = isKB ? 100000000 : 100000; // 100M for KB, 100K for MB/GB/B
+            double threshold = isB ? 100000000000 : (isKB ? 100000000 : 100000); 
             if (value > threshold)
                 return DefaultMemoryBytes;
             
@@ -66,7 +68,13 @@ public static class MemorySizeParser
             if (result > long.MaxValue || double.IsInfinity(result) || result < 0)
                 return DefaultMemoryBytes;
 
-            return (long)result;
+            long finalResult = (long)result;
+            // If the user provided a tiny positive number that truncated to 0, return default
+            // But if the user literally provided 0, return 0.
+            if (finalResult == 0 && value > 0)
+                return DefaultMemoryBytes;
+
+            return finalResult;
         }
 
         return DefaultMemoryBytes;

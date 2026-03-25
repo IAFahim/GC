@@ -88,10 +88,16 @@ public static class Program
             };
         }
 
-        // Override compact level if specified via CLI
-        if (cliArgs.Compact != gc.Domain.Models.Configuration.CompactLevel.None)
+        // Apply CLI max memory override to config so domain services see it
+        if (cliArgs.MaxMemoryBytes > 0)
         {
-            config = config with { Compact = cliArgs.Compact };
+            config = config with
+            {
+                Limits = config.Limits with
+                {
+                    MaxMemoryBytes = cliArgs.MaxMemoryBytes.ToString() + "B"
+                }
+            };
         }
 
         var result = await useCase.ExecuteAsync(

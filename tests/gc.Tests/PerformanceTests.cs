@@ -214,7 +214,7 @@ public class PerformanceTests : IDisposable
         }
 
         // Test with debug to see discovery time
-        var result = RunGC("--debug");
+        var result = RunGC("--debug --output out.md");
 
         Assert.Equal(0, result.ExitCode);
 
@@ -338,9 +338,6 @@ public class PerformanceTests : IDisposable
             }
             catch (System.ComponentModel.Win32Exception)
             {
-            }
-            {
-                // Process already terminated or invalid state
             }
         }
     }

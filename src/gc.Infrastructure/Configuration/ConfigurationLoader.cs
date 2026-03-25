@@ -232,7 +232,10 @@ public sealed class ConfigurationLoader
             if (result.TryGetValue(kvp.Key, out var existing))
             {
                 var mergedExtensions = new HashSet<string>(existing.Extensions, StringComparer.OrdinalIgnoreCase);
-                foreach (var ext in kvp.Value.Extensions) mergedExtensions.Add(ext);
+                if (kvp.Value.Extensions != null)
+                {
+                    foreach (var ext in kvp.Value.Extensions) mergedExtensions.Add(ext);
+                }
                 
                 result[kvp.Key] = existing with
                 {

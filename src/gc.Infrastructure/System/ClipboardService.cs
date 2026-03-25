@@ -107,8 +107,8 @@ public sealed class ClipboardService : IClipboardService
 
     private async Task<bool> CopyToWindowsAsync(Stream stream, CancellationToken ct)
     {
-        // Try pwsh first, then powershell
-        var success = await RunClipboardProcessAsync("pwsh", "-Command \"$input | Out-String | Set-Clipboard\"", stream, ct);
+        // Try clip.exe natively first (much faster and avoids PowerShell truncation)
+        var success = await RunClipboardProcessAsync("clip.exe", "", stream, ct);
         if (!success && stream.CanSeek)
         {
             stream.Position = 0; // Reset stream for fallback

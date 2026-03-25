@@ -2,28 +2,21 @@ services:
   gc:
     build:
       context: .
-      dockerfile: gc/Dockerfile
+      dockerfile: Dockerfile
     image: gc
     volumes:
       - .:/workspace
     working_dir: /workspace
-    command: ["dotnet", "run", "--project", "src/gc.CLI/gc.CLI.csproj", "--", "--help"]
 
   gc-test:
-    build:
-      context: .
-      dockerfile: gc/Dockerfile
-    image: gc
+    image: mcr.microsoft.com/dotnet/sdk:10.0
     volumes:
       - .:/workspace
     working_dir: /workspace
     command: ["dotnet", "test", "tests/gc.Tests/gc.Tests.csproj"]
 
   gc-bash:
-    build:
-      context: .
-      dockerfile: gc/Dockerfile
-    image: gc
+    image: mcr.microsoft.com/dotnet/sdk:10.0
     volumes:
       - .:/workspace
     working_dir: /workspace

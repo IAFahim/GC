@@ -39,7 +39,7 @@ public sealed class TestRunner
             var psi = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"test {_testProjectPath} --filter FullyQualifiedName!~ReleaseBinaryTests --verbosity normal --no-build",
+                Arguments = $"test {_testProjectPath} --filter FullyQualifiedName!~ReleaseBinaryTests --verbosity normal",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,

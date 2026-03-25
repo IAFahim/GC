@@ -597,7 +597,7 @@ public class BugFixTests
         try
         {
             using var cts = new CancellationTokenSource();
-            cts.CancelAfter(TimeSpan.FromMilliseconds(10)); // Cancel quickly
+            cts.Cancel(); // Cancel immediately to prevent race condition on fast systems
 
             // Act
             using var outputStream = new MemoryStream();

@@ -19,7 +19,6 @@ public sealed record CliArguments
     public bool InitConfig { get; init; }
     public bool ValidateConfig { get; init; }
     public bool DumpConfig { get; init; }
-    public CompactLevel Compact { get; init; }
     public bool Append { get; init; }
     public bool Force { get; init; }
     public int? Depth { get; init; }

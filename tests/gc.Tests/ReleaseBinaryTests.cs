@@ -551,12 +551,7 @@ public class ReleaseBinaryTests : IDisposable
                         }
                         _gitAvailable = (p.ExitCode == 0);
                     }
-                    catch (InvalidOperationException)
-            {
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-            }
+                    catch
                     {
                         _gitAvailable = false;
                     }

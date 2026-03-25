@@ -150,6 +150,8 @@ public sealed class FileDiscovery : IFileDiscovery
                     {
                         // This should never happen, but guard against it
                         _logger.Error($"Buffer overflow detected in git ls-files parsing. Remaining: {remaining}, Buffer: {buffer.Length}");
+                        // CRITICAL: Must kill process before breaking to avoid pipe deadlock
+                        try { process.Kill(true); } catch { }
                         break;
                     }
                     Array.Copy(buffer, start, buffer, 0, remaining);
@@ -216,6 +218,7 @@ public sealed class FileDiscovery : IFileDiscovery
             {
                 foreach (var file in Directory.EnumerateFiles(currentDir, "*", SearchOption.TopDirectoryOnly))
                 {
+                    ct.ThrowIfCancellationRequested();
                     files.Add(Path.GetRelativePath(rootPath, file).Replace('\\', '/'));
                 }
 
@@ -223,6 +226,7 @@ public sealed class FileDiscovery : IFileDiscovery
                 {
                     foreach (var dir in Directory.EnumerateDirectories(currentDir, "*", SearchOption.TopDirectoryOnly))
                     {
+                        ct.ThrowIfCancellationRequested();
                         var dirName = Path.GetFileName(dir);
                         if (!ignoredDirs.Contains(dirName))
                         {

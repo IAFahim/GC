@@ -18,8 +18,15 @@ public sealed class FileFilter
     public Result<IEnumerable<FileEntry>> FilterFiles(IEnumerable<string> rawFiles, GcConfiguration config, IEnumerable<string> searchPaths, IEnumerable<string> excludePatterns, IEnumerable<string> extensionFilters)
     {
         var activeExtensions = ResolveActiveExtensions(extensionFilters, config);
+        
+        // Pre-normalize patterns ONCE to avoid O(N²) performance
+        var normalizedIgnorePatterns = config.Filters?.SystemIgnoredPatterns?
+            .Select(p => p.Replace('\\', '/'))
+            .ToList() ?? new List<string>();
+        var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToList();
+        
         var filtered = rawFiles
-            .Where(path => IsValidPath(path, config, searchPaths, excludePatterns, activeExtensions))
+            .Where(path => IsValidPath(path, config, normalizedSearchPaths, excludePatterns, activeExtensions, normalizedIgnorePatterns))
             .Select(path => CreateFileEntry(path, config))
             .Where(entry => entry != null)
             .Cast<FileEntry>()
@@ -85,45 +92,42 @@ public sealed class FileFilter
         return set;
     }
 
-    private bool IsValidPath(string path, GcConfiguration config, IEnumerable<string> searchPaths, IEnumerable<string> excludePatterns, HashSet<string> extensions)
+    private bool IsValidPath(string path, GcConfiguration config, List<string> normalizedSearchPaths, IEnumerable<string> excludePatterns, HashSet<string> extensions, List<string> normalizedIgnorePatterns)
     {
         // Check extension filter
-        if (extensions.Count > 0 && !extensions.Contains(GetFullExtension(path))) return false;
+        if (extensions.Count > 0)
+        {
+            var fileName = Path.GetFileName(path);
+            var matchesExtension = extensions.Any(ext => 
+                fileName.EndsWith("." + ext, StringComparison.OrdinalIgnoreCase) || 
+                fileName.Equals(ext, StringComparison.OrdinalIgnoreCase));
+            if (!matchesExtension) return false;
+        }
 
         // Pre-normalize path once
         var pathNormalized = path.Replace('\\', '/');
 
-        // Check system ignored patterns from config
-        if (config.Filters?.SystemIgnoredPatterns != null)
+        // Check system ignored patterns from config (patterns already normalized)
+        foreach (var patternNormalized in normalizedIgnorePatterns)
         {
-            // Pre-normalize patterns once (cache this if called frequently)
-            var normalizedPatterns = config.Filters.SystemIgnoredPatterns
-                .Select(p => p.Replace('\\', '/'))
-                .ToList();
-            
-            foreach (var patternNormalized in normalizedPatterns)
+            // Check if path matches ignored pattern
+            if (pathNormalized.Contains(patternNormalized, StringComparison.OrdinalIgnoreCase))
             {
-                // Check if path matches ignored pattern
-                if (pathNormalized.Contains(patternNormalized, StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
+                return false;
+            }
 
-                // Also check extension-specific patterns (e.g., ".bin")
-                if (patternNormalized.StartsWith('.') && pathNormalized.EndsWith(patternNormalized, StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
+            // Also check extension-specific patterns (e.g., ".bin")
+            if (patternNormalized.StartsWith('.') && pathNormalized.EndsWith(patternNormalized, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
             }
         }
 
-        // Check search paths (path already normalized above)
-        var searchPathsList = searchPaths.ToList();
-        if (searchPathsList.Count > 0)
+        // Check search paths (paths already normalized)
+        if (normalizedSearchPaths.Count > 0)
         {
-            var matchesSearchPath = searchPathsList.Any(searchPath =>
+            var matchesSearchPath = normalizedSearchPaths.Any(searchNormalized =>
             {
-                var searchNormalized = searchPath.Replace('\\', '/').TrimEnd('/');
                 // Exact match or directory prefix match with path separator boundary
                 return pathNormalized.Equals(searchNormalized, StringComparison.OrdinalIgnoreCase) ||
                        pathNormalized.StartsWith(searchNormalized + "/", StringComparison.OrdinalIgnoreCase) ||

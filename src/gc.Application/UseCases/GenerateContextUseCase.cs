@@ -76,14 +76,13 @@ public sealed class GenerateContextUseCase
             // Time window checks are NOT applied when user explicitly requests append mode.
 
             using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+            
             var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, fs, config, ct);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-            // Save state for potential future append runs
-            await AppendStateManager.SaveStateAsync(rootPath);
-
             string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
             _logger.Success($"✔ {action} {outputFile}: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+
             return Result.Success();
         }
         else
@@ -94,10 +93,12 @@ public sealed class GenerateContextUseCase
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
             ms.Position = 0;
+            
             var clipResult = await _clipboard.CopyToClipboardAsync(ms, config.Limits, ct);
             if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
             _logger.Success($"✔ Copied: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+
             return Result.Success();
         }
     }

@@ -45,7 +45,7 @@ public class EdgeCaseTests : IDisposable
 
         AddTestFile("empty.cs", "");
 
-        var result = RunGC("");
+        var result = RunGC("--output out.md");
 
         Assert.Equal(0, result.ExitCode);
         // Empty files might be skipped or included - both are acceptable
@@ -60,7 +60,7 @@ public class EdgeCaseTests : IDisposable
         var longName = new string('a', 200) + ".cs";
         AddTestFile(longName, "public class Test { }");
 
-        var result = RunGC("");
+        var result = RunGC("--output out.md");
 
         // Should either work or fail gracefully
         Assert.True(result.ExitCode == 0 || result.ExitCode != 0);
@@ -215,7 +215,7 @@ public class Test
         AddTestFile("test.tar.gz", "archive content");
         AddTestFile("test.min.js", "minified js");
 
-        var result = RunGC("");
+        var result = RunGC("--output out.md");
 
         Assert.Equal(0, result.ExitCode);
 
@@ -230,7 +230,7 @@ public class Test
         AddTestFile("Makefile", "all:\n\techo 'building'");
         AddTestFile("Dockerfile", "FROM ubuntu:latest");
 
-        var result = RunGC("");
+        var result = RunGC("--output out.md");
 
         Assert.Equal(0, result.ExitCode);
         // These should be handled based on their names or content
@@ -247,7 +247,7 @@ public class Test
         AddTestFile("test.Cs", "public class Test { }");
         AddTestFile("test.JS", "console.log('test');");
 
-        var result = RunGC("--extension cs");
+        var result = RunGC("--extension cs --output out.md");
 
         Assert.Equal(0, result.ExitCode);
         // Should match regardless of case depending on OS
@@ -263,7 +263,7 @@ public class Test
         AddTestFile(".hidden.cs", "public class Hidden { }");
         AddTestFile(".gitignore", "*.log");
 
-        var result = RunGC("");
+        var result = RunGC("--output out.md");
 
         Assert.Equal(0, result.ExitCode);
         // Hidden files should be handled based on git tracking
@@ -472,9 +472,6 @@ public class Test
             }
             catch (System.ComponentModel.Win32Exception)
             {
-            }
-            {
-                // Process already terminated or invalid state
             }
         }
     }

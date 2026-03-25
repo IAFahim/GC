@@ -16,7 +16,7 @@ public static class BuiltInPresets
         ["cs", "shader", "cginc", "hlsl", "glsl", "asmdef", "asmref", "uss", "uxml", "json", "yaml"];
 
     public static readonly string[] PresetJava = ["java", "kt", "kts", "scala"];
-    public static readonly string[] PresetCpp = ["c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "rs", "go", "swift"];
+    public static readonly string[] PresetCpp = ["c", "h", "cpp", "cc", "cxx", "hpp", "hxx"];
     public static readonly string[] PresetScript = ["py", "rb", "php", "pl", "pm", "lua", "sh", "bash", "zsh", "ps1"];
 
     public static readonly string[] PresetData =

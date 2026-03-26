@@ -120,7 +120,7 @@ MyCompany.MyProduct/
 | Boolean | Prefix "is/has/can/should" | `isValid`, `hasPermission` |
 
 ### 3.2 Naming Principle: Intent Over Cleverness
-```csharp
+```cs
 // ❌ BAD — Google Style Guide violation: cryptic, saves no meaningful time
 int d;
 var x = GetD(userId, d);
@@ -131,7 +131,7 @@ var loginActivity = GetDaysSinceLastLogin(userId, out daysSinceLastLogin);
 ```
 
 ### 3.3 No Abbreviations (Google Rule)
-```csharp
+```cs
 // ❌ BAD
 var usrAcct = GetUsrAcct(usrId);
 
@@ -159,7 +159,7 @@ Each `if`, `else if`, `case`, `for`, `while`, `foreach`, `&&`, `||`, `??`, `?:` 
 | 21+ | Critical — Must refactor before release | ❌ All standards forbid |
 
 ### 4.1 The Problem (High Complexity)
-```csharp
+```cs
 // ❌ CC = 11 — 11 independent paths, nearly impossible to fully test
 public decimal CalculateDiscount(Order order, User user, bool isBlackFriday)
 {
@@ -200,7 +200,7 @@ public decimal CalculateDiscount(Order order, User user, bool isBlackFriday)
 ```
 
 ### 4.2 The Solution — Strategy + Guard Clauses + Decomposition
-```csharp
+```cs
 // ✅ CC = 1 per method — Every path is independently testable
 
 public decimal CalculateDiscount(Order order, User user, bool isBlackFriday)
@@ -263,7 +263,7 @@ public sealed class BlackFridayDiscount : IDiscountRule
 ### 4.3 Techniques to Eliminate Complexity
 
 #### Technique 1: Guard Clauses (Early Return)
-```csharp
+```cs
 // ❌ DEEPLY NESTED — CC grows with every indent level
 public Result ProcessOrder(Order order)
 {
@@ -293,7 +293,7 @@ public Result ProcessOrder(Order order)
 ```
 
 #### Technique 2: Replace Conditionals with Polymorphism
-```csharp
+```cs
 // ❌ Switch-based type dispatch — adds CC with every new type
 public decimal CalculateTax(Product product)
 {
@@ -320,7 +320,7 @@ public sealed class LuxuryTax   : ITaxStrategy { public decimal Calculate(decima
 ```
 
 #### Technique 3: Pattern Matching with Switch Expressions
-```csharp
+```cs
 // ✅ Switch expressions don't add CC the same way — and are exhaustive
 public string DescribeOrder(Order order) => order.Status switch
 {
@@ -334,7 +334,7 @@ public string DescribeOrder(Order order) => order.Status switch
 ```
 
 #### Technique 4: Replace Loops with LINQ
-```csharp
+```cs
 // ❌ Loop adds CC and is harder to read
 public List<OrderDto> GetPaidOrders(List<Order> orders)
 {
@@ -370,7 +370,7 @@ public IReadOnlyList<OrderDto> GetPaidOrders(IEnumerable<Order> orders) =>
 - **Google Rule:** If you need to scroll to see the whole function, it's too long.
 
 ### 5.2 Method Design Checklist
-```csharp
+```cs
 // ✅ Every great method satisfies ALL of these:
 
 // 1. Single Responsibility: Does exactly one thing
@@ -394,7 +394,7 @@ SendEmailWithoutAttachments(user);
 ```
 
 ### 5.3 Parameter Objects
-```csharp
+```cs
 // ❌ BAD — Too many parameters, caller must remember order
 public void CreateOrder(string customerId, decimal amount, string currency,
                          string shippingAddress, bool isPriority, DateTime dueDate) { }
@@ -416,7 +416,7 @@ public void CreateOrder(CreateOrderRequest request) { }
 ## 6. Classes & SOLID Principles
 
 ### 6.1 Single Responsibility Principle (SRP)
-```csharp
+```cs
 // ❌ BAD — One class doing 3 jobs
 public class OrderService
 {
@@ -432,7 +432,7 @@ public class OrderNotifier    { public Task NotifyAsync(Order order) { } }
 ```
 
 ### 6.2 Open/Closed Principle (OCP)
-```csharp
+```cs
 // ✅ Open for extension (add new IDiscountRule),
 //    Closed for modification (existing rules never change)
 public interface IDiscountRule
@@ -453,7 +453,7 @@ public sealed class DiscountCalculator
 ```
 
 ### 6.3 Liskov Substitution Principle (LSP)
-```csharp
+```cs
 // ✅ Any IPaymentGateway implementation must honor the contract:
 // - Never throw on valid input
 // - Return a meaningful Result, not throw for business failures
@@ -465,7 +465,7 @@ public interface IPaymentGateway
 ```
 
 ### 6.4 Interface Segregation Principle (ISP)
-```csharp
+```cs
 // ❌ BAD — Forces implementors to implement methods they don't need
 public interface IRepository<T>
 {
@@ -483,7 +483,7 @@ public interface ISearchRepository<T>{ Task<IReadOnlyList<T>> SearchAsync(string
 ```
 
 ### 6.5 Dependency Inversion Principle (DIP)
-```csharp
+```cs
 // ✅ High-level module depends on abstraction, not concrete class
 public sealed class OrderService
 {
@@ -510,7 +510,7 @@ public sealed class OrderService
 ### 7.1 Result Pattern over Exceptions (NASA + SEI CERT)
 > NASA Rule: Exceptions for exceptional conditions only. Business failures are not exceptions.
 
-```csharp
+```cs
 // ✅ Result<T> pattern — errors are values, not thrown
 public readonly record struct Result<T>
 {
@@ -532,7 +532,7 @@ if (!result.IsSuccess)
 ```
 
 ### 7.2 Exception Hierarchy (SEI CERT)
-```csharp
+```cs
 // ✅ Custom domain exceptions carry context
 public abstract class DomainException : Exception
 {
@@ -562,7 +562,7 @@ catch (DbUpdateConcurrencyException ex)
 ```
 
 ### 7.3 Global Exception Handler (ASP.NET Core)
-```csharp
+```cs
 // ✅ One place handles all unhandled exceptions — no scattered try/catch
 public sealed class GlobalExceptionHandler : IExceptionHandler
 {
@@ -612,7 +612,7 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
 | 7. Check return values | Never ignore `Task` without reason; never ignore `Result<T>`. |
 
 ### 8.2 Dispose Pattern
-```csharp
+```cs
 // ✅ Always use 'using' — never rely on finalizer
 await using var connection = await _connectionFactory.CreateAsync(ct);
 await using var transaction = await connection.BeginTransactionAsync(ct);
@@ -644,7 +644,7 @@ public sealed class ResourceOwner : IAsyncDisposable
 ```
 
 ### 8.3 Span<T> and Memory<T> — Zero-Allocation Patterns
-```csharp
+```cs
 // ✅ Use Span<T> for high-performance parsing — no heap allocation
 public static bool TryParseOrderId(ReadOnlySpan<char> input, out Guid orderId)
 {
@@ -659,7 +659,7 @@ public static bool TryParseOrderId(ReadOnlySpan<char> input, out Guid orderId)
 ## 9. Concurrency & Thread Safety
 
 ### 9.1 Async/Await Best Practices (Microsoft)
-```csharp
+```cs
 // ✅ RULE 1: Async all the way — never block on async code
 // ❌ NEVER: var result = GetDataAsync().Result;      — deadlock risk
 // ❌ NEVER: var result = GetDataAsync().GetAwaiter().GetResult();
@@ -686,7 +686,7 @@ public Task<Result<Order>> CreateOrderAsync(
 ```
 
 ### 9.2 Thread-Safe State
-```csharp
+```cs
 // ✅ Prefer immutable records for shared state
 public record OrderSnapshot(Guid Id, decimal Total, OrderStatus Status);
 
@@ -709,7 +709,7 @@ public async Task<T> ExecuteExclusivelyAsync<T>(Func<Task<T>> operation, Cancell
 ## 10. Security Coding (SEI CERT)
 
 ### 10.1 Input Validation — Never Trust Input
-```csharp
+```cs
 // ✅ Validate ALL external input at the boundary (FluentValidation)
 public sealed class CreateOrderRequestValidator : AbstractValidator<CreateOrderRequest>
 {
@@ -735,7 +735,7 @@ public sealed class CreateOrderRequestValidator : AbstractValidator<CreateOrderR
 ```
 
 ### 10.2 SQL Injection Prevention
-```csharp
+```cs
 // ❌ CRITICAL VULNERABILITY — Never concatenate SQL
 var sql = $"SELECT * FROM Orders WHERE CustomerId = '{customerId}'";
 
@@ -751,7 +751,7 @@ var orders = await _context.Orders
 ```
 
 ### 10.3 Sensitive Data
-```csharp
+```cs
 // ✅ Never log sensitive data (SEI CERT rule IDS04)
 // ❌ _logger.LogInformation("Processing card: {CardNumber}", request.CardNumber);
 // ✅ Log only non-sensitive identifiers
@@ -769,7 +769,7 @@ public record PaymentRequest
 ```
 
 ### 10.4 Nullable Reference Types — Enable Everywhere
-```csharp
+```cs
 // In .csproj — non-negotiable
 // <Nullable>enable</Nullable>
 // <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -793,7 +793,7 @@ public sealed class OrderService
 
 > **Rule:** Good code is self-documenting. A comment that explains *what* is a sign the code needs renaming. A comment that explains *why* is gold.
 
-```csharp
+```cs
 // ❌ USELESS — Restates the code
 // Increment counter
 counter++;
@@ -813,7 +813,7 @@ private readonly Dictionary<Guid, Order> _orderCache = new();
 ```
 
 ### 11.2 XML Documentation (for public APIs)
-```csharp
+```cs
 /// <summary>
 /// Processes a payment for an order.
 /// Returns a failure result if the payment gateway declines — does NOT throw.
@@ -835,7 +835,7 @@ public async Task<Result<string>> ProcessPaymentAsync(
 ## 12. Testing Standards
 
 ### 12.1 Test Naming — Arrange, Act, Assert
-```csharp
+```cs
 // ✅ Test name format: MethodName_Scenario_ExpectedBehavior
 public sealed class OrderServiceTests
 {
@@ -987,7 +987,7 @@ quality-gate:
 
 This is what a production-grade, zero-cyclomatic-complexity feature looks like end-to-end.
 
-```csharp
+```cs
 // ============================================================
 // DOMAIN LAYER
 // ============================================================

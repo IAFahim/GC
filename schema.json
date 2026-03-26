@@ -178,7 +178,7 @@
         "js": "javascript",
         "ts": "typescript",
         "py": "python",
-        "cs": "csharp"
+        "cs": "cs"
       }
     },
 

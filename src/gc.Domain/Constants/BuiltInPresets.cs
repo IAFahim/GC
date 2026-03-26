@@ -42,7 +42,7 @@ public static class BuiltInPresets
         ["js"] = "javascript",
         ["ts"] = "typescript",
         ["py"] = "python",
-        ["cs"] = "csharp",
+        ["cs"] = "cs",
         ["sh"] = "bash",
         ["md"] = "markdown",
         ["h"] = "c",

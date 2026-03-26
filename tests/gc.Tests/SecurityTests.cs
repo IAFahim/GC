@@ -80,7 +80,7 @@ public class SecurityTests : IDisposable
 
         // Create file with triple backticks
         var content = @"
-```csharp
+```cs
 public class Test
 {
     public void Method()

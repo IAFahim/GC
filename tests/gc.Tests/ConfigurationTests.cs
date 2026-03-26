@@ -81,7 +81,7 @@ public class ConfigurationTests
         Assert.True(config.LanguageMappings.ContainsKey("py"));
         Assert.Equal("python", config.LanguageMappings["py"]);
         Assert.True(config.LanguageMappings.ContainsKey("cs"));
-        Assert.Equal("csharp", config.LanguageMappings["cs"]);
+        Assert.Equal("cs", config.LanguageMappings["cs"]);
     }
 
     [Fact]

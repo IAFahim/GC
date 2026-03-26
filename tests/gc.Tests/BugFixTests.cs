@@ -264,7 +264,7 @@ public class BugFixTests
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
-        var fileEntry = new FileEntry("test.cs", "cs", "csharp", 20);
+        var fileEntry = new FileEntry("test.cs", "cs", "cs", 20);
         var fileContents = new List<FileContent>
         {
             new(fileEntry, "Console.WriteLine();", 20)
@@ -285,7 +285,7 @@ public class BugFixTests
 
         // Check that header is included
         Assert.Contains("test.cs", generatedContent);
-        Assert.Contains("```csharp", generatedContent);
+        Assert.Contains("```cs", generatedContent);
         Assert.Contains("```\n", generatedContent);
     }
 
@@ -331,7 +331,7 @@ public class BugFixTests
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
-        var entry1 = new FileEntry("file1.cs", "cs", "csharp", 15);
+        var entry1 = new FileEntry("file1.cs", "cs", "cs", 15);
         var entry2 = new FileEntry("file2.js", "js", "javascript", 20);
         var fileContents = new List<FileContent>
         {
@@ -362,7 +362,7 @@ public class BugFixTests
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
-        var entry = new FileEntry("test.cs", "cs", "csharp", 8);
+        var entry = new FileEntry("test.cs", "cs", "cs", 8);
         var fileContents = new List<FileContent>
         {
             new(entry, "// test", 8)

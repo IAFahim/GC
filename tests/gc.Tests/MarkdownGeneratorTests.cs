@@ -29,7 +29,7 @@ public class MarkdownGeneratorTests
     public async Task ExcludeLineIfStart_InMemory_FiltersCorrectly()
     {
         var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.cs", "cs", "csharp", 100);
+        var entry = new FileEntry("test.cs", "cs", "cs", 100);
         var content = "using System;\n// This is a comment\npublic class Test {\n  // Another comment\n}\n\n";
         
         var fileContents = new List<FileContent> { new(entry, content, content.Length) };
@@ -66,7 +66,7 @@ public class MarkdownGeneratorTests
         try
         {
             await File.WriteAllTextAsync(tempFile, "using System;\r\n// A comment\npublic class Test {\n  // Another comment\r\n}");
-            var entry = new FileEntry(tempFile, "cs", "csharp", 100);
+            var entry = new FileEntry(tempFile, "cs", "cs", 100);
             
             // Content is null so it falls back to streaming
             var fileContents = new List<FileContent> { new(entry, null, 100) };
@@ -103,7 +103,7 @@ public class MarkdownGeneratorTests
     public async Task ProcessLineSequence_HandlesEmptyLine_WithNewlineExclude()
     {
         var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.cs", "cs", "csharp", 100);
+        var entry = new FileEntry("test.cs", "cs", "cs", 100);
         var content = "using System;\n\npublic class Test {}";
         
         var fileContents = new List<FileContent> { new(entry, content, content.Length) };

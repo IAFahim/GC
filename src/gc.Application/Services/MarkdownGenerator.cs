@@ -57,7 +57,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                         foreach (var line in span.EnumerateLines())
                         {
                             var trimmedLine = line.TrimStart().TrimStart('\uFEFF');
-                            if (excludeNewline && trimmedLine.IsEmpty)
+                            if (excludeNewline && (trimmedLine.IsEmpty || trimmedLine.IsWhiteSpace()))
                                 continue;
                                 
                             bool shouldExclude = false;
@@ -70,12 +70,12 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 }
                             }
                             
-                            if (!shouldExclude)
-                            {
-                                if (!first) sb.Append('\n');
-                                sb.Append(line);
-                                first = false;
-                            }
+                            if (shouldExclude)
+                                continue;
+                                
+                            if (!first) sb.Append('\n');
+                            sb.Append(line);
+                            first = false;
                         }
                         actualContent = sb.ToString();
                     }
@@ -323,7 +323,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         string lineStr = Utf8NoBom.GetString(lineSequence);
         var trimmedLine = lineStr.TrimStart().TrimStart('\uFEFF');
         
-        if (excludeNewline && string.IsNullOrWhiteSpace(lineStr)) return;
+        if (excludeNewline && (string.IsNullOrEmpty(lineStr) || string.IsNullOrWhiteSpace(lineStr))) return;
         
         bool shouldExclude = false;
         foreach (var startStr in excludeArray)

@@ -70,8 +70,8 @@ jobs:
           fi
           
           # Test 3: Exclude line start logic
-          /app/gc-bin/gc -p src -e cs -o excluded_lines_dump.md --exclude-line-if-start "//" --force
-          if grep -q "^[[:space:]]*//" excluded_lines_dump.md; then
+          /app/gc-bin/gc -p src -e cs -o excluded_lines_dump.md --exclude-line-if-start // --force
+          if grep -E "^[[:space:]]*\/\/" excluded_lines_dump.md; then
              echo "Failed Test 3: Excluded lines (//) were found in output"
              exit 1
           fi

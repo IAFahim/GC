@@ -1,4 +1,6 @@
 using System.Text;
+using System.Buffers;
+using System.IO.Pipelines;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
@@ -44,21 +46,23 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                     var actualContent = content.Content;
                     if (excludeLineIfStart != null && excludeLineIfStart.Any())
                     {
-                        var lines = actualContent.Split('\n');
-                        var keptLines = new List<string>();
-                        foreach (var line in lines)
+                        var excludeArray = excludeLineIfStart.ToArray();
+                        var excludeNewline = excludeArray.Contains("\n");
+                        
+                        var span = actualContent.AsSpan();
+                        var sb = new StringBuilder(actualContent.Length);
+                        bool first = true;
+                        
+                        foreach (var line in span.EnumerateLines())
                         {
                             var trimmedLine = line.TrimStart();
+                            if (excludeNewline && trimmedLine.IsEmpty)
+                                continue;
+                                
                             bool shouldExclude = false;
-                            
-                            foreach (var startStr in excludeLineIfStart)
+                            foreach (var startStr in excludeArray)
                             {
-                                if (startStr == "\n" && string.IsNullOrWhiteSpace(line))
-                                {
-                                    shouldExclude = true;
-                                    break;
-                                }
-                                else if (startStr != "\n" && trimmedLine.StartsWith(startStr))
+                                if (startStr != "\n" && trimmedLine.StartsWith(startStr, StringComparison.Ordinal))
                                 {
                                     shouldExclude = true;
                                     break;
@@ -67,10 +71,12 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             
                             if (!shouldExclude)
                             {
-                                keptLines.Add(line);
+                                if (!first) sb.Append('\n');
+                                sb.Append(line);
+                                first = false;
                             }
                         }
-                        actualContent = string.Join("\n", keptLines);
+                        actualContent = sb.ToString();
                     }
 
                     // In-memory content processing
@@ -168,33 +174,42 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             if (excludeLineIfStart != null && excludeLineIfStart.Any())
                             {
                                 fs.Position = 0; // Reset position since we read header
-                                using var fileReader = new StreamReader(fs, Utf8NoBom, true, 8192, true);
-                                string? line;
-                                while ((line = await fileReader.ReadLineAsync(ct)) != null)
+                                var excludeArray = excludeLineIfStart.ToArray();
+                                var excludeNewline = excludeArray.Contains("\n");
+                                
+                                var pipeReader = PipeReader.Create(fs, new StreamPipeReaderOptions(leaveOpen: true));
+                                
+                                while (true)
                                 {
-                                    var trimmedLine = line.TrimStart();
-                                    bool shouldExclude = false;
+                                    var result = await pipeReader.ReadAsync(ct);
+                                    var pipeBuffer = result.Buffer;
                                     
-                                    foreach (var startStr in excludeLineIfStart)
+                                    SequencePosition? position = null;
+                                    
+                                    do
                                     {
-                                        if (startStr == "\n" && string.IsNullOrWhiteSpace(line))
+                                        position = pipeBuffer.PositionOf((byte)'\n');
+                                        if (position != null)
                                         {
-                                            shouldExclude = true;
-                                            break;
-                                        }
-                                        else if (startStr != "\n" && trimmedLine.StartsWith(startStr))
-                                        {
-                                            shouldExclude = true;
-                                            break;
+                                            var lineSequence = pipeBuffer.Slice(0, position.Value);
+                                            ProcessLineSequence(lineSequence, excludeArray, excludeNewline, writer, ref contentBytesWritten, newlineBytes);
+                                            pipeBuffer = pipeBuffer.Slice(pipeBuffer.GetPosition(1, position.Value));
                                         }
                                     }
+                                    while (position != null);
                                     
-                                    if (!shouldExclude)
+                                    pipeReader.AdvanceTo(pipeBuffer.Start, pipeBuffer.End);
+                                    
+                                    if (result.IsCompleted)
                                     {
-                                        await writer.WriteLineAsync(line);
-                                        contentBytesWritten += Utf8NoBom.GetByteCount(line) + newlineBytes;
+                                        if (!pipeBuffer.IsEmpty)
+                                        {
+                                            ProcessLineSequence(pipeBuffer, excludeArray, excludeNewline, writer, ref contentBytesWritten, newlineBytes);
+                                        }
+                                        break;
                                     }
                                 }
+                                await pipeReader.CompleteAsync();
                             }
                             else
                             {
@@ -277,5 +292,52 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
         await writer.WriteLineAsync(config.Markdown.Fence);
         await writer.WriteLineAsync(); // Final blank line
+    }
+
+    private void ProcessLineSequence(ReadOnlySequence<byte> lineSequence, string[] excludeArray, bool excludeNewline, StreamWriter writer, ref long contentBytesWritten, int newlineBytes)
+    {
+        var length = (int)lineSequence.Length;
+        if (length == 0)
+        {
+            if (!excludeNewline)
+            {
+                writer.WriteLine();
+                contentBytesWritten += newlineBytes;
+            }
+            return;
+        }
+        
+        if (length > 0)
+        {
+            var lastByte = lineSequence.Slice(length - 1).FirstSpan[0];
+            if (lastByte == '\r')
+            {
+                lineSequence = lineSequence.Slice(0, length - 1);
+                length--;
+            }
+        }
+        
+        if (length == 0 && excludeNewline) return;
+        
+        string lineStr = Encoding.UTF8.GetString(lineSequence);
+        var trimmedLine = lineStr.TrimStart();
+        
+        if (excludeNewline && string.IsNullOrWhiteSpace(lineStr)) return;
+        
+        bool shouldExclude = false;
+        foreach (var startStr in excludeArray)
+        {
+            if (startStr != "\n" && trimmedLine.StartsWith(startStr, StringComparison.Ordinal))
+            {
+                shouldExclude = true;
+                break;
+            }
+        }
+        
+        if (!shouldExclude)
+        {
+            writer.WriteLine(lineStr);
+            contentBytesWritten += Utf8NoBom.GetByteCount(lineStr) + newlineBytes;
+        }
     }
 }

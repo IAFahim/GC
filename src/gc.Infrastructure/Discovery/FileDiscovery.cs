@@ -121,20 +121,22 @@ public sealed class FileDiscovery : IFileDiscovery
                 {
                     if (buffer[i] == 0)
                     {
-                        var fileName = Encoding.UTF8.GetString(buffer, start, i - start);
-                        if (!string.IsNullOrEmpty(fileName))
+                        var span = buffer.AsSpan(start, i - start);
+                        if (span.Length > 0)
                         {
+                            bool shouldAdd = true;
                             if (config.MaxDepth.HasValue)
                             {
-                                var depth = fileName.Count(c => c == '/' || c == '\\');
-                                if (depth <= config.MaxDepth.Value)
+                                var depth = span.Count((byte)'/') + span.Count((byte)'\\');
+                                if (depth > config.MaxDepth.Value)
                                 {
-                                    files.Add(fileName);
+                                    shouldAdd = false;
                                 }
                             }
-                            else
+
+                            if (shouldAdd)
                             {
-                                files.Add(fileName);
+                                files.Add(Encoding.UTF8.GetString(span));
                             }
                         }
                         start = i + 1;

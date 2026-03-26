@@ -6,37 +6,45 @@ public static class MemorySizeParser
 {
     private const long DefaultMemoryBytes = 104857600; // 100MB
 
-    public static long Parse(string size)
+    public static long Parse(string sizeString)
     {
-        if (string.IsNullOrWhiteSpace(size))
+        if (string.IsNullOrWhiteSpace(sizeString))
             return DefaultMemoryBytes;
 
-        size = size.Trim().ToUpperInvariant();
+        return Parse(sizeString.AsSpan());
+    }
+
+    public static long Parse(ReadOnlySpan<char> size)
+    {
+        size = size.Trim();
+        if (size.IsEmpty)
+            return DefaultMemoryBytes;
+
         long multiplier = 1;
         bool hasValidUnit = false;
         bool isKB = false;
         bool isB = false;
 
-        if (size.EndsWith("KB", StringComparison.Ordinal))
+        if (size.EndsWith("KB", StringComparison.OrdinalIgnoreCase))
         {
             multiplier = 1024;
             size = size[..^2];
             hasValidUnit = true;
             isKB = true;
         }
-        else if (size.EndsWith("MB", StringComparison.Ordinal))
+        else if (size.EndsWith("MB", StringComparison.OrdinalIgnoreCase))
         {
             multiplier = 1048576;
             size = size[..^2];
             hasValidUnit = true;
         }
-        else if (size.EndsWith("GB", StringComparison.Ordinal))
+        else if (size.EndsWith("GB", StringComparison.OrdinalIgnoreCase))
         {
             multiplier = 1073741824;
             size = size[..^2];
             hasValidUnit = true;
         }
-        else if (size.EndsWith("B", StringComparison.Ordinal) && !size.EndsWith("KB", StringComparison.Ordinal) && !size.EndsWith("MB", StringComparison.Ordinal) && !size.EndsWith("GB", StringComparison.Ordinal))
+        else if (size.EndsWith("B", StringComparison.OrdinalIgnoreCase))
         {
             size = size[..^1];
             hasValidUnit = true;

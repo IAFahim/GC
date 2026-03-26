@@ -5,9 +5,9 @@
   "description": "Unity integration for gc - Copy project source code to clipboard for AI context",
   "unity": "2022.3",
   "unityRelease": "0f1",
-  "documentationUrl": "https://github.com/IAFahim/gc",
-  "changelogUrl": "https://github.com/IAFahim/gc/blob/main/CHANGELOG.md",
-  "licensesUrl": "https://github.com/IAFahim/gc/blob/main/LICENSE",
+  "documentationUrl": "https://github.com/IAFahim/GC",
+  "changelogUrl": "https://github.com/IAFahim/GC/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/IAFahim/GC/blob/main/LICENSE",
   "dependencies": {
     "com.unity.modules.subsystems": "1.0.0"
   },
@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/IAFahim/gc.git",
+    "url": "https://github.com/IAFahim/GC.git",
     "directory": "integration/unity/Packages/com.gitcopy.gc"
   },
   "samples": [

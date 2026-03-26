@@ -152,7 +152,7 @@ public static class BuiltInPresets
             {
                 Fence = "```",
                 ProjectStructureHeader = "_Project Structure:_",
-                FileHeaderTemplate = "## File: {path}",
+                FileHeaderTemplate = "{path}",
                 LanguageDetection = "extension"
             },
             Output = new OutputConfiguration

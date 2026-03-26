@@ -284,7 +284,7 @@ public class BugFixTests
         var generatedContent = Encoding.UTF8.GetString(output.ToArray());
 
         // Check that header is included
-        Assert.Contains("## File: test.cs", generatedContent);
+        Assert.Contains("test.cs", generatedContent);
         Assert.Contains("```csharp", generatedContent);
         Assert.Contains("```\n", generatedContent);
     }

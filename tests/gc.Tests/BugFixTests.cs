@@ -100,7 +100,7 @@ public class BugFixTests
             using var stream = new FileStream(tempFile, FileMode.Open, FileAccess.Read);
 
             // Act
-            var result = await clipboardService.CopyToClipboardAsync(stream, config.Limits, CancellationToken.None);
+            var result = await clipboardService.CopyToClipboardAsync(stream, config.Limits, false, CancellationToken.None);
 
             // Assert
             Assert.False(result.IsSuccess);
@@ -131,7 +131,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents, 
             output, 
-            config,
+            config, null,
             CancellationToken.None
         );
 
@@ -275,7 +275,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            config,
+            config, null,
             CancellationToken.None
         );
 
@@ -307,7 +307,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            config,
+            config, null,
             CancellationToken.None
         );
 
@@ -344,7 +344,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            config,
+            config, null,
             CancellationToken.None
         );
 
@@ -373,7 +373,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            config,
+            config, null,
             CancellationToken.None
         );
 
@@ -403,7 +403,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            config,
+            config, null,
             CancellationToken.None
         );
 

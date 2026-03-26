@@ -38,7 +38,8 @@ public sealed class GenerateContextUseCase
         IEnumerable<string> excludes,
         IEnumerable<string> extensions,
         string? outputFile,
-        bool appendMode = false,
+        bool appendMode = true,
+        IEnumerable<string>? excludeLineIfStart = null,
         CancellationToken ct = default)
     {
         var discoveryResult = await _discovery.DiscoverFilesAsync(rootPath, config, ct);
@@ -77,7 +78,7 @@ public sealed class GenerateContextUseCase
 
             using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
             
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, fs, config, ct);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, fs, config, excludeLineIfStart, ct);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
             string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
@@ -89,12 +90,12 @@ public sealed class GenerateContextUseCase
         {
             // Use a temporary memory stream to capture the output for the clipboard
             using var ms = new MemoryStream();
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, ct);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, ct);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
             ms.Position = 0;
             
-            var clipResult = await _clipboard.CopyToClipboardAsync(ms, config.Limits, ct);
+            var clipResult = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
             if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
             _logger.Success($"✔ Copied: {entries.Count} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");

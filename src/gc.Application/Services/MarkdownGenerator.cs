@@ -18,7 +18,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         _reader = reader;
     }
 
-    public async Task<Result<long>> GenerateMarkdownStreamingAsync(IEnumerable<FileContent> contents, Stream outputStream, GcConfiguration config, CancellationToken ct = default)
+    public async Task<Result<long>> GenerateMarkdownStreamingAsync(IEnumerable<FileContent> contents, Stream outputStream, GcConfiguration config, IEnumerable<string>? excludeLineIfStart = null, CancellationToken ct = default)
     {
         try
         {
@@ -40,10 +40,43 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                 if (content.Content != null)
                 {
+                    // Filter lines if needed
+                    var actualContent = content.Content;
+                    if (excludeLineIfStart != null && excludeLineIfStart.Any())
+                    {
+                        var lines = actualContent.Split('\n');
+                        var keptLines = new List<string>();
+                        foreach (var line in lines)
+                        {
+                            var trimmedLine = line.TrimStart();
+                            bool shouldExclude = false;
+                            
+                            foreach (var startStr in excludeLineIfStart)
+                            {
+                                if (startStr == "\n" && string.IsNullOrWhiteSpace(line))
+                                {
+                                    shouldExclude = true;
+                                    break;
+                                }
+                                else if (startStr != "\n" && trimmedLine.StartsWith(startStr))
+                                {
+                                    shouldExclude = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!shouldExclude)
+                            {
+                                keptLines.Add(line);
+                            }
+                        }
+                        actualContent = string.Join("\n", keptLines);
+                    }
+
                     // In-memory content processing
                     var fence = "```";
-                    if (content.Content.Contains("`````")) fence = "``````````";
-                    else if (content.Content.Contains("````")) fence = "``````";
+                    if (actualContent.Contains("`````")) fence = "``````````";
+                    else if (actualContent.Contains("````")) fence = "``````";
 
                     var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
                     var headerBytes = Utf8NoBom.GetByteCount(header) + Utf8NoBom.GetByteCount(Environment.NewLine);
@@ -51,11 +84,15 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                     var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + Utf8NoBom.GetByteCount(Environment.NewLine);
                     var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + Utf8NoBom.GetByteCount(Environment.NewLine);
                     var newlineBytes = Utf8NoBom.GetByteCount(Environment.NewLine);
-                    var contentBytes = Utf8NoBom.GetByteCount(content.Content);
+                    var contentBytes = Utf8NoBom.GetByteCount(actualContent);
 
-                    bool needsTrailingNewline = !content.Content.EndsWith('\n');
+                    // Skip the final trailing new line that gets added by splitting or when not needed
+                    actualContent = actualContent.TrimEnd(' ', '\t', '\r', '\n');
+                    contentBytes = Utf8NoBom.GetByteCount(actualContent);
+
+                    bool needsTrailingNewline = !actualContent.EndsWith('\n');
                     long entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + closingFenceBytes + newlineBytes;
-                    if (needsTrailingNewline) entryTotalBytes += newlineBytes;
+                    if (needsTrailingNewline && actualContent.Length > 0) entryTotalBytes += newlineBytes;
 
                     if (totalBytes + entryTotalBytes > maxMemoryBytes)
                     {
@@ -64,8 +101,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                     await writer.WriteLineAsync(header);
                     await writer.WriteLineAsync(fenceLine);
-                    await writer.WriteAsync(content.Content);
-                    if (needsTrailingNewline) await writer.WriteLineAsync();
+                    await writer.WriteLineAsync(actualContent);
                     await writer.WriteLineAsync(fence);
                     await writer.WriteLineAsync();
 

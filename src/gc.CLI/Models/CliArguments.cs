@@ -8,6 +8,7 @@ public sealed record CliArguments
     public string[] Extensions { get; init; } = Array.Empty<string>();
     public string[] Excludes { get; init; } = Array.Empty<string>();
     public string[] Presets { get; init; } = Array.Empty<string>();
+    public string[] ExcludeLineIfStart { get; init; } = Array.Empty<string>();
     public string OutputFile { get; init; } = string.Empty;
     public bool ShowHelp { get; init; }
     public bool ShowVersion { get; init; }

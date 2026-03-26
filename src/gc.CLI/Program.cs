@@ -108,6 +108,7 @@ public static class Program
             cliArgs.Extensions,
             cliArgs.OutputFile,
             cliArgs.Append,
+            cliArgs.ExcludeLineIfStart,
             ct);
 
         if (!result.IsSuccess)

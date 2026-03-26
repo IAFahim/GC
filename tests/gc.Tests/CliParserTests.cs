@@ -37,7 +37,7 @@ public class CliParserTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.False(result.Value.Append);
+        Assert.True(result.Value.Append);
     }
 
     [Fact]

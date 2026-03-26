@@ -46,7 +46,7 @@ public sealed class ClipboardService : IClipboardService
         }
     }
 
-    public async Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, CancellationToken ct = default)
+    public async Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append = false, CancellationToken ct = default)
     {
         try
         {
@@ -60,18 +60,44 @@ public sealed class ClipboardService : IClipboardService
                 }
             }
 
+            // Read the stream contents
+            string newContent;
+            if (stream.CanSeek)
+            {
+                stream.Position = 0;
+            }
+            using (var reader = new StreamReader(stream, Utf8NoBom, true, -1, true))
+            {
+                newContent = await reader.ReadToEndAsync(ct);
+            }
+
+            if (append)
+            {
+                var existingContent = await GetClipboardTextAsync(ct);
+                if (!string.IsNullOrEmpty(existingContent))
+                {
+                    newContent = existingContent + Environment.NewLine + newContent;
+                }
+            }
+            
+            if (stream.CanSeek)
+            {
+                stream.Position = 0;
+            }
+            using var combinedStream = new MemoryStream(Utf8NoBom.GetBytes(newContent));
+
             bool success;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                success = await CopyToWindowsAsync(stream, ct);
+                success = await CopyToWindowsAsync(combinedStream, ct);
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                success = await CopyToMacAsync(stream, ct);
+                success = await CopyToMacAsync(combinedStream, ct);
             }
             else
             {
-                success = await CopyToLinuxAsync(stream, ct);
+                success = await CopyToLinuxAsync(combinedStream, ct);
             }
 
             return success
@@ -91,7 +117,7 @@ public sealed class ClipboardService : IClipboardService
         return await CopyToClipboardAsync(ms, ct);
     }
 
-    public async Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, CancellationToken ct = default)
+    public async Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append = false, CancellationToken ct = default)
     {
         var maxClipboardSize = limits.GetMaxClipboardSizeBytes();
         var contentBytes = Utf8NoBom.GetByteCount(content);
@@ -102,7 +128,64 @@ public sealed class ClipboardService : IClipboardService
         }
 
         using var ms = new MemoryStream(Utf8NoBom.GetBytes(content));
-        return await CopyToClipboardAsync(ms, ct);
+        return await CopyToClipboardAsync(ms, limits, append, ct);
+    }
+
+    private async Task<string> GetClipboardTextAsync(CancellationToken ct)
+    {
+        try
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return await RunClipboardGetProcessAsync("powershell.exe", "-Command \"Get-Clipboard\"", ct);
+            }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return await RunClipboardGetProcessAsync("pbpaste", "", ct);
+            }
+            else
+            {
+                var wayland = await RunClipboardGetProcessAsync("wl-paste", "", ct);
+                if (string.IsNullOrEmpty(wayland))
+                {
+                    return await RunClipboardGetProcessAsync("xclip", "-selection clipboard -o", ct);
+                }
+                return wayland;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Failed to get clipboard contents", ex);
+            return string.Empty;
+        }
+    }
+
+    private async Task<string> RunClipboardGetProcessAsync(string fileName, string arguments, CancellationToken ct)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null) return string.Empty;
+
+            var output = await process.StandardOutput.ReadToEndAsync(ct);
+            await process.WaitForExitAsync(ct);
+
+            return process.ExitCode == 0 ? output.TrimEnd('\r', '\n') : string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
 
     private async Task<bool> CopyToWindowsAsync(Stream stream, CancellationToken ct)

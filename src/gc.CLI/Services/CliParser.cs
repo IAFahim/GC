@@ -17,7 +17,8 @@ public sealed class CliParser
         Output,
         MaxMemory,
         Append,
-        Depth
+        Depth,
+        ExcludeLineIfStart
     }
 
     public Result<CliArguments> Parse(string[] args, GcConfiguration configuration)
@@ -26,6 +27,7 @@ public sealed class CliParser
         var extensions = new List<string>();
         var excludes = new List<string>();
         var presets = new List<string>();
+        var excludeLineIfStart = new List<string>();
         var output = string.Empty;
         var showHelp = false;
         var showVersion = false;
@@ -37,7 +39,7 @@ public sealed class CliParser
         var validateConfig = false;
         var dumpConfig = false;
         var maxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes);
-        var appendMode = false;
+        var appendMode = true; // default to append
         var force = false;
         int? depth = configuration.Discovery.MaxDepth;
 
@@ -74,7 +76,7 @@ public sealed class CliParser
 
             if (state != ParseState.None)
             {
-                ProcessStateArg(arg, state, paths, extensions, excludes, presets, ref output, ref maxMemoryBytes, ref depth);
+                ProcessStateArg(arg, state, paths, extensions, excludes, presets, excludeLineIfStart, ref output, ref maxMemoryBytes, ref depth);
                 if (IsSingleValueState(state))
                 {
                     state = ParseState.None;
@@ -107,6 +109,7 @@ public sealed class CliParser
             Extensions = extensions.ToArray(),
             Excludes = excludes.ToArray(),
             Presets = presets.ToArray(),
+            ExcludeLineIfStart = excludeLineIfStart.ToArray(),
             OutputFile = output,
             ShowHelp = showHelp,
             ShowVersion = showVersion,
@@ -139,6 +142,7 @@ public sealed class CliParser
             "--validate-config" or "--Validate-Config" => "validate-config",
             "--dump-config" or "--Dump-Config" => "dump-config",
             "--append" or "--Append" => "append",
+            "--no-append" or "--No-Append" => "no-append",
             "-f" or "--force" or "--Force" => "force",
             _ => string.Empty
         };
@@ -159,6 +163,7 @@ public sealed class CliParser
             case "validate-config": validateConfig = true; break;
             case "dump-config": dumpConfig = true; break;
             case "append": appendMode = true; break;
+            case "no-append": appendMode = false; break;
             case "force": force = true; break;
         }
     }
@@ -171,6 +176,7 @@ public sealed class CliParser
             "-e" or "--extension" or "--extensions" or "--Extension" or "--Extensions" => ParseState.Extensions,
             "-x" or "--exclude" or "--excludes" or "--Exclude" or "--Excludes" => ParseState.Excludes,
             "--preset" or "--presets" or "--Preset" or "--Presets" => ParseState.Presets,
+            "--exclude-line-if-start" => ParseState.ExcludeLineIfStart,
             "-o" or "--output" or "--Output" => ParseState.Output,
             "--max-memory" or "--Max-Memory" => ParseState.MaxMemory,
             "-d" or "--depth" or "--Depth" => ParseState.Depth,
@@ -184,7 +190,7 @@ public sealed class CliParser
         return state is ParseState.Output or ParseState.MaxMemory or ParseState.Depth;
     }
 
-    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, ref string output, ref long maxMemoryBytes, ref int? depth)
+    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, List<string> excludeLineIfStart, ref string output, ref long maxMemoryBytes, ref int? depth)
     {
         switch (state)
         {
@@ -192,6 +198,10 @@ public sealed class CliParser
             case ParseState.Extensions: ProcessExtensions(arg, extensions); break;
             case ParseState.Excludes: excludes.Add(arg.Replace('\\', '/')); break;
             case ParseState.Presets: presets.Add(arg.ToLowerInvariant()); break;
+            case ParseState.ExcludeLineIfStart: 
+                var v = arg.Equals("\\n") ? "\n" : arg;
+                excludeLineIfStart.Add(v);
+                break;
             case ParseState.Output: output = arg; break;
             case ParseState.MaxMemory: maxMemoryBytes = MemorySizeParser.Parse(arg); break;
             case ParseState.Depth: 
@@ -237,6 +247,7 @@ public sealed class CliParser
             ParseState.Excludes => "--exclude",
             ParseState.Presets => "--preset",
             ParseState.Output => "--output",
+            ParseState.ExcludeLineIfStart => "--exclude-line-if-start",
             ParseState.MaxMemory => "--max-memory",
             ParseState.Depth => "--depth",
             _ => "unknown"

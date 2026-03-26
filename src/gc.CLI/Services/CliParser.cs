@@ -61,16 +61,16 @@ public sealed class CliParser
                 continue;
             }
 
+            if (TryGetNewState(arg, out var newState))
+            {
+                state = newState;
+                continue;
+            }
+
             if (IsFlag(arg, out var flagType))
             {
                 ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force);
                 state = ParseState.None;
-                continue;
-            }
-
-            if (TryGetNewState(arg, out var newState))
-            {
-                state = newState;
                 continue;
             }
 

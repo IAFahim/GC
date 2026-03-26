@@ -1,0 +1,79 @@
+name: Real-World Docker Matrix
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  real-world-test:
+    name: ${{ matrix.os-image }} Real World Test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os-image:
+          - 'ubuntu:latest'
+          - 'alpine:latest'
+          - 'debian:latest'
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Build gc Linux Executable
+      run: |
+        if [[ "${{ matrix.os-image }}" == *"alpine"* ]]; then
+          dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -r linux-musl-x64 --self-contained -o ./gc-bin
+        else
+          dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -r linux-x64 --self-contained -o ./gc-bin
+        fi
+
+    - name: Run Test in Docker
+      uses: addnab/docker-run-action@v3
+      with:
+        image: ${{ matrix.os-image }}
+        options: -v ${{ github.workspace }}:/app -w /app
+        run: |
+          if grep -q "Alpine" /etc/os-release; then
+            apk update && apk add bash git icu-libs
+            export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+          else
+            apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y bash git
+          fi
+          
+          # Clone a real world repository
+          git clone --depth 1 https://github.com/fluentvalidation/fluentvalidation.git /tmp/real-repo
+          
+          # Run gc on the real repository
+          cd /tmp/real-repo
+          
+          # Test 1: Full dump to output file
+          /app/gc-bin/gc -o full_dump.md --force
+          if [ ! -s full_dump.md ]; then
+             echo "Failed Test 1: Full dump file is empty or missing"
+             exit 1
+          fi
+          
+          # Test 2: Preset dotnet
+          /app/gc-bin/gc --preset dotnet -o preset_dump.md --force
+          if [ ! -s preset_dump.md ]; then
+             echo "Failed Test 2: Preset dump file is empty or missing"
+             exit 1
+          fi
+          
+          # Test 3: Exclude line start logic
+          /app/gc-bin/gc -p src -e cs -o excluded_lines_dump.md --exclude-line-if-start "//" --force
+          if grep -q "^[[:space:]]*//" excluded_lines_dump.md; then
+             echo "Failed Test 3: Excluded lines (//) were found in output"
+             exit 1
+          fi
+          
+          echo "Success on ${{ matrix.os-image }}"

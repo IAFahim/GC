@@ -62,10 +62,13 @@ gc --output project_context.md
 | `-p, --paths` | Folders to include (e.g., `src libs`) |
 | `-e, --extension` | File extensions to include (e.g., `js ts`) |
 | `-x, --exclude` | Paths or patterns to skip |
+| `--exclude-line-if-start` | Filter out specific lines that start with these strings (e.g., `//`, `\n`) |
 | `--preset` | Use predefined configurations (`dotnet`, `web`, `python`, etc.) |
 | `-o, --output` | Write to a file instead of the clipboard |
-| `--discovery` | Force discovery mode (`git`, `filesystem`, or `auto`) |
-| `-v, --verbose` | Show file-by-file progress |
+| `--no-append` | Do not append to the current clipboard/file content (appends by default) |
+| `-d, --depth` | Maximum directory depth to penetrate |
+| `-f, --force` | Force filesystem discovery (ignore git) |
+| `-v, --verbose` | Enable verbose logging |
 
 ## Performance
 

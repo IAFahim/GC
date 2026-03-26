@@ -125,19 +125,21 @@ public static class Program
         Console.WriteLine(@"gc - Git Copy (Elite C# Edition)
 USAGE: gc [OPTIONS]
 OPTIONS:
-    -p, --paths <paths>        Filter by starting paths
-    -e, --extension <ext>      Filter by extension
-    -x, --exclude <path>       Exclude folder, path or pattern
-    -o, --output <file>        Save output to file instead of clipboard
-    -f, --force                Force filesystem discovery (ignore git)
-    -d, --depth <number>       Maximum directory depth to penetrate
-    -v, --verbose              Enable verbose logging
-    --init-config               Initialize configuration
-    --validate-config           Validate configuration
-    --dump-config               Show configuration
-    --test                     Run tests
-    --benchmark                Run benchmark
-    --version                  Show version information");
+    -p, --paths <paths>              Filter by starting paths
+    -e, --extension <ext>            Filter by extension
+    -x, --exclude <path>             Exclude folder, path or pattern
+    --exclude-line-if-start <string> Exclude lines starting with this string
+    -o, --output <file>              Save output to file instead of clipboard
+    --no-append                      Do not append to current clipboard/file content
+    -f, --force                      Force filesystem discovery (ignore git)
+    -d, --depth <number>             Maximum directory depth to penetrate
+    -v, --verbose                    Enable verbose logging
+    --init-config                    Initialize configuration
+    --validate-config                Validate configuration
+    --dump-config                    Show configuration
+    --test                           Run tests
+    --benchmark                      Run benchmark
+    --version                        Show version information");
     }
 
     private static void PrintVersion()

@@ -46,7 +46,8 @@ jobs:
             apk update && apk add bash git icu-libs
             export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
           else
-            apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y bash git
+            apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y bash git libicu-dev
+            export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
           fi
           
           # Clone a real world repository

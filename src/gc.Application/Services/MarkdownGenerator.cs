@@ -56,7 +56,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                         
                         foreach (var line in span.EnumerateLines())
                         {
-                            var trimmedLine = line.TrimStart();
+                            var trimmedLine = line.TrimStart().TrimStart('\uFEFF');
                             if (excludeNewline && trimmedLine.IsEmpty)
                                 continue;
                                 
@@ -321,7 +321,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         if (length == 0 && excludeNewline) return;
         
         string lineStr = Utf8NoBom.GetString(lineSequence);
-        var trimmedLine = lineStr.TrimStart();
+        var trimmedLine = lineStr.TrimStart().TrimStart('\uFEFF');
         
         if (excludeNewline && string.IsNullOrWhiteSpace(lineStr)) return;
         

@@ -25,6 +25,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         try
         {
             using var writer = new StreamWriter(outputStream, Utf8NoBom, bufferSize: 8192, leaveOpen: true);
+            writer.AutoFlush = true;
             
             // Sort by path only if configured to do so
             var sortedContents = config.Output.SortByPath 
@@ -152,7 +153,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             }
 
                             // Check safe fence
-                            var sample = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                            var sample = Utf8NoBom.GetString(buffer, 0, bytesRead);
                             var fence = "```";
                             if (sample.Contains("`````")) fence = "``````````";
                             else if (sample.Contains("````")) fence = "``````";
@@ -319,7 +320,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         
         if (length == 0 && excludeNewline) return;
         
-        string lineStr = Encoding.UTF8.GetString(lineSequence);
+        string lineStr = Utf8NoBom.GetString(lineSequence);
         var trimmedLine = lineStr.TrimStart();
         
         if (excludeNewline && string.IsNullOrWhiteSpace(lineStr)) return;

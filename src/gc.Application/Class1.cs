@@ -1,4 +1,4 @@
-﻿namespace gc.Application;
+namespace gc.Application;
 
 public class Class1
 {

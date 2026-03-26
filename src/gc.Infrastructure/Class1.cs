@@ -1,4 +1,4 @@
-﻿namespace gc.Infrastructure;
+namespace gc.Infrastructure;
 
 public class Class1
 {

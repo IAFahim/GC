@@ -285,7 +285,7 @@ public class Test
         // All should complete without errors
         foreach (var task in tasks)
         {
-            Assert.Equal(0, task.Result);
+            Assert.Equal(0, await task);
         }
 
         _output.WriteLine($"✅ Concurrent operations are thread-safe");

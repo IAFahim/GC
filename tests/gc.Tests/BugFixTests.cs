@@ -75,7 +75,7 @@ public class BugFixTests
 
             // Assert
             Assert.True(result.IsSuccess);
-            result.Value.Dispose();
+            result.Value?.Dispose();
         }
         finally
         {
@@ -834,7 +834,7 @@ public class BugFixTests
 
             // Assert - Should fail in explicit git mode
             Assert.False(result.IsSuccess);
-            Assert.Contains("not a git repository", result.Error.ToLowerInvariant());
+            Assert.Contains("not a git repository", result.Error?.ToLowerInvariant() ?? "");
         }
         finally
         {
@@ -890,7 +890,7 @@ public class BugFixTests
     }
 
     [Fact]
-    public void ExceptionHandling_NoUnhandledExceptions()
+    public async Task ExceptionHandling_NoUnhandledExceptions()
     {
         // Arrange - Create scenarios that could throw exceptions
         var fileReader = new FileReader(_logger);
@@ -899,13 +899,13 @@ public class BugFixTests
         var config = BuiltInPresets.GetDefaultConfiguration();
 
         // Act & Assert - None of these should throw
-        var readResult = fileReader.ReadStreamingAsync("/invalid/path/file.txt").Result;
+        var readResult = await fileReader.ReadStreamingAsync("/invalid/path/file.txt");
         Assert.False(readResult.IsSuccess);
 
         var filterResult = fileFilter.FilterFiles(new[] { "/invalid/file.txt" }, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
         Assert.NotNull(filterResult.Value);
 
-        var discoveryResult = discovery.DiscoverFilesAsync("/invalid/path", config, CancellationToken.None).Result;
+        var discoveryResult = await discovery.DiscoverFilesAsync("/invalid/path", config, CancellationToken.None);
         // Discovery might succeed with empty results or fail gracefully
         Assert.NotNull(discoveryResult);
     }

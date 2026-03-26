@@ -21,7 +21,7 @@ public class CliParserTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value.Append);
+        Assert.True(result.Value!.Append);
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public class CliParserTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value.Append);
+        Assert.True(result.Value!.Append);
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class CliParserTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(5, result.Value.Depth);
+        Assert.Equal(5, result.Value!.Depth);
     }
 
     [Fact]
@@ -69,6 +69,6 @@ public class CliParserTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value.Force);
+        Assert.True(result.Value!.Force);
     }
 }

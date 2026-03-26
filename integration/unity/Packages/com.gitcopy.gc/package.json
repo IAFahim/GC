@@ -1,0 +1,39 @@
+{
+  "name": "com.gitcopy.gc",
+  "version": "1.0.0",
+  "displayName": "Git Copy (gc)",
+  "description": "Unity integration for gc - Copy project source code to clipboard for AI context",
+  "unity": "2022.3",
+  "unityRelease": "0f1",
+  "documentationUrl": "https://github.com/IAFahim/gc",
+  "changelogUrl": "https://github.com/IAFahim/gc/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/IAFahim/gc/blob/main/LICENSE",
+  "dependencies": {
+    "com.unity.modules.subsystems": "1.0.0"
+  },
+  "keywords": [
+    "git",
+    "clipboard",
+    "ai",
+    "llm",
+    "context",
+    "documentation"
+  ],
+  "author": {
+    "name": "IAFahim",
+    "email": "",
+    "url": "https://github.com/IAFahim"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IAFahim/gc.git",
+    "directory": "integration/unity/Packages/com.gitcopy.gc"
+  },
+  "samples": [
+    {
+      "displayName": "Git Copy Context",
+      "description": "Copy project source code to clipboard",
+      "path": "Samples~/GitCopy"
+    }
+  ]
+}

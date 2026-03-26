@@ -1,0 +1,23 @@
+{
+  "paths": ["Assets", "Packages"],
+  "exclude": [
+    "**/*.meta",
+    "**/Library/**",
+    "**/Temp/**",
+    "**/Obj/**",
+    "**/Logs/**",
+    "**/MemoryCaptures/**",
+    "**/UserSettings/**",
+    "**/ProjectSettings/**"
+  ],
+  "extension": ["cs", "asmdef", "json", "unity", "prefab", "asset", "ushl", "hlsl", "compute"],
+  "preset": "unity",
+  "output": {
+    "format": "markdown",
+    "includeLineNumbers": true,
+    "groupByDirectory": true
+  },
+  "limits": {
+    "maxFileSize": "1MB"
+  }
+}

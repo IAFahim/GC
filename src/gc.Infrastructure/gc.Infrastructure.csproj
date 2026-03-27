@@ -5,6 +5,10 @@
     <ProjectReference Include="..\gc.Application\gc.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="IoUring" Version="0.4.0-beta1" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

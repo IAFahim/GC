@@ -380,7 +380,9 @@ unsafe
 
 ## Phase 3 — OS Fuckery (est. 3-4 hours)
 
-### 3.1 Linux: Use `io_uring` for batched I/O (via `IoUring` NuGet or P/Invoke)
+### 3.1 ❌ Linux: Use `io_uring` for batched I/O (via `IoUring` NuGet or P/Invoke)
+
+*Skipped - `posix_fadvise` and `readahead` optimizations achieve similar zero-I/O-wait characteristics by warming the page cache before read. io_uring integration would require large architectural changes to `MarkdownGenerator.cs`.*
 
 **What:** Instead of issuing one read() syscall per file, batch ALL file reads into a single io_uring submission. The kernel processes them all concurrently with zero context switches.
 
@@ -405,7 +407,7 @@ ring.WaitForCompletions();
 
 ---
 
-### 3.2 Linux: `O_NOATIME` flag to skip access time updates
+### 3.2 ✅ Linux: `O_NOATIME` flag to skip access time updates
 
 **What:** Every file read updates the access timestamp (atime) unless `noatime` is mounted. This causes a metadata WRITE for every READ.
 
@@ -429,7 +431,7 @@ int fd = open(path, O_RDONLY | O_NOATIME);
 
 ---
 
-### 3.3 `posix_fadvise` / `madvise` — tell kernel about access patterns
+### 3.3 ✅ `posix_fadvise` / `madvise` — tell kernel about access patterns
 
 **What:** Tell the kernel we're reading files sequentially and won't re-read them. Kernel can prefetch aggressively and drop pages after we're done.
 
@@ -455,7 +457,7 @@ posix_fadvise(fd, 0, fileSize, POSIX_FADV_DONTNEED);
 
 ---
 
-### 3.4 Windows: Use `FILE_FLAG_SEQUENTIAL_SCAN`
+### 3.4 ✅ Windows: Use `FILE_FLAG_SEQUENTIAL_SCAN`
 
 **What:** Windows equivalent of `posix_fadvise(SEQUENTIAL)`. Tells the cache manager to prefetch aggressively.
 
@@ -473,7 +475,7 @@ new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
 
 ---
 
-### 3.5 Pre-warm the page cache with `readahead()` / prefetch
+### 3.5 ✅ Pre-warm the page cache with `readahead()` / prefetch
 
 **What:** While we're filtering files (CPU-bound), issue non-blocking readahead hints for files we know we'll read. By the time filtering is done, the files are already in page cache.
 

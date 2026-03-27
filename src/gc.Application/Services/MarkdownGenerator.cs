@@ -93,19 +93,47 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     return;
                                 }
 
-                                using var handle = File.OpenHandle(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, FileOptions.SequentialScan | FileOptions.Asynchronous);
-                                long fileLength = RandomAccess.GetLength(handle);
-                                
-                                if (fileLength <= 10 * 1024 * 1024)
+                                SafeFileHandle handle;
+                                if (OperatingSystem.IsLinux())
                                 {
-                                    int len = (int)fileLength;
-                                    var buffer = ArrayPool<byte>.Shared.Rent(len);
-                                    int bytesRead = await RandomAccess.ReadAsync(handle, buffer.AsMemory(0, len), 0, token);
-                                    await channel.Writer.WriteAsync((index, buffer, bytesRead, null), token);
+                                    // Phase 3.2: O_NOATIME and Phase 3.3: posix_fadvise(SEQUENTIAL)
+                                    // O_RDONLY = 0, O_NOATIME = 0x40000
+                                    int fd = gc.Application.Native.LinuxFastPath.open(content.Entry.Path, 0x40000);
+                                    if (fd < 0)
+                                    {
+                                        // Fallback if O_NOATIME fails (e.g. not owner)
+                                        fd = gc.Application.Native.LinuxFastPath.open(content.Entry.Path, 0);
+                                    }
+                                    if (fd >= 0)
+                                    {
+                                        gc.Application.Native.LinuxFastPath.posix_fadvise(fd, 0, 0, gc.Application.Native.LinuxFastPath.POSIX_FADV_SEQUENTIAL);
+                                        handle = new SafeFileHandle((IntPtr)fd, ownsHandle: true);
+                                    }
+                                    else
+                                    {
+                                        handle = File.OpenHandle(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, FileOptions.SequentialScan | FileOptions.Asynchronous);
+                                    }
                                 }
                                 else
                                 {
-                                    await channel.Writer.WriteAsync((index, null, -1, null), token);
+                                    handle = File.OpenHandle(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, FileOptions.SequentialScan | FileOptions.Asynchronous);
+                                }
+                                
+                                using (handle)
+                                {
+                                    long fileLength = RandomAccess.GetLength(handle);
+                                    
+                                    if (fileLength <= 10 * 1024 * 1024)
+                                    {
+                                        int len = (int)fileLength;
+                                        var buffer = ArrayPool<byte>.Shared.Rent(len);
+                                        int bytesRead = await RandomAccess.ReadAsync(handle, buffer.AsMemory(0, len), 0, token);
+                                        await channel.Writer.WriteAsync((index, buffer, bytesRead, null), token);
+                                    }
+                                    else
+                                    {
+                                        await channel.Writer.WriteAsync((index, null, -1, null), token);
+                                    }
                                 }
                             }
                             catch (Exception ex)

@@ -55,6 +55,10 @@ public sealed class GenerateContextUseCase
             return Result.Success();
         }
 
+        // Phase 3.5: Pre-warm the page cache with readahead() / prefetch
+        var fullPaths = entries.Select(e => Path.Combine(rootPath, e.Path));
+        gc.Application.Native.LinuxFastPath.Prewarm(fullPaths, entries.Count);
+
         _logger.Success("Processing...");
 
         // Stream contents lazily

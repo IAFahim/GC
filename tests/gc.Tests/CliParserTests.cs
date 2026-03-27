@@ -71,4 +71,20 @@ public class CliParserTests
         Assert.True(result.IsSuccess);
         Assert.True(result.Value!.Force);
     }
+
+    [Fact]
+    public void Parse_NoSortFlag_SetsNoSort()
+    {
+        // Arrange
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new[] { "--no-sort" };
+
+        // Act
+        var result = parser.Parse(args, config);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.NoSort);
+    }
 }

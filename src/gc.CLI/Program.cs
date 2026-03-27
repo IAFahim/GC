@@ -100,6 +100,17 @@ public static class Program
             };
         }
 
+        if (cliArgs.NoSort)
+        {
+            config = config with
+            {
+                Output = config.Output with
+                {
+                    SortByPath = false
+                }
+            };
+        }
+
         var result = await useCase.ExecuteAsync(
             Directory.GetCurrentDirectory(),
             config,
@@ -132,6 +143,7 @@ OPTIONS:
     -o, --output <file>              Save output to file instead of clipboard
     --append                         Append to current clipboard/file content
     --no-append                      Do not append (default)
+    --no-sort                        Do not sort output by file path
     -f, --force                      Force filesystem discovery (ignore git)
     -d, --depth <number>             Maximum directory depth to penetrate
     -v, --verbose                    Enable verbose logging

@@ -41,6 +41,7 @@ public sealed class CliParser
         var maxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes);
         var appendMode = false; // default to overwrite
         var force = false;
+        var noSort = false;
         int? depth = configuration.Discovery.MaxDepth;
 
         var state = ParseState.None;
@@ -69,7 +70,7 @@ public sealed class CliParser
 
             if (IsFlag(arg, out var flagType))
             {
-                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force);
+                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort);
                 state = ParseState.None;
                 continue;
             }
@@ -122,6 +123,7 @@ public sealed class CliParser
             ValidateConfig = validateConfig,
             DumpConfig = dumpConfig,
             Append = appendMode,
+            NoSort = noSort,
             Force = force,
             Depth = depth,
             Configuration = configuration
@@ -143,13 +145,14 @@ public sealed class CliParser
             "--dump-config" or "--Dump-Config" => "dump-config",
             "--append" or "--Append" => "append",
             "--no-append" or "--No-Append" => "no-append",
+            "--no-sort" or "--No-Sort" => "no-sort",
             "-f" or "--force" or "--Force" => "force",
             _ => string.Empty
         };
         return !string.IsNullOrEmpty(flagType);
     }
 
-    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force)
+    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort)
     {
         switch (flagType)
         {
@@ -164,6 +167,7 @@ public sealed class CliParser
             case "dump-config": dumpConfig = true; break;
             case "append": appendMode = true; break;
             case "no-append": appendMode = false; break;
+            case "no-sort": noSort = true; break;
             case "force": force = true; break;
         }
     }

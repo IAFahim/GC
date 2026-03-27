@@ -1,3 +1,3 @@
 namespace gc.Domain.Models;
 
-public sealed record FileEntry(string Path, string Extension, string Language, long Size);
+public readonly record struct FileEntry(string Path, string Extension, string Language, long Size);

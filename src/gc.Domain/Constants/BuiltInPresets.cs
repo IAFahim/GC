@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using gc.Domain.Models.Configuration;
 
 namespace gc.Domain.Constants;
@@ -37,7 +38,7 @@ public static class BuiltInPresets
         ".env", "secrets", "credentials"
     ];
 
-    public static readonly Dictionary<string, string> LanguageMappings = new(StringComparer.OrdinalIgnoreCase)
+    public static readonly FrozenDictionary<string, string> LanguageMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["js"] = "javascript",
         ["ts"] = "typescript",
@@ -59,7 +60,7 @@ public static class BuiltInPresets
         ["makefile"] = "makefile",
         ["gemfile"] = "ruby",
         ["rakefile"] = "ruby"
-    };
+    }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     public static Dictionary<string, PresetConfiguration> GetAllPresets()
     {

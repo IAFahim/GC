@@ -20,17 +20,21 @@ public sealed class FileFilter
     public Result<IEnumerable<FileEntry>> FilterFiles(IEnumerable<string> rawFiles, GcConfiguration config, IEnumerable<string> searchPaths, IEnumerable<string> excludePatterns, IEnumerable<string> extensionFilters)
     {
         // Phase 1.1: FrozenSet for O(1) extension lookups with perfect hashing
+        // Phase 4.2: Extensions lookup already uses FrozenSet
         var activeExtensions = ResolveActiveExtensions(extensionFilters);
 
-        // Pre-normalize patterns ONCE — avoid repeated Replace per file
-        var normalizedIgnorePatterns = config.Filters?.SystemIgnoredPatterns?
-            .Select(p => p.Replace('\\', '/'))
-            .ToArray() ?? Array.Empty<string>();
+        var systemIgnored = config.Filters?.SystemIgnoredPatterns ?? Array.Empty<string>();
+        var allExcludes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in systemIgnored) allExcludes.Add(p.Replace('\\', '/'));
+        foreach (var p in excludePatterns) allExcludes.Add(p.Replace('\\', '/'));
+
+        // Phase 4.1: Aho-Corasick automaton for substring checks (O(L) instead of O(P*L))
+        var excludeSearchValues = System.Buffers.SearchValues.Create(allExcludes.ToArray(), StringComparison.OrdinalIgnoreCase);
+
         var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToArray();
-        var excludeArray = excludePatterns.ToArray();
 
         var filtered = rawFiles
-            .Where(path => IsValidPath(path, normalizedSearchPaths, excludeArray, activeExtensions, normalizedIgnorePatterns))
+            .Where(path => IsValidPath(path, normalizedSearchPaths, excludeSearchValues, activeExtensions))
             .Select(path => CreateFileEntry(path, config))
             .Where(entry => entry != null)
             .Cast<FileEntry>()
@@ -125,41 +129,39 @@ public sealed class FileFilter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsValidPath(string path, string[] normalizedSearchPaths, string[] excludePatterns, FrozenSet<string> extensions, string[] normalizedIgnorePatterns)
+    [System.Runtime.CompilerServices.SkipLocalsInit]
+    private static bool IsValidPath(string path, string[] normalizedSearchPaths, System.Buffers.SearchValues<string> excludeSearchValues, FrozenSet<string> extensions)
     {
         var pathSpan = path.AsSpan();
 
-        // Phase 1.1: Extension check using span — zero allocation
+        // Phase 1.1 / 4.2: Extension check using FrozenSet (O(1)) — zero allocation
         if (extensions.Count > 0)
         {
             var fileNameSpan = GetFileNameSpan(pathSpan);
-
+            var dotIdx = fileNameSpan.LastIndexOf('.');
             bool matchesExtension = false;
-            foreach (var ext in extensions)
+
+            var lookup = extensions.GetAlternateLookup<ReadOnlySpan<char>>();
+
+            // Check exact filename match first (e.g., "Dockerfile")
+            if (lookup.Contains(fileNameSpan))
             {
-                // Check ".ext" suffix
-                if (fileNameSpan.Length > ext.Length + 1)
-                {
-                    var extSpan = fileNameSpan[(fileNameSpan.Length - ext.Length)..];
-                    if (fileNameSpan[fileNameSpan.Length - ext.Length - 1] == '.' &&
-                        extSpan.Equals(ext.AsSpan(), StringComparison.OrdinalIgnoreCase))
-                    {
-                        matchesExtension = true;
-                        break;
-                    }
-                }
-                // Check exact filename match (e.g., "Dockerfile")
-                if (fileNameSpan.Equals(ext.AsSpan(), StringComparison.OrdinalIgnoreCase))
+                matchesExtension = true;
+            }
+            // Check extension match
+            else if (dotIdx >= 0 && dotIdx < fileNameSpan.Length - 1)
+            {
+                var extSpan = fileNameSpan[(dotIdx + 1)..];
+                if (lookup.Contains(extSpan))
                 {
                     matchesExtension = true;
-                    break;
                 }
             }
+            
             if (!matchesExtension) return false;
         }
 
         // Phase 1.1: Normalize path without allocation when no backslashes present
-        // Most paths from git are already forward-slash normalized
         string pathNormalized;
         if (path.Contains('\\'))
         {
@@ -167,20 +169,14 @@ public sealed class FileFilter
         }
         else
         {
-            pathNormalized = path; // Zero allocation — reuse same string
+            pathNormalized = path;
         }
         var normalizedSpan = pathNormalized.AsSpan();
 
-        // Check system ignored patterns
-        foreach (var pattern in normalizedIgnorePatterns)
+        // Phase 4.1: Single pass SIMD Aho-Corasick check for all ignores and excludes
+        if (normalizedSpan.ContainsAny(excludeSearchValues))
         {
-            if (normalizedSpan.Contains(pattern.AsSpan(), StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            // Extension-specific patterns (e.g., ".bin")
-            if (pattern.Length > 0 && pattern[0] == '.' &&
-                normalizedSpan.EndsWith(pattern.AsSpan(), StringComparison.OrdinalIgnoreCase))
-                return false;
+            return false;
         }
 
         // Check search paths
@@ -199,13 +195,6 @@ public sealed class FileFilter
                 }
             }
             if (!matchesSearchPath) return false;
-        }
-
-        // Check exclude patterns
-        foreach (var exclude in excludePatterns)
-        {
-            if (normalizedSpan.Contains(exclude.AsSpan(), StringComparison.OrdinalIgnoreCase))
-                return false;
         }
 
         return true;

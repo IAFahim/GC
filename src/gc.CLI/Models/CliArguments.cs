@@ -21,6 +21,7 @@ public sealed record CliArguments
     public bool ValidateConfig { get; init; }
     public bool DumpConfig { get; init; }
     public bool Append { get; init; }
+    public bool NoSort { get; init; }
     public bool Force { get; init; }
     public int? Depth { get; init; }
     public GcConfiguration? Configuration { get; init; }

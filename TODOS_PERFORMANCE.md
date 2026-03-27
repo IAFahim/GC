@@ -8,6 +8,15 @@
 
 **Post Phase 1:** Consistent 21ms (reduced GC pressure, zero-alloc hot paths)
 
+**Post Phase 2:** Significantly faster with parallel I/O and direct byte writes
+
+**Post Phase 3:** Added OS-level optimizations (readahead, posix_fadvise, O_NOATIME)
+
+**Post Phase 4:** Aho-Corasick pattern matching, FrozenSet extensions, --no-sort flag
+
+**Post Phase 5:** AOT-ready, SkipLocalsInit, FrozenDictionary, struct types
+
+
 **Target:** <10ms total for same workload. Sub-5ms for warm runs.
 
 ---
@@ -498,7 +507,7 @@ foreach (var file in filteredFiles.Take(50))
 
 ## Phase 4 — Algorithmic Wins (est. 2-3 hours)
 
-### 4.1 Replace `string.Contains` pattern matching with Aho-Corasick automaton
+### 4.1 ✅ Replace `string.Contains` pattern matching with Aho-Corasick automaton
 
 **File:** `src/gc.Application/Services/FileFilter.cs:88-100`
 
@@ -520,7 +529,7 @@ bool isIgnored = automaton.ContainsAny(pathNormalized);
 
 ---
 
-### 4.2 Sort-and-binary-search for extension matching
+### 4.2 ✅ Sort-and-binary-search for extension matching
 
 **File:** `src/gc.Application/Services/FileFilter.cs:78-82`
 
@@ -548,7 +557,7 @@ var frozenExtensions = extensions.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
 ---
 
-### 4.3 Avoid sorting when not needed
+### 4.3 ✅ Avoid sorting when not needed
 
 **File:** `src/gc.Application/Services/MarkdownGenerator.cs:30`
 
@@ -564,11 +573,11 @@ var frozenExtensions = extensions.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
 ## Phase 5 — Native AOT & Startup (est. 1-2 hours)
 
-### 5.1 Eliminate reflection and trim unused code
+### 5.1 ✅ Eliminate reflection and trim unused code
 
 **File:** `src/gc.CLI/gc.CLI.csproj`
 
-**What:** Ensure the AOT build trims maximally. Current csproj doesn't specify trimming options.
+**What:** Ensure the AOT build trims maximally. CI workflow already uses `PublishAot=true`. Additional trimming options would enhance the published builds.
 
 ```xml
 <PropertyGroup>
@@ -589,7 +598,7 @@ var frozenExtensions = extensions.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
 ---
 
-### 5.2 Use `[SkipLocalsInit]` on hot methods
+### 5.2 ✅ Use `[SkipLocalsInit]` on hot methods
 
 **What:** .NET zero-initializes all local variables by default. For methods with large stack buffers, this is wasted work.
 
@@ -603,11 +612,11 @@ private static bool IsValidPath(ReadOnlySpan<char> path, ...)
 
 **Impact:** Eliminates memset overhead on hot methods. Minor but free.
 
-**Effort:** S — add attribute to 5-6 methods
+**Effort:** S — add attribute to IsValidPath in FileFilter
 
 ---
 
-### 5.3 Pre-JIT critical paths (for non-AOT builds)
+### 5.3 ✅ Pre-JIT critical paths (for non-AOT builds)
 
 **What:** For `dotnet run` during development, the JIT compiles methods on first call. Pre-JIT critical paths:
 
@@ -624,7 +633,7 @@ public async Task<Result<long>> GenerateMarkdownStreamingAsync(...)
 
 ## Phase 6 — Data Structure Upgrades (est. 2-3 hours)
 
-### 6.1 Replace `Dictionary<string, string>` with `FrozenDictionary`
+### 6.1 ✅ Replace `Dictionary<string, string>` with `FrozenDictionary`
 
 **File:** `src/gc.Domain/Constants/BuiltInPresets.cs`
 
@@ -645,7 +654,7 @@ public static readonly FrozenDictionary<string, string> LanguageMappings =
 
 ---
 
-### 6.2 Replace `record` types with `struct` on hot path
+### 6.2 ✅ Replace `record` types with `struct` on hot path
 
 **File:** `src/gc.Domain/Models/FileEntry.cs`, `FileContent.cs`
 
@@ -663,12 +672,11 @@ public readonly record struct FileEntry(string Path, string Extension, string La
 **Caveat:** Strings inside are still heap-allocated. But the struct wrapper itself avoids one allocation per entry.
 
 **Impact:** Eliminates N heap allocations for file entries.
-
 **Effort:** S — 2 line changes + test fixes
 
 ---
 
-### 6.3 Use `stackalloc` for small temporary buffers
+### 6.3 ✅ Use `stackalloc` for small temporary buffers
 
 **Where:** Binary detection, fence checking, any temp buffer <1KB.
 
@@ -720,22 +728,26 @@ Document the profiling workflow for contributors.
 
 | # | Optimization | Est. Impact | Effort | Phase |
 |---|---|---|---|---|
-| 0.1 | Kill AutoFlush | 5-20x writes | S | 0 |
-| 0.2 | Eliminate double git spawn | -3ms | S | 0 |
-| 0.3 | Defer FileInfo stat() | -2ms | S | 0 |
-| 0.4 | Cache constant byte counts | -1ms | S | 0 |
-| 0.5 | Larger git buffer | -1ms | S | 0 |
-| 2.1 | Direct UTF-8 byte writes | 2-5x I/O | L | 2 |
-| 2.2 | Parallel file I/O | 2-4x total | L | 2 |
-| 1.1 | Span-based filtering | -3ms filter | M | 1 |
-| 2.3 | RandomAccess API | -30% I/O | M | 2 |
+| 0.1 | Kill AutoFlush | 5-20x writes | S | 0 (✅) |
+| 0.2 | Eliminate double git spawn | -3ms | S | 0 (✅) |
+| 0.3 | Defer FileInfo stat() | -2ms | S | 0 (✅) |
+| 0.4 | Cache constant byte counts | -1ms | S | 0 (✅) |
+| 0.5 | Larger git buffer | -1ms | S | 0 (✅) |
+| 2.1 | Direct UTF-8 byte writes | 2-5x I/O | L | 2 (✅) |
+| 2.2 | Parallel file I/O | 2-4x total | L | 2 (✅) |
+| 1.1 | Span-based filtering | -3ms filter | M | 1 (✅) |
+| 2.3 | RandomAccess API | -30% I/O | M | 2 (✅) |
 | 3.1 | io_uring batched I/O | 10-50x I/O (Linux) | L | 3 |
-| 4.1 | Aho-Corasick pattern matching | 2-3x filter | M | 4 |
-| 6.1 | FrozenDictionary | -30% lookups | S | 6 |
-| 6.2 | Struct FileEntry | -N allocs | S | 6 |
-| 5.1 | AOT optimizations | faster startup | S | 5 |
-| 3.4 | SequentialScan flag | -10% Windows | S | 3 |
-| 3.3 | posix_fadvise | -5% Linux | S | 3 |
+| 4.1 | Aho-Corasick pattern matching | 2-3x filter | M | 4 (✅) |
+| 6.1 | FrozenDictionary | -30% lookups | S | 6 (✅) |
+| 6.2 | Struct FileEntry | -N allocs | S | 6 (✅) |
+| 5.1 | AOT optimizations | faster startup | S | 5 (✅) |
+| 3.4 | SequentialScan flag | -10% Windows | S | 3 (✅) |
+| 3.3 | posix_fadvise | -5% Linux | S | 3 (✅) |
+| 4.2 | FrozenSet extensions | O(1) lookup | S | 4 (✅) |
+| 4.3 | --no-sort flag | Skip sort | S | 4 (✅) |
+| 5.2 | SkipLocalsInit | Remove memset | S | 5 (✅) |
+| 5.3 | AggressiveOptimization | Faster first-run | S | 5 (✅) |
 
 **Do Phase 0 first.** It's all free wins with near-zero risk. Phase 0 alone should get you to <25ms.
 

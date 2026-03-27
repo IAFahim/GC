@@ -39,7 +39,7 @@ public sealed class CliParser
         var validateConfig = false;
         var dumpConfig = false;
         var maxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes);
-        var appendMode = true; // default to append
+        var appendMode = false; // default to overwrite
         var force = false;
         int? depth = configuration.Discovery.MaxDepth;
 

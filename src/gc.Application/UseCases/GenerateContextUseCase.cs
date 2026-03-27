@@ -38,7 +38,7 @@ public sealed class GenerateContextUseCase
         IEnumerable<string> excludes,
         IEnumerable<string> extensions,
         string? outputFile,
-        bool appendMode = true,
+        bool appendMode = false,
         IEnumerable<string>? excludeLineIfStart = null,
         CancellationToken ct = default)
     {

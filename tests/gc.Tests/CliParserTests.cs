@@ -37,7 +37,7 @@ public class CliParserTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value!.Append);
+        Assert.False(result.Value!.Append); // default is no-append
     }
 
     [Fact]

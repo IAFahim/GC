@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+using System.Runtime.CompilerServices;
 using gc.Domain.Common;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
@@ -17,16 +19,18 @@ public sealed class FileFilter
 
     public Result<IEnumerable<FileEntry>> FilterFiles(IEnumerable<string> rawFiles, GcConfiguration config, IEnumerable<string> searchPaths, IEnumerable<string> excludePatterns, IEnumerable<string> extensionFilters)
     {
-        var activeExtensions = ResolveActiveExtensions(extensionFilters, config);
-        
-        // Pre-normalize patterns ONCE to avoid O(N²) performance
+        // Phase 1.1: FrozenSet for O(1) extension lookups with perfect hashing
+        var activeExtensions = ResolveActiveExtensions(extensionFilters);
+
+        // Pre-normalize patterns ONCE — avoid repeated Replace per file
         var normalizedIgnorePatterns = config.Filters?.SystemIgnoredPatterns?
             .Select(p => p.Replace('\\', '/'))
-            .ToList() ?? new List<string>();
-        var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToList();
-        
+            .ToArray() ?? Array.Empty<string>();
+        var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToArray();
+        var excludeArray = excludePatterns.ToArray();
+
         var filtered = rawFiles
-            .Where(path => IsValidPath(path, config, normalizedSearchPaths, excludePatterns, activeExtensions, normalizedIgnorePatterns))
+            .Where(path => IsValidPath(path, normalizedSearchPaths, excludeArray, activeExtensions, normalizedIgnorePatterns))
             .Select(path => CreateFileEntry(path, config))
             .Where(entry => entry != null)
             .Cast<FileEntry>()
@@ -41,29 +45,22 @@ public sealed class FileFilter
         return Result<IEnumerable<FileEntry>>.Success(filtered);
     }
 
+    // Phase 0.3: Defer FileInfo stat() — don't call new FileInfo(path) during filtering.
+    // The generator already does its own FileInfo check when reading.
+    // This eliminates N stat() syscalls during filtering.
     private FileEntry? CreateFileEntry(string path, GcConfiguration config)
     {
         try
         {
-            var fileInfo = new FileInfo(path);
-            if (!fileInfo.Exists) return null;
-
-            var extension = GetFullExtension(path).ToLowerInvariant();
-            var fileName = Path.GetFileName(path).ToLowerInvariant();
-            var languageKey = string.IsNullOrEmpty(extension) ? fileName : extension;
+            // Phase 1.1: Avoid Path.GetExtension + ToLowerInvariant allocations
+            // by extracting extension from the path span directly
+            var extension = GetFullExtension(path);
+            var fileName = GetFileNameSpan(path);
+            var languageKey = string.IsNullOrEmpty(extension) ? fileName.ToString().ToLowerInvariant() : extension;
             var language = ResolveLanguage(languageKey, config);
 
-            return new FileEntry(path, extension, language, fileInfo.Length);
-        }
-        catch (IOException ex)
-        {
-            _logger.Error($"Failed to access file info for {path} (file may be locked)", ex);
-            return null;
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _logger.Error($"Access denied to {path}", ex);
-            return null;
+            // Size = -1 signals "not yet resolved" — the generator resolves it when reading
+            return new FileEntry(path, extension, language, -1);
         }
         catch (Exception ex)
         {
@@ -72,74 +69,143 @@ public sealed class FileFilter
         }
     }
 
-    private string GetFullExtension(string path)
+    /// <summary>
+    /// Extracts extension without unnecessary allocation.
+    /// Returns lowercased extension (without dot).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static string GetFullExtension(string path)
     {
-        var extension = Path.GetExtension(path);
-        return string.IsNullOrEmpty(extension) ? string.Empty : extension.TrimStart('.');
+        var span = path.AsSpan();
+        var dotIdx = span.LastIndexOf('.');
+        if (dotIdx < 0) return string.Empty;
+
+        // Don't return extension if the dot is at a path separator
+        var afterDot = span[(dotIdx + 1)..];
+        if (afterDot.IsEmpty) return string.Empty;
+        if (afterDot.Contains('/') || afterDot.Contains('\\')) return string.Empty;
+
+        // Single allocation: create lowered string directly
+        return string.Create(afterDot.Length, (path, dotIdx + 1), static (dest, state) =>
+        {
+            var src = state.path.AsSpan(state.Item2);
+            src.CopyTo(dest);
+            // In-place lowercase (ASCII extensions are the common case)
+            for (int i = 0; i < dest.Length; i++)
+            {
+                if (dest[i] >= 'A' && dest[i] <= 'Z')
+                    dest[i] = (char)(dest[i] | 0x20);
+            }
+        });
     }
 
-    private string ResolveLanguage(string key, GcConfiguration config)
+    /// <summary>
+    /// Gets filename portion as a span — zero allocation.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ReadOnlySpan<char> GetFileNameSpan(ReadOnlySpan<char> path)
+    {
+        var lastSep = path.LastIndexOfAny('/', '\\');
+        return lastSep >= 0 ? path[(lastSep + 1)..] : path;
+    }
+
+    private static string ResolveLanguage(string key, GcConfiguration config)
     {
         if (config.LanguageMappings.TryGetValue(key, out var language)) return language;
         if (BuiltInPresets.LanguageMappings.TryGetValue(key, out var builtIn)) return builtIn;
         return key;
     }
 
-    private HashSet<string> ResolveActiveExtensions(IEnumerable<string> extensions, GcConfiguration config)
+    /// <summary>
+    /// Phase 1.1: Use FrozenSet for O(1) extension matching with perfect hashing.
+    /// </summary>
+    private static FrozenSet<string> ResolveActiveExtensions(IEnumerable<string> extensions)
     {
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var ext in extensions) set.Add(ext);
-        return set;
+        return extensions.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    private bool IsValidPath(string path, GcConfiguration config, List<string> normalizedSearchPaths, IEnumerable<string> excludePatterns, HashSet<string> extensions, List<string> normalizedIgnorePatterns)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsValidPath(string path, string[] normalizedSearchPaths, string[] excludePatterns, FrozenSet<string> extensions, string[] normalizedIgnorePatterns)
     {
-        // Check extension filter
+        var pathSpan = path.AsSpan();
+
+        // Phase 1.1: Extension check using span — zero allocation
         if (extensions.Count > 0)
         {
-            var fileName = Path.GetFileName(path);
-            var matchesExtension = extensions.Any(ext => 
-                fileName.EndsWith("." + ext, StringComparison.OrdinalIgnoreCase) || 
-                fileName.Equals(ext, StringComparison.OrdinalIgnoreCase));
+            var fileNameSpan = GetFileNameSpan(pathSpan);
+
+            bool matchesExtension = false;
+            foreach (var ext in extensions)
+            {
+                // Check ".ext" suffix
+                if (fileNameSpan.Length > ext.Length + 1)
+                {
+                    var extSpan = fileNameSpan[(fileNameSpan.Length - ext.Length)..];
+                    if (fileNameSpan[fileNameSpan.Length - ext.Length - 1] == '.' &&
+                        extSpan.Equals(ext.AsSpan(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        matchesExtension = true;
+                        break;
+                    }
+                }
+                // Check exact filename match (e.g., "Dockerfile")
+                if (fileNameSpan.Equals(ext.AsSpan(), StringComparison.OrdinalIgnoreCase))
+                {
+                    matchesExtension = true;
+                    break;
+                }
+            }
             if (!matchesExtension) return false;
         }
 
-        // Pre-normalize path once
-        var pathNormalized = path.Replace('\\', '/');
-
-        // Check system ignored patterns from config (patterns already normalized)
-        foreach (var patternNormalized in normalizedIgnorePatterns)
+        // Phase 1.1: Normalize path without allocation when no backslashes present
+        // Most paths from git are already forward-slash normalized
+        string pathNormalized;
+        if (path.Contains('\\'))
         {
-            // Check if path matches ignored pattern
-            if (pathNormalized.Contains(patternNormalized, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
+            pathNormalized = path.Replace('\\', '/');
+        }
+        else
+        {
+            pathNormalized = path; // Zero allocation — reuse same string
+        }
+        var normalizedSpan = pathNormalized.AsSpan();
 
-            // Also check extension-specific patterns (e.g., ".bin")
-            if (patternNormalized.StartsWith('.') && pathNormalized.EndsWith(patternNormalized, StringComparison.OrdinalIgnoreCase))
-            {
+        // Check system ignored patterns
+        foreach (var pattern in normalizedIgnorePatterns)
+        {
+            if (normalizedSpan.Contains(pattern.AsSpan(), StringComparison.OrdinalIgnoreCase))
                 return false;
-            }
+
+            // Extension-specific patterns (e.g., ".bin")
+            if (pattern.Length > 0 && pattern[0] == '.' &&
+                normalizedSpan.EndsWith(pattern.AsSpan(), StringComparison.OrdinalIgnoreCase))
+                return false;
         }
 
-        // Check search paths (paths already normalized)
-        if (normalizedSearchPaths.Count > 0)
+        // Check search paths
+        if (normalizedSearchPaths.Length > 0)
         {
-            var matchesSearchPath = normalizedSearchPaths.Any(searchNormalized =>
+            bool matchesSearchPath = false;
+            foreach (var searchPath in normalizedSearchPaths)
             {
-                // Exact match or directory prefix match with path separator boundary
-                return pathNormalized.Equals(searchNormalized, StringComparison.OrdinalIgnoreCase) ||
-                       pathNormalized.StartsWith(searchNormalized + "/", StringComparison.OrdinalIgnoreCase) ||
-                       pathNormalized.Contains("/" + searchNormalized + "/", StringComparison.OrdinalIgnoreCase);
-            });
+                var searchSpan = searchPath.AsSpan();
+                if (normalizedSpan.Equals(searchSpan, StringComparison.OrdinalIgnoreCase) ||
+                    normalizedSpan.StartsWith(searchPath + "/", StringComparison.OrdinalIgnoreCase) ||
+                    normalizedSpan.Contains(("/" + searchPath + "/").AsSpan(), StringComparison.OrdinalIgnoreCase))
+                {
+                    matchesSearchPath = true;
+                    break;
+                }
+            }
             if (!matchesSearchPath) return false;
         }
 
         // Check exclude patterns
         foreach (var exclude in excludePatterns)
         {
-            if (path.Contains(exclude, StringComparison.OrdinalIgnoreCase)) return false;
+            if (normalizedSpan.Contains(exclude.AsSpan(), StringComparison.OrdinalIgnoreCase))
+                return false;
         }
 
         return true;

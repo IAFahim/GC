@@ -1,6 +1,7 @@
-using System.Text;
 using System.Buffers;
 using System.IO.Pipelines;
+using System.Runtime.CompilerServices;
+using System.Text;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
@@ -14,6 +15,20 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     private readonly IFileReader _reader;
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
+    // Phase 0.4: Cache constant byte counts — avoid redundant Encoding.GetByteCount on every file
+    private static readonly int NewlineByteCount = Utf8NoBom.GetByteCount(Environment.NewLine);
+    private static readonly int DefaultFenceByteCount = Utf8NoBom.GetByteCount("```");
+
+    // Phase 0.1: Buffer size for StreamWriter — 64KB instead of 8KB
+    private const int WriterBufferSize = 65536;
+
+    // Phase 1.4: SearchValues for SIMD-accelerated binary detection
+    private static readonly SearchValues<byte> NullByte = SearchValues.Create([(byte)0]);
+
+    // Phase 1.2: Thread-local StringBuilder to avoid per-file allocation during line exclusion
+    [ThreadStatic]
+    private static StringBuilder? t_lineExclusionBuilder;
+
     public MarkdownGenerator(ILogger logger, IFileReader reader)
     {
         _logger = logger;
@@ -24,8 +39,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     {
         try
         {
-            using var writer = new StreamWriter(outputStream, Utf8NoBom, bufferSize: 8192, leaveOpen: true);
-            writer.AutoFlush = true;
+            // Phase 0.1: Removed AutoFlush (was forcing kernel flush on EVERY write).
+            // Single FlushAsync at the end. Buffer increased from 8KB to 64KB.
+            using var writer = new StreamWriter(outputStream, Utf8NoBom, bufferSize: WriterBufferSize, leaveOpen: true);
             
             // Sort by path only if configured to do so
             var sortedContents = config.Output.SortByPath 
@@ -51,7 +67,10 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                         var excludeNewline = excludeArray.Contains("\n");
                         
                         var span = actualContent.AsSpan();
-                        var sb = new StringBuilder(actualContent.Length);
+                        // Phase 1.2: Reuse thread-local StringBuilder — avoid allocation per file
+                        var sb = t_lineExclusionBuilder ??= new StringBuilder(4096);
+                        sb.Clear();
+                        sb.EnsureCapacity(actualContent.Length);
                         bool first = true;
                         
                         foreach (var line in span.EnumerateLines())
@@ -85,12 +104,13 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                     if (actualContent.Contains("`````")) fence = "``````````";
                     else if (actualContent.Contains("````")) fence = "``````";
 
+                    // Phase 0.4: Use cached NewlineByteCount instead of recalculating per file
                     var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
-                    var headerBytes = Utf8NoBom.GetByteCount(header) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                    var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
                     var fenceLine = $"{fence}{content.Entry.Language}";
-                    var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + Utf8NoBom.GetByteCount(Environment.NewLine);
-                    var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + Utf8NoBom.GetByteCount(Environment.NewLine);
-                    var newlineBytes = Utf8NoBom.GetByteCount(Environment.NewLine);
+                    var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
+                    var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + NewlineByteCount;
+                    var newlineBytes = NewlineByteCount;
                     var contentBytes = Utf8NoBom.GetByteCount(actualContent);
 
                     // Skip the final trailing new line that gets added by splitting or when not needed
@@ -118,37 +138,41 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                 else
                 {
                     // Streaming processing - open file ONCE
-                    var fileInfo = new FileInfo(content.Entry.Path);
-                    if (fileInfo.Length > maxFileSize)
-                    {
-                        var errorMsg = $"[File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes)]";
-                        await writer.WriteLineAsync(errorMsg);
-                        totalBytes += Utf8NoBom.GetByteCount(errorMsg) + Utf8NoBom.GetByteCount(Environment.NewLine);
-                        continue;
-                    }
-
                     try
                     {
-                        using var fs = new FileStream(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        var fileInfo = new FileInfo(content.Entry.Path);
+                        if (!fileInfo.Exists)
+                        {
+                            var errorMsg = $"[Error reading file: File not found: {content.Entry.Path}]";
+                            await writer.WriteLineAsync(errorMsg);
+                            totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
+                            continue;
+                        }
+                        if (fileInfo.Length > maxFileSize)
+                        {
+                            var errorMsg = $"[File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes)]";
+                            await writer.WriteLineAsync(errorMsg);
+                            totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
+                            continue;
+                        }
+
+                        // Phase 3.4: SequentialScan hint for OS read-ahead prefetch
+                        using var fs = new FileStream(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 0, FileOptions.SequentialScan);
                         
-                        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(8192);
+                        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(65536);
                         try
                         {
                             var bytesRead = await fs.ReadAsync(buffer.AsMemory(0, buffer.Length), ct);
                             
-                            // Check binary (SIMD optimized)
-                            bool isBinary = false;
+                            // Phase 1.4: Binary check using SearchValues — SIMD accelerated via AVX2/SSE2
                             int checkLen = Math.Min(bytesRead, 4096);
-                            if (buffer.AsSpan(0, checkLen).Contains((byte)0))
-                            {
-                                isBinary = true;
-                            }
+                            bool isBinary = buffer.AsSpan(0, checkLen).ContainsAny(NullByte);
 
                             if (isBinary)
                             {
                                 var errorMsg = $"[Skipping binary file: {content.Entry.Path}]";
                                 await writer.WriteLineAsync(errorMsg);
-                                totalBytes += Utf8NoBom.GetByteCount(errorMsg) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                                totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                 continue;
                             }
 
@@ -158,17 +182,16 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             if (sample.Contains("`````")) fence = "``````````";
                             else if (sample.Contains("````")) fence = "``````";
 
-                            // Calculate bytes
+                            // Phase 0.4: Use cached NewlineByteCount
                             var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
-                            var headerBytes = Utf8NoBom.GetByteCount(header) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                            var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
                             var fenceLine = $"{fence}{content.Entry.Language}";
-                            var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + Utf8NoBom.GetByteCount(Environment.NewLine);
-                            var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + Utf8NoBom.GetByteCount(Environment.NewLine);
-                            var newlineBytes = Utf8NoBom.GetByteCount(Environment.NewLine);
+                            var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
+                            var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + NewlineByteCount;
+                            var newlineBytes = NewlineByteCount;
                             
                             await writer.WriteLineAsync(header);
                             await writer.WriteLineAsync(fenceLine);
-                            await writer.FlushAsync();
 
                             long contentBytesWritten = 0;
                             
@@ -248,7 +271,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                         _logger.Error($"Failed to stream file {content.Entry.Path}", ex);
                         var errorMsg = $"[Error reading file: {ex.Message}]";
                         await writer.WriteLineAsync(errorMsg);
-                        totalBytes += Utf8NoBom.GetByteCount(errorMsg) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                        totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                     }
                 }
             }
@@ -256,16 +279,16 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             await WriteProjectStructureAsync(writer, fileList, config);
             await writer.FlushAsync();
 
-            // Add project structure bytes to total
-            var projectStructureBytes = Utf8NoBom.GetByteCount(config.Markdown.ProjectStructureHeader) + Utf8NoBom.GetByteCount(Environment.NewLine);
-            projectStructureBytes += Utf8NoBom.GetByteCount($"{config.Markdown.Fence}text") + Utf8NoBom.GetByteCount(Environment.NewLine);
+            // Phase 0.4: Use cached NewlineByteCount for project structure section
+            var projectStructureBytes = Utf8NoBom.GetByteCount(config.Markdown.ProjectStructureHeader) + NewlineByteCount;
+            projectStructureBytes += Utf8NoBom.GetByteCount($"{config.Markdown.Fence}text") + NewlineByteCount;
             foreach (var path in fileList)
             {
-                projectStructureBytes += Utf8NoBom.GetByteCount(path) + Utf8NoBom.GetByteCount(Environment.NewLine);
+                projectStructureBytes += Utf8NoBom.GetByteCount(path) + NewlineByteCount;
             }
-            projectStructureBytes += Utf8NoBom.GetByteCount(config.Markdown.Fence) + Utf8NoBom.GetByteCount(Environment.NewLine);
+            projectStructureBytes += Utf8NoBom.GetByteCount(config.Markdown.Fence) + NewlineByteCount;
             // Add one more newline that's written after the closing fence
-            projectStructureBytes += Utf8NoBom.GetByteCount(Environment.NewLine);
+            projectStructureBytes += NewlineByteCount;
             totalBytes += projectStructureBytes;
 
             return Result<long>.Success(totalBytes);

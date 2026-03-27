@@ -130,7 +130,8 @@ OPTIONS:
     -x, --exclude <path>             Exclude folder, path or pattern
     --exclude-line-if-start <string> Exclude lines starting with this string
     -o, --output <file>              Save output to file instead of clipboard
-    --no-append                      Do not append to current clipboard/file content
+    --append                         Append to current clipboard/file content
+    --no-append                      Do not append (default)
     -f, --force                      Force filesystem discovery (ignore git)
     -d, --depth <number>             Maximum directory depth to penetrate
     -v, --verbose                    Enable verbose logging

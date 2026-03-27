@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Text;
 using gc.Domain.Common;
@@ -32,7 +33,10 @@ public sealed class FileDiscovery : IFileDiscovery
                 return await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
             }
 
-            if (mode == "auto" && await IsGitRepositoryAsync(rootPath, ct))
+            // Phase 0.2: In auto mode, skip IsGitRepositoryAsync entirely.
+            // Just try git ls-files directly — if it fails, fall back to filesystem.
+            // This eliminates one process spawn (~2-5ms) on every run.
+            if (mode == "auto")
             {
                 var gitFiles = await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
                 if (gitFiles.IsSuccess)
@@ -106,9 +110,13 @@ public sealed class FileDiscovery : IFileDiscovery
             using var process = Process.Start(psi);
             if (process == null) return Result<IEnumerable<string>>.Failure("Failed to start git process");
 
-            var files = new List<string>();
+            // Phase 1.3: Pre-size list to avoid repeated resizing (typical repos have 50-500 files)
+            var files = new List<string>(256);
             var stream = process.StandardOutput.BaseStream;
-            var buffer = new byte[4096];
+            // Phase 0.5: 64KB buffer instead of 4KB — reduces read syscalls by 16x
+            var buffer = ArrayPool<byte>.Shared.Rent(65536);
+            try
+            {
             int bytesRead;
             var position = 0;
 
@@ -163,6 +171,11 @@ public sealed class FileDiscovery : IFileDiscovery
                 {
                     position = 0;
                 }
+            }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
             }
 
             await process.WaitForExitAsync(ct);

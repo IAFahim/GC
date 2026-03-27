@@ -808,9 +808,14 @@ public class BugFixTests
         // Act
         var result = fileFilter.FilterFiles(files, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
 
-        // Assert - Should return empty result, not throw
+        // Assert - Should not throw. Phase 0.3: FileFilter no longer stat()s during filtering,
+        // so non-existent files pass through to the generator which handles them gracefully.
         Assert.NotNull(result.Value);
-        Assert.Empty(result.Value);
+        // The entry is created with Size=-1 (deferred stat), which is correct
+        foreach (var entry in result.Value!)
+        {
+            Assert.Equal(-1, entry.Size);
+        }
     }
 
     [Fact]

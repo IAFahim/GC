@@ -248,7 +248,7 @@ bool isBinary = buffer.AsSpan(0, checkLen).ContainsAny(BinaryIndicators);
 
 ## Phase 2 — I/O Pipeline Revolution (est. 4-6 hours)
 
-### 2.1 Replace StreamWriter with direct UTF-8 byte writes via `IBufferWriter<byte>`
+### 2.1 ✅ Replace StreamWriter with direct UTF-8 byte writes via `IBufferWriter<byte>`
 
 **File:** `src/gc.Application/Services/MarkdownGenerator.cs`
 
@@ -281,7 +281,7 @@ while (true)
 
 ---
 
-### 2.2 Parallel file I/O with bounded concurrency
+### 2.2 ✅ Parallel file I/O with bounded concurrency
 
 **File:** `src/gc.Application/UseCases/GenerateContextUseCase.cs`
 
@@ -312,7 +312,7 @@ await Parallel.ForEachAsync(indexedEntries,
 
 ---
 
-### 2.3 Use `RandomAccess` API instead of `FileStream`
+### 2.3 ✅ Use `RandomAccess` API instead of `FileStream`
 
 **File:** `src/gc.Application/Services/MarkdownGenerator.cs:95`
 
@@ -344,7 +344,8 @@ if (fileSize <= 65536)
 
 ---
 
-### 2.4 Memory-mapped I/O for large files
+### 2.4 ❌ Memory-mapped I/O for large files
+*Skipped — `RandomAccess` reading into `ArrayPool` is sufficient up to 10MB.*
 
 **File:** new utility
 

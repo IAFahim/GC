@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -74,10 +74,33 @@ jobs:
       run: |
         Compress-Archive -Path publish/${{ matrix.target }}/* -DestinationPath ${{ matrix.asset_name }}
 
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.asset_name }}
+        path: ${{ matrix.asset_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
+
+    - name: Generate Checksums
+      run: |
+        cd artifacts
+        sha256sum * > ../checksums.txt
+
     - name: Upload Release Asset
       uses: softprops/action-gh-release@v1
       with:
-        files: ${{ matrix.asset_name }}
+        files: |
+          artifacts/*
+          checksums.txt
         tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}
         prerelease: false

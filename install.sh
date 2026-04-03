@@ -93,23 +93,36 @@ fi
 # Download and verify checksum
 CHECKSUM_URL="https://github.com/${REPO_NAME}/releases/download/${LATEST_VERSION}/checksums.txt"
 echo -e "${GREEN}[4/7]${NC} Downloading checksums for verification..."
-if ! curl -L -o "$TEMP_DIR/checksums.txt" "$CHECKSUM_URL"; then
-    echo -e "${RED}Error: Failed to download checksums${NC}"
-    echo -e "${RED}Security: Cannot verify binary integrity. Aborting installation.${NC}"
-    exit 1
-fi
+if ! curl -fL -s -o "$TEMP_DIR/checksums.txt" "$CHECKSUM_URL"; then
+    echo -e "${YELLOW}Warning: Checksums not available for version ${LATEST_VERSION}. Skipping verification.${NC}"
+else
+    # Verify checksum
+    echo -e "${GREEN}[5/7]${NC} Verifying checksum integrity..."
+    cd "$TEMP_DIR"
+    
+    CHECKSUM_SUCCESS=false
+    if command -v sha256sum >/dev/null 2>&1; then
+        if sha256sum -c checksums.txt --ignore-missing 2>/dev/null | grep -q "${ARCHIVE_NAME}: OK"; then
+            CHECKSUM_SUCCESS=true
+        fi
+    elif command -v shasum >/dev/null 2>&1; then
+        if shasum -a 256 -c checksums.txt --ignore-missing 2>/dev/null | grep -q "${ARCHIVE_NAME}: OK"; then
+            CHECKSUM_SUCCESS=true
+        fi
+    else
+        echo -e "${YELLOW}Warning: Neither sha256sum nor shasum found. Skipping checksum verification.${NC}"
+        CHECKSUM_SUCCESS=true
+    fi
 
-# Verify checksum
-echo -e "${GREEN}[5/7]${NC} Verifying checksum integrity..."
-cd "$TEMP_DIR"
-if ! sha256sum -c checksums.txt --ignore-missing 2>/dev/null | grep -q "${ARCHIVE_NAME}: OK"; then
-    echo -e "${RED}Error: Checksum verification failed!${NC}"
-    echo -e "${RED}Security: Binary integrity check failed. Aborting installation.${NC}"
-    echo -e "${YELLOW}This could indicate a corrupted download or potential security issue.${NC}"
-    exit 1
+    if [ "$CHECKSUM_SUCCESS" = false ]; then
+        echo -e "${RED}Error: Checksum verification failed!${NC}"
+        echo -e "${RED}Security: Binary integrity check failed. Aborting installation.${NC}"
+        echo -e "${YELLOW}This could indicate a corrupted download or potential security issue.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}Checksum verified successfully${NC}"
+    cd - > /dev/null
 fi
-echo -e "${GREEN}Checksum verified successfully${NC}"
-cd - > /dev/null
 
 # Extract archive
 echo -e "${GREEN}[6/7]${NC} Extracting archive and installing binary..."

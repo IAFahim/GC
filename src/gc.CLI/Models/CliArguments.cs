@@ -24,5 +24,7 @@ public sealed record CliArguments
     public bool NoSort { get; init; }
     public bool Force { get; init; }
     public int? Depth { get; init; }
+    public bool ShowHistory { get; init; }
+    public int? HistoryIndex { get; init; }
     public GcConfiguration? Configuration { get; init; }
 }

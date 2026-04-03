@@ -43,6 +43,8 @@ public sealed class CliParser
         var force = false;
         var noSort = false;
         int? depth = configuration.Discovery.MaxDepth;
+        var showHistory = false;
+        int? historyIndex = null;
 
         var state = ParseState.None;
         var onlyPaths = false;
@@ -70,7 +72,15 @@ public sealed class CliParser
 
             if (IsFlag(arg, out var flagType))
             {
-                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort);
+                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort, ref showHistory);
+                state = ParseState.None;
+                continue;
+            }
+
+            // Check if this is a numeric index for --history
+            if (showHistory && historyIndex is null && int.TryParse(arg, out var idx) && idx > 0)
+            {
+                historyIndex = idx;
                 state = ParseState.None;
                 continue;
             }
@@ -126,6 +136,8 @@ public sealed class CliParser
             NoSort = noSort,
             Force = force,
             Depth = depth,
+            ShowHistory = showHistory,
+            HistoryIndex = historyIndex,
             Configuration = configuration
         });
     }
@@ -147,12 +159,13 @@ public sealed class CliParser
             "--no-append" or "--No-Append" => "no-append",
             "--no-sort" or "--No-Sort" => "no-sort",
             "-f" or "--force" or "--Force" => "force",
+            "--history" or "--History" => "history",
             _ => string.Empty
         };
         return !string.IsNullOrEmpty(flagType);
     }
 
-    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort)
+    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort, ref bool showHistory)
     {
         switch (flagType)
         {
@@ -169,6 +182,7 @@ public sealed class CliParser
             case "no-append": appendMode = false; break;
             case "no-sort": noSort = true; break;
             case "force": force = true; break;
+            case "history": showHistory = true; break;
         }
     }
 

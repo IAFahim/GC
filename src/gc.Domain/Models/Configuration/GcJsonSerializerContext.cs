@@ -17,6 +17,7 @@ namespace gc.Domain.Models.Configuration;
 [JsonSerializable(typeof(LoggingConfiguration))]
 [JsonSerializable(typeof(Dictionary<string, PresetConfiguration>))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
+[JsonSerializable(typeof(List<HistoryEntry>))]
 public partial class GcJsonSerializerContext : JsonSerializerContext
 {
 }

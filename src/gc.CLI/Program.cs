@@ -46,6 +46,15 @@ public static class Program
         if (cliArgs.RunTests) { TestRunner.RunTests(); return 0; }
         if (cliArgs.RunRealBenchmark) { await RealBenchmark.RunRealBenchmarkAsync(logger); return 0; }
 
+        // Setup History
+        var historyService = new HistoryService(configLoader.GetConfigDirectory(), logger);
+
+        // Handle --history
+        if (cliArgs.ShowHistory)
+        {
+            return await HistoryMenu.ShowAsync(historyService, parser, config, cliArgs.HistoryIndex, cts.Token);
+        }
+
         // Setup UseCase
         var discovery = new FileDiscovery(logger);
         var filter = new FileFilter(logger);
@@ -57,10 +66,21 @@ public static class Program
         
         var useCase = new GenerateContextUseCase(discovery, filter, reader, generator, clipboard, logger);
 
-        return await ExecuteAsync(cliArgs, config, useCase, configService, logger, cts.Token);
+        var exitCode = await ExecuteAsync(cliArgs, config, useCase, configService, logger, cts.Token);
+
+        // Record successful runs in history
+        if (exitCode == 0)
+        {
+            await historyService.AddEntryAsync(
+                Directory.GetCurrentDirectory(),
+                args.Where(a => !a.Equals("--history", StringComparison.OrdinalIgnoreCase)).ToArray(),
+                cts.Token);
+        }
+
+        return exitCode;
     }
 
-    private static async Task<int> ExecuteAsync(CliArguments cliArgs, GcConfiguration config, GenerateContextUseCase useCase, ConfigurationService configService, ILogger logger, CancellationToken ct)
+    internal static async Task<int> ExecuteAsync(CliArguments cliArgs, GcConfiguration config, GenerateContextUseCase useCase, ConfigurationService configService, ILogger logger, CancellationToken ct)
     {
         if (cliArgs.InitConfig) return (await configService.InitializeConfigAsync()).IsSuccess ? 0 : 1;
         if (cliArgs.ValidateConfig) return configService.ValidateConfig(config).IsSuccess ? 0 : 1;
@@ -146,6 +166,7 @@ OPTIONS:
     --no-sort                        Do not sort output by file path
     -f, --force                      Force filesystem discovery (ignore git)
     -d, --depth <number>             Maximum directory depth to penetrate
+    --history [N]                    Show run history (optionally re-run entry N)
     -v, --verbose                    Enable verbose logging
     --init-config                    Initialize configuration
     --validate-config                Validate configuration

@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
     - uses: actions/checkout@v4
 
@@ -26,10 +28,37 @@ jobs:
           ${{ runner.os }}-nuget-
 
     - name: Restore dependencies
-      run: dotnet restore src/gc.CLI/gc.CLI.csproj
+      run: dotnet restore gc.sln
+
+    - name: Lint
+      run: dotnet format gc.sln --verify-no-changes --no-restore --verbosity diagnostic
 
     - name: Build
-      run: dotnet build src/gc.CLI/gc.CLI.csproj --configuration Release --no-restore
+      run: dotnet build gc.sln --configuration Release --no-restore
 
     - name: Test
-      run: dotnet test gc.sln --no-restore --verbosity normal
+      run: >
+        dotnet test gc.sln
+        --no-restore
+        --no-build
+        --verbosity normal
+        --logger "trx;LogFileName=test-results.trx"
+        --results-directory ./test-results
+
+    - name: Cluster Tests
+      run: >
+        dotnet test gc.sln
+        --no-restore
+        --no-build
+        --verbosity normal
+        --filter 'FullyQualifiedName~Cluster'
+        --logger "trx;LogFileName=cluster-test-results.trx"
+        --results-directory ./test-results
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: ./test-results/*.trx
+        retention-days: 7

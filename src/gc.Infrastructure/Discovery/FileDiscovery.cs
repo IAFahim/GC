@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
+using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
 
 namespace gc.Infrastructure.Discovery;
@@ -51,6 +52,237 @@ public sealed class FileDiscovery : IFileDiscovery
         {
             _logger.Error("File discovery failed", ex);
             return Result<IEnumerable<string>>.Failure(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Discovers all git repositories within a cluster directory.
+    /// Scans the directory tree looking for .git folders/submodules and returns info about each repo.
+    /// Handles edge cases: nested repos, submodules, permission errors, empty dirs, symlinks.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(string clusterRoot, ClusterConfiguration clusterConfig, CancellationToken ct = default)
+    {
+        try
+        {
+            if (!Directory.Exists(clusterRoot))
+            {
+                return Result<IReadOnlyList<RepoInfo>>.Failure($"Cluster directory does not exist: {clusterRoot}");
+            }
+
+            var skipDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "node_modules", ".git", ".svn", ".hg", "bin", "obj", "dist", "build",
+                "target", "out", ".vs", ".idea", "coverage", ".next", ".nuxt",
+                "__pycache__", "venv", ".env"
+            };
+
+            // Add user-specified skip directories
+            if (clusterConfig.SkipDirectories != null)
+            {
+                foreach (var skip in clusterConfig.SkipDirectories)
+                {
+                    if (!string.IsNullOrWhiteSpace(skip))
+                        skipDirs.Add(skip);
+                }
+            }
+
+            var maxDepth = clusterConfig.MaxDepth > 0 ? clusterConfig.MaxDepth : 2;
+            var repos = new List<RepoInfo>();
+            var visitedRealPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            await ScanForGitReposAsync(clusterRoot, clusterRoot, skipDirs, maxDepth, repos, visitedRealPaths, ct);
+
+            if (repos.Count == 0)
+            {
+                _logger.Warning($"No git repositories found in {clusterRoot}");
+                return Result<IReadOnlyList<RepoInfo>>.Success(repos);
+            }
+
+            // Validate each discovered repo
+            for (int i = 0; i < repos.Count; i++)
+            {
+                var repo = repos[i];
+                if (!repo.IsValid)
+                {
+                    // Already marked invalid during scan
+                    continue;
+                }
+
+                var isValid = await IsGitRepositoryAsync(repo.RootPath, ct);
+                repos[i] = repo with { IsValid = isValid, Error = isValid ? null : "Git validation failed" };
+            }
+
+            // Filter to only valid repos
+            var validRepos = repos.Where(r => r.IsValid).ToList();
+            var invalidCount = repos.Count - validRepos.Count;
+
+            if (invalidCount > 0)
+            {
+                _logger.Warning($"{invalidCount} repo(s) failed validation and were skipped");
+                foreach (var invalid in repos.Where(r => !r.IsValid))
+                {
+                    _logger.Debug($"  Skipped: {invalid.RelativePath} - {invalid.Error}");
+                }
+            }
+
+            _logger.Success($"Discovered {validRepos.Count} git repos in cluster directory");
+            return Result<IReadOnlyList<RepoInfo>>.Success(validRepos);
+        }
+        catch (OperationCanceledException)
+        {
+            return Result<IReadOnlyList<RepoInfo>>.Failure("Operation cancelled");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Cluster discovery failed", ex);
+            return Result<IReadOnlyList<RepoInfo>>.Failure(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Recursively scans a directory for git repositories.
+    /// Handles edge cases: symlink cycles, permission errors, nested git repos.
+    /// Stops descending into a directory once a .git is found (it's a repo root, not a parent).
+    /// </summary>
+    private async Task ScanForGitReposAsync(
+        string currentDir,
+        string clusterRoot,
+        HashSet<string> skipDirs,
+        int maxDepth,
+        List<RepoInfo> repos,
+        HashSet<string> visitedRealPaths,
+        CancellationToken ct,
+        int currentDepth = 0)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        // Resolve real path to detect symlink cycles
+        string realPath;
+        try
+        {
+            realPath = Path.GetFullPath(currentDir);
+            var dirInfo = new DirectoryInfo(currentDir);
+            var linkTarget = dirInfo.ResolveLinkTarget(returnFinalTarget: true);
+            if (linkTarget != null)
+            {
+                realPath = linkTarget.FullName;
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _logger.Debug($"Access denied scanning: {currentDir}");
+            return;
+        }
+        catch (IOException ex)
+        {
+            _logger.Debug($"I/O error scanning: {currentDir} - {ex.Message}");
+            return;
+        }
+
+        if (!visitedRealPaths.Add(realPath))
+        {
+            // Symlink cycle detected
+            _logger.Debug($"Skipping already-visited path (possible symlink cycle): {currentDir}");
+            return;
+        }
+
+        // Check if this directory is itself a git repo
+        bool isGitRepo = false;
+        try
+        {
+            // Check for .git directory (standard repo) or .git file (submodule/worktree)
+            var gitPath = Path.Combine(currentDir, ".git");
+            if (Directory.Exists(gitPath) || File.Exists(gitPath))
+            {
+                isGitRepo = true;
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _logger.Debug($"Access denied checking .git in: {currentDir}");
+            return;
+        }
+
+        if (isGitRepo)
+        {
+            var relativePath = Path.GetRelativePath(clusterRoot, currentDir).Replace('\\', '/');
+            var name = Path.GetFileName(currentDir);
+            repos.Add(new RepoInfo
+            {
+                RootPath = currentDir,
+                RelativePath = relativePath,
+                Name = name,
+                IsValid = true // Will be validated later
+            });
+            _logger.Debug($"Found git repo: {relativePath}");
+
+            // IMPORTANT: Do NOT descend into a git repo's subdirectories looking for more repos
+            // UNLESS we want to support nested repos (submodules). For submodules, .git is a file
+            // pointing to ../.git/modules/..., and the submodule's own submodules would be in .git/modules/.
+            // We skip descending to avoid duplicate discovery of parent repos.
+            return;
+        }
+
+        // Not a git repo — scan subdirectories if we haven't exceeded max depth
+        if (currentDepth >= maxDepth)
+        {
+            return;
+        }
+
+        string[] subdirectories;
+        try
+        {
+            subdirectories = Directory.GetDirectories(currentDir);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _logger.Debug($"Access denied listing directory: {currentDir}");
+            return;
+        }
+        catch (IOException ex)
+        {
+            _logger.Debug($"I/O error listing directory: {currentDir} - {ex.Message}");
+            return;
+        }
+
+        foreach (var subdir in subdirectories)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var dirName = Path.GetFileName(subdir);
+
+            // Skip ignored directories
+            if (skipDirs.Contains(dirName))
+            {
+                continue;
+            }
+
+            // Skip hidden directories (start with .) unless they might be project roots
+            // e.g., don't skip .config, .github repos
+            if (dirName.StartsWith('.') && dirName != ".github")
+            {
+                // Still scan .github directories but skip most hidden dirs
+                if (dirName.Length > 1 && !dirName.Equals(".github", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+            }
+
+            // Skip symlink directories when FollowSymlinks is false
+            try
+            {
+                var subdirInfo = new DirectoryInfo(subdir);
+                if ((subdirInfo.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
+                {
+                    // Symlink — still scan it (cycle detection is handled above)
+                    // but log it for debug visibility
+                    _logger.Debug($"Following symlink: {subdir}");
+                }
+            }
+            catch (UnauthorizedAccessException) { continue; }
+            catch (IOException) { continue; }
+
+            await ScanForGitReposAsync(subdir, clusterRoot, skipDirs, maxDepth, repos, visitedRealPaths, ct, currentDepth + 1);
         }
     }
 

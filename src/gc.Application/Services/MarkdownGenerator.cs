@@ -47,7 +47,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             var writer = PipeWriter.Create(outputStream, pipeOptions);
             
             var sortedContents = config.Output.SortByPath 
-                ? contents.OrderBy(c => c.Entry.Path, StringComparer.OrdinalIgnoreCase)
+                ? contents.OrderBy(c => c.Entry.DisplayPath ?? c.Entry.Path, StringComparer.OrdinalIgnoreCase)
                 : contents;
 
             long totalBytes = 0;
@@ -84,7 +84,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 var fileInfo = new FileInfo(content.Entry.Path);
                                 if (!fileInfo.Exists)
                                 {
-                                    await channel.Writer.WriteAsync((index, null, 0, $"File not found: {content.Entry.Path}"), token);
+                                    await channel.Writer.WriteAsync((index, null, 0, $"File not found: {content.Entry.DisplayPath ?? content.Entry.Path}"), token);
                                     return;
                                 }
                                 if (fileInfo.Length > maxFileSize)
@@ -138,7 +138,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             }
                             catch (Exception ex)
                             {
-                                _logger.Error($"Failed to read file {content.Entry.Path}", ex);
+                                _logger.Error($"Failed to read file {content.Entry.DisplayPath ?? content.Entry.Path}", ex);
                                 await channel.Writer.WriteAsync((index, null, 0, ex.Message), token);
                             }
                         });
@@ -208,7 +208,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             if (actualContent.Contains("`````")) fence = "``````````";
                             else if (actualContent.Contains("````")) fence = "``````";
 
-                            var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
+                            var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.DisplayPath ?? content.Entry.Path, StringComparison.OrdinalIgnoreCase);
                             var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
                             var fenceLine = $"{fence}{content.Entry.Language}";
                             var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
@@ -233,7 +233,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             WriteStringLine(writer, fence);
                             WriteStringLine(writer, "");
 
-                            fileList.Add(content.Entry.Path);
+                            fileList.Add(content.Entry.DisplayPath ?? content.Entry.Path);
                             totalBytes += entryTotalBytes;
                         }
                         else
@@ -250,7 +250,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             {
                                 // Fallback for massive files (streamed sequentially to avoid OOM)
                                 // Not implemented here to keep test small, we'll just skip them in this draft
-                                var errorMsg = $"[File too large for fast streaming: {content.Entry.Path}]";
+                                var errorMsg = $"[File too large for fast streaming: {content.Entry.DisplayPath ?? content.Entry.Path}]";
                                 WriteStringLine(writer, errorMsg);
                                 totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                 continue;
@@ -262,7 +262,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                             if (isBinary)
                             {
-                                var errorMsg = $"[Skipping binary file: {content.Entry.Path}]";
+                                var errorMsg = $"[Skipping binary file: {content.Entry.DisplayPath ?? content.Entry.Path}]";
                                 WriteStringLine(writer, errorMsg);
                                 totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                 continue;
@@ -273,7 +273,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             if (sample.Contains("`````")) fence = "``````````";
                             else if (sample.Contains("````")) fence = "``````";
 
-                            var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.Path, StringComparison.OrdinalIgnoreCase);
+                            var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.DisplayPath ?? content.Entry.Path, StringComparison.OrdinalIgnoreCase);
                             var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
                             var fenceLine = $"{fence}{content.Entry.Language}";
                             var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
@@ -347,7 +347,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 return Result<long>.Failure($"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes).");
                             }
 
-                            fileList.Add(content.Entry.Path);
+                            fileList.Add(content.Entry.DisplayPath ?? content.Entry.Path);
                             totalBytes += entryTotalBytes;
                         }
                     }
@@ -371,6 +371,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             projectStructureBytes += Utf8NoBom.GetByteCount($"{config.Markdown.Fence}text") + NewlineByteCount;
             foreach (var path in fileList)
             {
+                if (path.StartsWith('[')) continue; // Skip virtual entries
                 projectStructureBytes += Utf8NoBom.GetByteCount(path) + NewlineByteCount;
             }
             projectStructureBytes += Utf8NoBom.GetByteCount(config.Markdown.Fence) + NewlineByteCount;
@@ -413,6 +414,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
         foreach (var path in filePaths)
         {
+            // Skip virtual entries (cluster headers/separators) — they're metadata, not real files
+            if (path.StartsWith('[')) continue;
             WriteStringLine(writer, path);
         }
 

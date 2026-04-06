@@ -1,5 +1,53 @@
+# .NET Build Output
 bin/
 obj/
+out/
 /packages/
 riderModule.iml
-/_ReSharper.Caches/benchmark_results.txt
+/_ReSharper.Caches/
+benchmark_results.txt
+
+# Visual Studio user-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio auto-generated directory
+.vs/
+
+# JetBrains Rider
+.idea/
+
+# dotnet publish output
+publish/
+
+# Test results
+test-results/
+*.trx
+TestResults/
+
+# Build artifacts
+artifacts/
+
+# BenchmarkDotNet
+BenchmarkDotNet.Artifacts/
+
+# Code coverage
+coverage/
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/

@@ -131,7 +131,80 @@ public static class Program
             };
         }
 
-        var result = await useCase.ExecuteAsync(
+        // Handle cluster mode
+        if (cliArgs.Cluster)
+        {
+            var clusterDir = string.IsNullOrEmpty(cliArgs.ClusterDir)
+                ? Directory.GetCurrentDirectory()
+                : Path.GetFullPath(cliArgs.ClusterDir);
+
+            if (!Directory.Exists(clusterDir))
+            {
+                logger.Error($"Cluster directory does not exist: {clusterDir}");
+                return 1;
+            }
+
+            // Cluster mode preserves repo-by-repo order from BuildClusterContents.
+            // Sorting would break the interleaved header/file structure.
+            config = config with
+            {
+                Output = config.Output with { SortByPath = false }
+            };
+
+            // Apply cluster depth if specified via CLI
+            if (cliArgs.ClusterDepth.HasValue)
+            {
+                var existingCluster = config.Discovery?.Cluster ?? new ClusterConfiguration();
+                config = config with
+                {
+                    Discovery = (config.Discovery ?? new DiscoveryConfiguration()) with
+                    {
+                        Cluster = existingCluster with
+                        {
+                            Enabled = true,
+                            MaxDepth = cliArgs.ClusterDepth.Value
+                        }
+                    }
+                };
+            }
+            else if (config.Discovery?.Cluster == null || !config.Discovery.Cluster.Enabled)
+            {
+                // Enable cluster mode with defaults
+                config = config with
+                {
+                    Discovery = (config.Discovery ?? new DiscoveryConfiguration()) with
+                    {
+                        Cluster = (config.Discovery?.Cluster ?? new ClusterConfiguration()) with
+                        {
+                            Enabled = true
+                        }
+                    }
+                };
+            }
+
+            logger.Info($"Cluster mode: scanning {clusterDir} for git repositories...");
+
+            var result = await useCase.ExecuteClusterAsync(
+                clusterDir,
+                config,
+                cliArgs.Paths,
+                cliArgs.Excludes,
+                cliArgs.Extensions,
+                cliArgs.OutputFile,
+                cliArgs.Append,
+                cliArgs.ExcludeLineIfStart,
+                ct);
+
+            if (!result.IsSuccess)
+            {
+                logger.Error(result.Error!);
+                return 1;
+            }
+
+            return 0;
+        }
+
+        var normalResult = await useCase.ExecuteAsync(
             Directory.GetCurrentDirectory(),
             config,
             cliArgs.Paths,
@@ -142,9 +215,9 @@ public static class Program
             cliArgs.ExcludeLineIfStart,
             ct);
 
-        if (!result.IsSuccess)
+        if (!normalResult.IsSuccess)
         {
-            logger.Error(result.Error!);
+            logger.Error(normalResult.Error!);
             return 1;
         }
 
@@ -155,30 +228,47 @@ public static class Program
     {
         Console.WriteLine(@"gc - Git Copy (Elite C# Edition)
 USAGE: gc [OPTIONS]
-OPTIONS:
+
+DISCOVERY:
+    -f, --force                      Force filesystem discovery (ignore git)
+    -d, --depth <number>             Maximum directory depth to penetrate
+
+FILTERING:
     -p, --paths <paths>              Filter by starting paths
     -e, --extension <ext>            Filter by extension
     -x, --exclude <path>             Exclude folder, path or pattern
     --exclude-line-if-start <string> Exclude lines starting with this string
+    --preset <name>                  Use a built-in preset (web,backend,dotnet,etc)
+
+OUTPUT:
     -o, --output <file>              Save output to file instead of clipboard
     --append                         Append to current clipboard/file content
     --no-append                      Do not append (default)
     --no-sort                        Do not sort output by file path
-    -f, --force                      Force filesystem discovery (ignore git)
-    -d, --depth <number>             Maximum directory depth to penetrate
-    --history [N]                    Show run history (optionally re-run entry N)
-    -v, --verbose                    Enable verbose logging
+
+CLUSTER MODE:
+    --cluster                        Enable cluster mode (batch process repos)
+    --cluster-dir <path>             Directory to scan for repos (default: CWD)
+    --cluster-depth <number>         Max depth to scan for repos (default: 2)
+
+CONFIGURATION:
     --init-config                    Initialize configuration
     --validate-config                Validate configuration
     --dump-config                    Show configuration
+
+OTHER:
+    --history [N]                    Show run history (optionally re-run entry N)
+    -v, --verbose                    Enable verbose logging
+    --debug                          Enable debug logging
     --test                           Run tests
     --benchmark                      Run benchmark
-    --version                        Show version information");
+    --version                        Show version information
+    -h, --help                       Show this help message");
     }
 
     private static void PrintVersion()
     {
-        Console.WriteLine("gc version 1.0.0");
-        Console.WriteLine("Git Copy (Elite C# Edition)");
+        Console.WriteLine("gc version 1.1.0");
+        Console.WriteLine("Git Copy (Elite C# Edition) with Cluster Mode");
     }
 }

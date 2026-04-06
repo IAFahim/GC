@@ -207,7 +207,26 @@ public sealed class ConfigurationLoader
         {
             Mode = source.Mode ?? target.Mode,
             UseGit = source.UseGit,
-            FollowSymlinks = source.FollowSymlinks
+            FollowSymlinks = source.FollowSymlinks,
+            Cluster = MergeCluster(target.Cluster, source.Cluster)
+        };
+    }
+
+    private ClusterConfiguration? MergeCluster(ClusterConfiguration? target, ClusterConfiguration? source)
+    {
+        if (source == null) return target;
+        if (target == null) return source;
+
+        return target with
+        {
+            Enabled = source.Enabled,
+            MaxDepth = source.MaxDepth > 0 ? source.MaxDepth : target.MaxDepth,
+            RepoSeparator = source.RepoSeparator ?? target.RepoSeparator,
+            IncludeRepoHeader = source.IncludeRepoHeader,
+            MaxParallelRepos = source.MaxParallelRepos > 0 ? source.MaxParallelRepos : target.MaxParallelRepos,
+            SkipDirectories = source.SkipDirectories?.Length > 0 ? source.SkipDirectories : target.SkipDirectories,
+            IncludeRootFiles = source.IncludeRootFiles,
+            FailFast = source.FailFast
         };
     }
 

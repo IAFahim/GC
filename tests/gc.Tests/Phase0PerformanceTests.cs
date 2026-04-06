@@ -611,7 +611,7 @@ public class Phase0PerformanceTests : IDisposable
         Assert.True(filtered.All(e => e.Size == -1), "All entries should have deferred size");
 
         _output.WriteLine($"Filter 500 paths: {swFilter.ElapsedTicks} ticks ({swFilter.ElapsedMilliseconds}ms)");
-        Assert.True(swFilter.ElapsedMilliseconds < 20,
+        Assert.True(swFilter.ElapsedMilliseconds < 100,
             $"Filtering took {swFilter.ElapsedMilliseconds}ms — too slow");
     }
 

@@ -10,6 +10,7 @@ namespace gc.Domain.Models.Configuration;
 [JsonSerializable(typeof(GcConfiguration))]
 [JsonSerializable(typeof(LimitsConfiguration))]
 [JsonSerializable(typeof(DiscoveryConfiguration))]
+[JsonSerializable(typeof(ClusterConfiguration))]
 [JsonSerializable(typeof(FiltersConfiguration))]
 [JsonSerializable(typeof(PresetConfiguration))]
 [JsonSerializable(typeof(MarkdownConfiguration))]

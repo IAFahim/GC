@@ -140,7 +140,18 @@ public static class BuiltInPresets
             {
                 Mode = "auto",
                 UseGit = true,
-                FollowSymlinks = false
+                FollowSymlinks = false,
+                Cluster = new ClusterConfiguration
+                {
+                    Enabled = false,
+                    MaxDepth = 2,
+                    RepoSeparator = "---",
+                    IncludeRepoHeader = true,
+                    MaxParallelRepos = 0,
+                    SkipDirectories = [],
+                    IncludeRootFiles = false,
+                    FailFast = false
+                }
             },
             Filters = new FiltersConfiguration
             {

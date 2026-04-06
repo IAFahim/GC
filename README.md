@@ -69,6 +69,32 @@ gc --output project_context.md
 | `-d, --depth` | Maximum directory depth to penetrate |
 | `-f, --force` | Force filesystem discovery (ignore git) |
 | `-v, --verbose` | Enable verbose logging |
+| `--cluster` | Enable cluster mode for multi-repo processing |
+| `--cluster-dir` | Directory containing multiple git repos (default: current dir) |
+| `--cluster-depth` | Max depth to search for git repos (default: 5) |
+
+## Cluster Mode
+
+Cluster mode lets you process multiple Git repositories at once by pointing `gc` at a parent directory containing several repos. It discovers each `.git`-backed subdirectory and consolidates all their source files into a single Markdown document.
+
+```bash
+# Process all repos in ~/projects and copy to clipboard
+gc --cluster --cluster-dir ~/projects
+
+# Process all repos, filtering to C# files only, and save to a file
+gc --cluster --cluster-dir ~/projects --extension cs --output all-code.md
+
+# Limit how deep gc searches for git repos
+gc --cluster --cluster-dir ~/projects --cluster-depth 3 --preset dotnet
+```
+
+### How it works
+
+1. `gc` scans `--cluster-dir` (or the current directory) for subdirectories containing a `.git` folder, up to `--cluster-depth` levels deep (default: 5).
+2. Each discovered repo is processed independently, respecting its own `.gitignore`.
+3. All results are merged into a single output (clipboard or file).
+
+All existing filters work with cluster mode -- including `--extension`, `--exclude`, `--preset`, `--paths`, `--depth`, and `--exclude-line-if-start`.
 
 ## Performance
 

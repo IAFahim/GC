@@ -67,6 +67,36 @@ public sealed class ConfigurationValidator
             if (mode != "auto" && mode != "git" && mode != "filesystem")
                 errors.Add($"Invalid DiscoveryMode: '{discovery.Mode}'. Must be: auto, git, or filesystem");
         }
+
+        // Validate cluster configuration if present
+        if (discovery.Cluster != null)
+        {
+            ValidateCluster(discovery.Cluster, errors, warnings);
+        }
+    }
+
+    private static void ValidateCluster(ClusterConfiguration cluster, List<string> errors, List<string> warnings)
+    {
+        if (cluster.MaxDepth < 0)
+            errors.Add($"Cluster MaxDepth must be non-negative, got: {cluster.MaxDepth}");
+
+        if (cluster.MaxDepth > 10)
+            warnings.Add($"Cluster MaxDepth is very high ({cluster.MaxDepth}), this may be slow");
+
+        if (cluster.MaxParallelRepos < 0)
+            errors.Add($"Cluster MaxParallelRepos must be non-negative, got: {cluster.MaxParallelRepos}");
+
+        if (string.IsNullOrWhiteSpace(cluster.RepoSeparator))
+            warnings.Add("Cluster RepoSeparator is empty, repos will be concatenated without visual separation");
+
+        if (cluster.SkipDirectories != null)
+        {
+            foreach (var skip in cluster.SkipDirectories)
+            {
+                if (string.IsNullOrWhiteSpace(skip))
+                    warnings.Add("Empty entry in Cluster SkipDirectories");
+            }
+        }
     }
 
     private static void ValidateFilters(FiltersConfiguration? filters, List<string> errors, List<string> warnings)

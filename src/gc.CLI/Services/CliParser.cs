@@ -18,7 +18,9 @@ public sealed class CliParser
         MaxMemory,
         Append,
         Depth,
-        ExcludeLineIfStart
+        ExcludeLineIfStart,
+        ClusterDir,
+        ClusterDepth
     }
 
     public Result<CliArguments> Parse(string[] args, GcConfiguration configuration)
@@ -45,6 +47,9 @@ public sealed class CliParser
         int? depth = configuration.Discovery.MaxDepth;
         var showHistory = false;
         int? historyIndex = null;
+        var cluster = false;
+        var clusterDir = string.Empty;
+        int? clusterDepth = null;
 
         var state = ParseState.None;
         var onlyPaths = false;
@@ -72,7 +77,7 @@ public sealed class CliParser
 
             if (IsFlag(arg, out var flagType))
             {
-                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort, ref showHistory);
+                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort, ref showHistory, ref cluster);
                 state = ParseState.None;
                 continue;
             }
@@ -87,7 +92,7 @@ public sealed class CliParser
 
             if (state != ParseState.None)
             {
-                ProcessStateArg(arg, state, paths, extensions, excludes, presets, excludeLineIfStart, ref output, ref maxMemoryBytes, ref depth);
+                ProcessStateArg(arg, state, paths, extensions, excludes, presets, excludeLineIfStart, ref output, ref maxMemoryBytes, ref depth, ref clusterDir, ref clusterDepth);
                 if (IsSingleValueState(state))
                 {
                     state = ParseState.None;
@@ -138,7 +143,10 @@ public sealed class CliParser
             Depth = depth,
             ShowHistory = showHistory,
             HistoryIndex = historyIndex,
-            Configuration = configuration
+            Configuration = configuration,
+            Cluster = cluster,
+            ClusterDir = clusterDir,
+            ClusterDepth = clusterDepth
         });
     }
 
@@ -160,12 +168,13 @@ public sealed class CliParser
             "--no-sort" or "--No-Sort" => "no-sort",
             "-f" or "--force" or "--Force" => "force",
             "--history" or "--History" => "history",
+            "--cluster" or "--Cluster" => "cluster",
             _ => string.Empty
         };
         return !string.IsNullOrEmpty(flagType);
     }
 
-    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort, ref bool showHistory)
+    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort, ref bool showHistory, ref bool cluster)
     {
         switch (flagType)
         {
@@ -183,6 +192,7 @@ public sealed class CliParser
             case "no-sort": noSort = true; break;
             case "force": force = true; break;
             case "history": showHistory = true; break;
+            case "cluster": cluster = true; break;
         }
     }
 
@@ -198,6 +208,8 @@ public sealed class CliParser
             "-o" or "--output" or "--Output" => ParseState.Output,
             "--max-memory" or "--Max-Memory" => ParseState.MaxMemory,
             "-d" or "--depth" or "--Depth" => ParseState.Depth,
+            "--cluster-dir" or "--Cluster-Dir" => ParseState.ClusterDir,
+            "--cluster-depth" or "--Cluster-Depth" => ParseState.ClusterDepth,
             _ => ParseState.None
         };
         return state != ParseState.None;
@@ -205,10 +217,10 @@ public sealed class CliParser
 
     private static bool IsSingleValueState(ParseState state)
     {
-        return state is ParseState.Output or ParseState.MaxMemory or ParseState.Depth;
+        return state is ParseState.Output or ParseState.MaxMemory or ParseState.Depth or ParseState.ClusterDir or ParseState.ClusterDepth;
     }
 
-    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, List<string> excludeLineIfStart, ref string output, ref long maxMemoryBytes, ref int? depth)
+    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, List<string> excludeLineIfStart, ref string output, ref long maxMemoryBytes, ref int? depth, ref string clusterDir, ref int? clusterDepth)
     {
         switch (state)
         {
@@ -224,6 +236,10 @@ public sealed class CliParser
             case ParseState.MaxMemory: maxMemoryBytes = MemorySizeParser.Parse(arg); break;
             case ParseState.Depth: 
                 if (int.TryParse(arg, out var d)) depth = d;
+                break;
+            case ParseState.ClusterDir: clusterDir = arg.Replace('\\', '/'); break;
+            case ParseState.ClusterDepth:
+                if (int.TryParse(arg, out var cd) && cd > 0) clusterDepth = cd;
                 break;
         }
     }
@@ -268,6 +284,8 @@ public sealed class CliParser
             ParseState.ExcludeLineIfStart => "--exclude-line-if-start",
             ParseState.MaxMemory => "--max-memory",
             ParseState.Depth => "--depth",
+            ParseState.ClusterDir => "--cluster-dir",
+            ParseState.ClusterDepth => "--cluster-depth",
             _ => "unknown"
         };
     }

@@ -136,8 +136,6 @@ public sealed class DynamicCompressor
         }
 
         candidates.Sort((a, b) => b.Savings.CompareTo(a.Savings));
-        if (candidates.Count > maxCount)
-            candidates.Capacity = maxCount;
 
         return candidates.Take(maxCount).ToList();
     }

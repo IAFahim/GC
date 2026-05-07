@@ -4,7 +4,7 @@ using System.Text;
 
 namespace gc.Application.Services;
 
-internal sealed class AhoCorasick
+public sealed class AhoCorasick
 {
     private readonly int[] _gotoFunc;
     private readonly int[] _fail;

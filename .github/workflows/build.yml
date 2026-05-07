@@ -36,9 +36,12 @@ jobs:
     - name: Build
       run: dotnet build gc.sln --configuration Release --no-restore
 
+    - name: Prepare test results directory
+      run: mkdir -p ./test-results
+
     - name: Test
       run: >
-        dotnet test gc.sln
+        dotnet test tests/gc.Tests/gc.Tests.csproj
         --no-restore
         --no-build
         --verbosity normal
@@ -47,7 +50,7 @@ jobs:
 
     - name: Cluster Tests
       run: >
-        dotnet test gc.sln
+        dotnet test tests/gc.Tests/gc.Tests.csproj
         --no-restore
         --no-build
         --verbosity normal

@@ -43,7 +43,6 @@ jobs:
       run: >
         dotnet test tests/gc.Tests/gc.Tests.csproj
         --no-restore
-        --no-build
         --verbosity normal
         --logger "trx;LogFileName=test-results.trx"
         --results-directory ./test-results
@@ -52,7 +51,6 @@ jobs:
       run: >
         dotnet test tests/gc.Tests/gc.Tests.csproj
         --no-restore
-        --no-build
         --verbosity normal
         --filter 'FullyQualifiedName~Cluster'
         --logger "trx;LogFileName=cluster-test-results.trx"

@@ -262,6 +262,7 @@ public sealed class GenerateContextUseCase
         CancellationToken ct)
     {
         var crusher = brainMode ? new BrainCrusher() : null;
+        var dynamicCompressor = brainMode ? new DynamicCompressor() : null;
 
         if (!string.IsNullOrEmpty(outputFile))
         {
@@ -275,22 +276,48 @@ public sealed class GenerateContextUseCase
             bool shouldAppend = appendMode && File.Exists(outputFile);
             FileMode fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
 
-            using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-
-            // Write Brain Mode dictionary header BEFORE the streamed content
-            if (crusher != null)
+            // When dynamic compression is active, buffer to memory first
+            // Memory is bounded by maxMemoryBytes config
+            if (dynamicCompressor != null)
             {
-                var headerBytes = Encoding.UTF8.GetBytes(crusher.GetDictionaryHeader());
-                await fs.WriteAsync(headerBytes, ct);
+                using var ms = new MemoryStream();
+
+                // Write static Brain Mode header
+                if (crusher != null)
+                {
+                    var headerBytes = Encoding.UTF8.GetBytes(crusher.GetDictionaryHeader());
+                    await ms.WriteAsync(headerBytes, ct);
+                }
+
+                var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, crusher, ct);
+                if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
+
+                // Dynamic compression pass
+                ms.Position = 0;
+                using var reader = new StreamReader(ms, Encoding.UTF8);
+                var rawOutput = await reader.ReadToEndAsync(ct);
+
+                var dynResult = dynamicCompressor.Compress(rawOutput);
+                var finalOutput = dynResult.Legend + dynResult.Output;
+                var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
+
+                using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                await fs.WriteAsync(finalBytes, ct);
+
+                string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
+                string dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
+                _logger.Success($"{action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
+
+                return Result.Success();
             }
 
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, fs, config, excludeLineIfStart, crusher, ct);
-            if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
+            using var fs2 = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
-            string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-            string brainTag = crusher != null ? "🧠 " : "✔ ";
-            string brainInfo = crusher != null ? " | BrainMode ON" : "";
-            _logger.Success($"{brainTag}{action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)}{brainInfo} | Tokens: ~{genResult.Value / 4}");
+            var genResult2 = await _generator.GenerateMarkdownStreamingAsync(contents, fs2, config, excludeLineIfStart, crusher, ct);
+            if (!genResult2.IsSuccess) return Result.Failure(genResult2.Error!);
+
+            string action2 = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
+            _logger.Success($"✔ {action2} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(genResult2.Value)} | Tokens: ~{genResult2.Value / 4}");
 
             return Result.Success();
         }
@@ -298,7 +325,7 @@ public sealed class GenerateContextUseCase
         {
             using var ms = new MemoryStream();
 
-            // Write Brain Mode dictionary header first
+            // Write static Brain Mode header first
             if (crusher != null)
             {
                 var headerBytes = Encoding.UTF8.GetBytes(crusher.GetDictionaryHeader());
@@ -308,14 +335,37 @@ public sealed class GenerateContextUseCase
             var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, crusher, ct);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-            ms.Position = 0;
+            // Dynamic compression pass (clipboard path already buffers)
+            Stream finalStream = ms;
+            DynamicCompressor.CompressResult? dynResult = null;
 
-            var clipResult = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
+            if (dynamicCompressor != null)
+            {
+                ms.Position = 0;
+                using var reader = new StreamReader(ms, Encoding.UTF8);
+                var rawOutput = await reader.ReadToEndAsync(ct);
+
+                var dr = dynamicCompressor.Compress(rawOutput);
+                var finalOutput = dr.Legend + dr.Output;
+                var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
+                finalStream = new MemoryStream(finalBytes);
+                dynResult = dr;
+            }
+
+            finalStream.Position = 0;
+            var clipResult = await _clipboard.CopyToClipboardAsync(finalStream, config.Limits, appendMode, ct);
             if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
-            string brainTag = crusher != null ? "🧠 " : "✔ ";
-            string brainInfo = crusher != null ? " | BrainMode ON" : "";
-            _logger.Success($"{brainTag}Copied: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)}{brainInfo} | Tokens: ~{genResult.Value / 4}");
+            if (dynResult.HasValue)
+            {
+                var dr = dynResult.Value;
+                string dynInfo = dr.ReplacementCount > 0 ? $" | Dynamic: {dr.ReplacementCount} replacements, ~{dr.TokensSaved} tokens saved" : "";
+                _logger.Success($"Copied: {fileCount} files | Size: {Formatting.FormatSize(dr.Output.Length)} | BrainMode ON{dynInfo} | Tokens: ~{dr.Output.Length / 4}");
+            }
+            else
+            {
+                _logger.Success($"✔ Copied: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            }
 
             return Result.Success();
         }

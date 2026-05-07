@@ -751,4 +751,76 @@ public class MarkdownGeneratorExtendedTests
         Assert.True(result.IsSuccess);
         Assert.True(result.Value > 100 * 1024);
     }
+
+    // =========================================================================
+    // Brain Mode — boundary protection tests
+    // =========================================================================
+
+    [Fact]
+    public async Task Generate_BrainMode_CodeBlocksCrushed()
+    {
+        var generator = new MarkdownGenerator(_logger, _reader);
+        var crusher = new BrainCrusher();
+        var entry = new FileEntry("src/Foo.cs", "cs", "csharp", 0);
+        var code = "public static void Main() { return; } // comment";
+        var contents = new List<FileContent> { new(entry, code, code.Length) };
+
+        using var ms = new MemoryStream();
+        var result = await generator.GenerateMarkdownStreamingAsync(contents, ms, _config, null, crusher, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        ms.Position = 0;
+        var output = Encoding.UTF8.GetString(ms.ToArray());
+
+        // Code should be crushed: "public" → "!1", "static" → "!5", "void" → "!l"
+        Assert.Contains("!1", output);   // public
+        Assert.Contains("!5", output);   // static
+        Assert.Contains("!l", output);   // void
+        // Comment should be stripped
+        Assert.DoesNotContain("comment", output);
+    }
+
+    [Fact]
+    public async Task Generate_BrainMode_FileHeadersPreserved()
+    {
+        var generator = new MarkdownGenerator(_logger, _reader);
+        var crusher = new BrainCrusher();
+        var entry = new FileEntry("src/public/X.cs", "cs", "csharp", 0);
+        var code = "public class X { }";
+        var contents = new List<FileContent> { new(entry, code, code.Length) };
+
+        using var ms = new MemoryStream();
+        var result = await generator.GenerateMarkdownStreamingAsync(contents, ms, _config, null, crusher, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        ms.Position = 0;
+        var output = Encoding.UTF8.GetString(ms.ToArray());
+
+        // File path header should be preserved as-is (not crushed)
+        Assert.Contains("src/public/X.cs", output);
+        // But code inside fences should be crushed
+        Assert.Contains("!1 !e", output); // public class
+    }
+
+    [Fact]
+    public async Task Generate_BrainMode_StructureTreePreserved()
+    {
+        var generator = new MarkdownGenerator(_logger, _reader);
+        var crusher = new BrainCrusher();
+        var entry = new FileEntry("public/Foo.cs", "cs", "csharp", 0);
+        var code = "public class Foo { private int x; }";
+        var contents = new List<FileContent> { new(entry, code, code.Length) };
+
+        using var ms = new MemoryStream();
+        var result = await generator.GenerateMarkdownStreamingAsync(contents, ms, _config, null, crusher, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        ms.Position = 0;
+        var output = Encoding.UTF8.GetString(ms.ToArray());
+
+        // Structure tree paths should be preserved (not crushed)
+        Assert.Contains("_Project Structure:_", output);
+        // The path "public/Foo.cs" in the structure tree should be readable
+        Assert.Contains("public/Foo.cs", output);
+    }
 }

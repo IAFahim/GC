@@ -41,9 +41,7 @@ public class MarkdownGeneratorTests
             fileContents, 
             output, 
             _config, 
-            excludes,
-            CancellationToken.None
-        );
+            excludes, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var str = Encoding.UTF8.GetString(output.ToArray());
@@ -78,9 +76,7 @@ public class MarkdownGeneratorTests
                 fileContents, 
                 output, 
                 _config, 
-                excludes,
-                CancellationToken.None
-            );
+                excludes, null, CancellationToken.None);
 
             Assert.True(result.IsSuccess);
             var str = Encoding.UTF8.GetString(output.ToArray());
@@ -115,9 +111,7 @@ public class MarkdownGeneratorTests
             fileContents, 
             output, 
             _config, 
-            excludes,
-            CancellationToken.None
-        );
+            excludes, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var str = Encoding.UTF8.GetString(output.ToArray());

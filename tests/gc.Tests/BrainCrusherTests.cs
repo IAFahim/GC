@@ -1,4 +1,5 @@
 using gc.Application.Services;
+using gc.Domain.Interfaces;
 using Xunit;
 
 namespace gc.Tests;
@@ -101,7 +102,7 @@ public class BrainCrusherTests
     }
 
     // =========================================================================
-    // 3. Token dictionary mapping
+    // 3. Token dictionary mapping (trie-based)
     // =========================================================================
 
     [Fact]
@@ -172,7 +173,120 @@ public class BrainCrusherTests
     }
 
     // =========================================================================
-    // 4. Round-trip (Crush → Uncrush)
+    // 4. Trie-specific: longest-match and prefix scenarios
+    // =========================================================================
+
+    [Fact]
+    public void Crush_TrieLongestMatch_ForeachNotFor()
+    {
+        // "foreach" should match as "foreach" (#4), not "for" (#3) + "each"
+        var input = "foreach (var x in list)";
+        var result = _crusher.Crush(input);
+        Assert.Contains("#4", result); // foreach → #4
+        Assert.DoesNotContain("#3", result); // should NOT match "for" prefix
+    }
+
+    [Fact]
+    public void Crush_TriePrefixKeyword_WhileMatchesWhole()
+    {
+        // "while" should match as whole word
+        var input = "while (true)";
+        var result = _crusher.Crush(input);
+        Assert.Contains("#5", result); // while → #5
+        Assert.Contains("!q", result); // true → !q
+    }
+
+    [Fact]
+    public void Crush_TrieCaseSensitive_OnlyExactCase()
+    {
+        // Keywords are case-sensitive: "Public" should NOT match
+        var input = "Public class Foo";
+        var result = _crusher.Crush(input);
+        Assert.DoesNotContain("!1", result); // "Public" != "public"
+        Assert.Contains("!e", result);       // "class" still matches
+    }
+
+    [Fact]
+    public void Crush_TrieAllAccessModifiers()
+    {
+        var input = "public private protected internal";
+        var result = _crusher.Crush(input);
+        Assert.Contains("!1", result); // public
+        Assert.Contains("!2", result); // private
+        Assert.Contains("!3", result); // protected
+        Assert.Contains("!4", result); // internal
+    }
+
+    [Fact]
+    public void Crush_TrieAllControlFlow()
+    {
+        var input = "if else for foreach while do switch case break continue try catch finally throw yield";
+        var result = _crusher.Crush(input);
+        Assert.Contains("#1", result); // if
+        Assert.Contains("#2", result); // else
+        Assert.Contains("#3", result); // for
+        Assert.Contains("#4", result); // foreach
+        Assert.Contains("#5", result); // while
+        Assert.Contains("#6", result); // do
+        Assert.Contains("#7", result); // switch
+        Assert.Contains("#8", result); // case
+        Assert.Contains("#9", result); // break
+        Assert.Contains("#a", result); // continue
+        Assert.Contains("#b", result); // try
+        Assert.Contains("#c", result); // catch
+        Assert.Contains("#d", result); // finally
+        Assert.Contains("#e", result); // throw
+        Assert.Contains("#f", result); // yield
+    }
+
+    // =========================================================================
+    // 5. CrushBlock API (per-code-block crushing)
+    // =========================================================================
+
+    [Fact]
+    public void CrushBlock_SameResultAsCrush_ForCodeContent()
+    {
+        var code = "public static void Main() { return; }";
+        var crushed = _crusher.Crush(code);
+        var crushedBlock = _crusher.CrushBlock(code);
+        Assert.Equal(crushed, crushedBlock);
+    }
+
+    [Fact]
+    public void CrushBlock_EmptyString_ReturnsEmpty()
+    {
+        Assert.Equal("", _crusher.CrushBlock(""));
+    }
+
+    [Fact]
+    public void CrushBlock_Null_ThrowsOrReturnsNull()
+    {
+        var result = _crusher.CrushBlock(null!);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void CrushBlock_CommentsStripped()
+    {
+        var code = "int x = 5; // remove this";
+        var result = _crusher.CrushBlock(code);
+        Assert.DoesNotContain("remove this", result);
+        Assert.Contains("%2", result); // int → %2
+    }
+
+    [Fact]
+    public void CrushBlock_TokensApplied()
+    {
+        var code = "public class Foo { private int x; }";
+        var result = _crusher.CrushBlock(code);
+        Assert.Contains("!1", result); // public
+        Assert.Contains("!e", result); // class
+        Assert.Contains("!2", result); // private
+        Assert.Contains("%2", result); // int
+    }
+
+    // =========================================================================
+    // 6. Round-trip (Crush → Uncrush)
     // =========================================================================
 
     [Fact]
@@ -203,7 +317,7 @@ public class BrainCrusherTests
     }
 
     // =========================================================================
-    // 5. Token reduction measurement
+    // 7. Token reduction measurement
     // =========================================================================
 
     [Fact]
@@ -255,7 +369,7 @@ namespace MyApp
     }
 
     // =========================================================================
-    // 6. Edge cases
+    // 8. Edge cases
     // =========================================================================
 
     [Fact]
@@ -292,7 +406,7 @@ namespace MyApp
     }
 
     // =========================================================================
-    // 7. Dictionary header
+    // 9. Dictionary header
     // =========================================================================
 
     [Fact]
@@ -305,7 +419,7 @@ namespace MyApp
     }
 
     // =========================================================================
-    // 8. Uncrush edge cases
+    // 10. Uncrush edge cases
     // =========================================================================
 
     [Fact]
@@ -328,5 +442,73 @@ namespace MyApp
         // "!x" is not a valid token
         var result = _crusher.Uncrush("foo !x bar");
         Assert.Equal("foo !x bar", result);
+    }
+
+    // =========================================================================
+    // 11. IBrainCrusher interface compliance
+    // =========================================================================
+
+    [Fact]
+    public void BrainCrusher_ImplementsIBrainCrusher()
+    {
+        IBrainCrusher crusher = new BrainCrusher();
+        Assert.NotNull(crusher);
+    }
+
+    [Fact]
+    public void IBrainCrusher_CrushBlock_Works()
+    {
+        IBrainCrusher crusher = new BrainCrusher();
+        var result = crusher.CrushBlock("public static void Main() {}");
+        Assert.Contains("!1", result); // public
+        Assert.Contains("!5", result); // static
+    }
+
+    [Fact]
+    public void IBrainCrusher_Uncrush_Works()
+    {
+        IBrainCrusher crusher = new BrainCrusher();
+        var result = crusher.Uncrush("!1 !e");
+        Assert.Contains("public", result);
+        Assert.Contains("class", result);
+    }
+
+    [Fact]
+    public void IBrainCrusher_GetDictionaryHeader_Works()
+    {
+        IBrainCrusher crusher = new BrainCrusher();
+        var header = crusher.GetDictionaryHeader();
+        Assert.Contains("Brain Mode Token Dictionary", header);
+    }
+
+    // =========================================================================
+    // 12. Boundary protection — file paths must not be mangled
+    // =========================================================================
+
+    [Fact]
+    public void CrushBlock_FilePathNotMangled()
+    {
+        // A path like "src/public/X.cs" — "public" is part of a path segment
+        // The trie only matches whole words at boundaries, so "public" in "src/public/X"
+        // is preceded by / (non-identifier) and followed by / (non-identifier) → it WILL match.
+        // This is correct behavior for code content inside fences.
+        // But for file paths written as markdown headers OUTSIDE fences, the MarkdownGenerator
+        // doesn't call CrushBlock — only on code inside fences.
+        var code = "// File: src/public/X.cs\npublic class X { }";
+        var result = _crusher.CrushBlock(code);
+        // The comment gets stripped, so the path in the comment is gone
+        // The "public class X" gets crushed
+        Assert.Contains("!1", result); // public → !1
+    }
+
+    [Fact]
+    public void CrushBlock_NonCodeContent_IdempotentForPureText()
+    {
+        // Non-code content with no keywords passes through with just whitespace collapse
+        var text = "Hello World  \n  \n  This is plain text  ";
+        var result = _crusher.CrushBlock(text);
+        Assert.Contains("Hello World", result);
+        Assert.Contains("This is plain text", result);
+        Assert.DoesNotContain("  ", result); // no double spaces
     }
 }

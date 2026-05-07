@@ -39,7 +39,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         _reader = reader;
     }
 
-    public async Task<Result<long>> GenerateMarkdownStreamingAsync(IEnumerable<FileContent> contents, Stream outputStream, GcConfiguration config, IEnumerable<string>? excludeLineIfStart = null, CancellationToken ct = default)
+    public async Task<Result<long>> GenerateMarkdownStreamingAsync(IEnumerable<FileContent> contents, Stream outputStream, GcConfiguration config, IEnumerable<string>? excludeLineIfStart = null, IBrainCrusher? brainCrusher = null, CancellationToken ct = default)
     {
         try
         {
@@ -216,6 +216,13 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             var newlineBytes = NewlineByteCount;
 
                             actualContent = actualContent.TrimEnd(' ', '\t', '\r', '\n');
+
+                            // Brain Mode: crush only the code block content, never headers/fences
+                            if (brainCrusher != null)
+                            {
+                                actualContent = brainCrusher.CrushBlock(actualContent);
+                            }
+
                             var contentBytes = Utf8NoBom.GetByteCount(actualContent);
 
                             bool needsTrailingNewline = !actualContent.EndsWith('\n');
@@ -285,7 +292,18 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                             long contentBytesWritten = 0;
 
-                            if (excludeLineIfStart != null && excludeLineIfStart.Any())
+                            // Brain Mode: decode buffer → crush → write crushed content
+                            if (brainCrusher != null)
+                            {
+                                var rawText = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length);
+                                var crushed = brainCrusher.CrushBlock(rawText);
+                                if (crushed.Length > 0)
+                                {
+                                    WriteStringLine(writer, crushed);
+                                    contentBytesWritten += Utf8NoBom.GetByteCount(crushed) + NewlineByteCount;
+                                }
+                            }
+                            else if (excludeLineIfStart != null && excludeLineIfStart.Any())
                             {
                                 var excludeArray = excludeLineIfStart.ToArray();
                                 var excludeNewline = excludeArray.Contains("\n");

@@ -63,14 +63,17 @@ public class GenerateContextUseCaseTests
         public long ReturnSize { get; set; } = 100;
         public bool ShouldFail { get; set; }
         public IEnumerable<string>? CapturedExcludeLineIfStart { get; private set; }
+        public IBrainCrusher? CapturedBrainCrusher { get; private set; }
 
         public Task<Result<long>> GenerateMarkdownStreamingAsync(
             IEnumerable<FileContent> contents, Stream outputStream,
             GcConfiguration config, IEnumerable<string>? excludeLineIfStart,
-            CancellationToken ct)
+            IBrainCrusher? brainCrusher = null,
+            CancellationToken ct = default)
         {
             ProcessedContents.AddRange(contents);
             CapturedExcludeLineIfStart = excludeLineIfStart;
+            CapturedBrainCrusher = brainCrusher;
             if (ShouldFail)
                 return Task.FromResult(Result<long>.Failure("Generator failed"));
             outputStream.WriteByte((byte)'#');

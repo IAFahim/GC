@@ -269,7 +269,7 @@ public class Phase1PerformanceTests : IDisposable
 
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            entries, ms, _config, new[] { "//" }, CancellationToken.None);
+            entries, ms, _config, new[] { "//" }, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var output = Encoding.UTF8.GetString(ms.ToArray());
@@ -292,7 +292,7 @@ public class Phase1PerformanceTests : IDisposable
 
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            entries, ms, _config, new[] { "//" }, CancellationToken.None);
+            entries, ms, _config, new[] { "//" }, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var output = Encoding.UTF8.GetString(ms.ToArray());
@@ -321,7 +321,7 @@ public class Phase1PerformanceTests : IDisposable
 
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            entries, ms, _config, new[] { "\n" }, CancellationToken.None);
+            entries, ms, _config, new[] { "\n" }, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var output = Encoding.UTF8.GetString(ms.ToArray());
@@ -347,13 +347,13 @@ public class Phase1PerformanceTests : IDisposable
         using (var warmup = new MemoryStream())
         {
             await generator.GenerateMarkdownStreamingAsync(
-                entries.Take(1), warmup, _config, new[] { "//" }, CancellationToken.None);
+                entries.Take(1), warmup, _config, new[] { "//" }, null, CancellationToken.None);
         }
 
         using var ms = new MemoryStream();
         var sw = Stopwatch.StartNew();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            entries, ms, _config, new[] { "//" }, CancellationToken.None);
+            entries, ms, _config, new[] { "//" }, null, CancellationToken.None);
         sw.Stop();
 
         Assert.True(result.IsSuccess);
@@ -411,7 +411,7 @@ public class Phase1PerformanceTests : IDisposable
 
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            entries, ms, _config, null, CancellationToken.None);
+            entries, ms, _config, null, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var output = Encoding.UTF8.GetString(ms.ToArray());
@@ -433,7 +433,7 @@ public class Phase1PerformanceTests : IDisposable
 
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            entries, ms, _config, null, CancellationToken.None);
+            entries, ms, _config, null, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var output = Encoding.UTF8.GetString(ms.ToArray());
@@ -460,7 +460,7 @@ public class Phase1PerformanceTests : IDisposable
         using var ms = new MemoryStream();
         var sw = Stopwatch.StartNew();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            entries, ms, _config, null, CancellationToken.None);
+            entries, ms, _config, null, null, CancellationToken.None);
         sw.Stop();
 
         Assert.True(result.IsSuccess);
@@ -487,7 +487,7 @@ public class Phase1PerformanceTests : IDisposable
 
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            entries, ms, _config, null, CancellationToken.None);
+            entries, ms, _config, null, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var output = Encoding.UTF8.GetString(ms.ToArray());
@@ -552,7 +552,7 @@ public class Phase1PerformanceTests : IDisposable
 
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            contents, ms, _config, new[] { "//" }, CancellationToken.None);
+            contents, ms, _config, new[] { "//" }, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var output = Encoding.UTF8.GetString(ms.ToArray());
@@ -579,7 +579,7 @@ public class Phase1PerformanceTests : IDisposable
 
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            entries, ms, _config, new[] { "//" }, CancellationToken.None);
+            entries, ms, _config, new[] { "//" }, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(ms.ToArray().Length, result.Value);

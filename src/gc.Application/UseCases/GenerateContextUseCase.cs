@@ -261,6 +261,8 @@ public sealed class GenerateContextUseCase
         bool brainMode,
         CancellationToken ct)
     {
+        var crusher = brainMode ? new BrainCrusher() : null;
+
         if (!string.IsNullOrEmpty(outputFile))
         {
             // Ensure parent directory exists
@@ -273,72 +275,47 @@ public sealed class GenerateContextUseCase
             bool shouldAppend = appendMode && File.Exists(outputFile);
             FileMode fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
 
-            if (brainMode)
+            using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+
+            // Write Brain Mode dictionary header BEFORE the streamed content
+            if (crusher != null)
             {
-                // BrainMode: generate to memory first, crush, then write
-                using var ms = new MemoryStream();
-                var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, ct);
-                if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
-
-                ms.Position = 0;
-                using var reader = new StreamReader(ms, Encoding.UTF8);
-                var rawContent = await reader.ReadToEndAsync(ct);
-
-                var crusher = new BrainCrusher();
-                var crushed = crusher.GetDictionaryHeader() + crusher.Crush(rawContent);
-                var crushedBytes = Encoding.UTF8.GetBytes(crushed);
-
-                using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-                await fs.WriteAsync(crushedBytes, ct);
-
-                string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-                _logger.Success($"🧠 {action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(crushedBytes.Length)} | BrainMode ON | Tokens: ~{crushedBytes.Length / 4}");
-
-                return Result.Success();
+                var headerBytes = Encoding.UTF8.GetBytes(crusher.GetDictionaryHeader());
+                await fs.WriteAsync(headerBytes, ct);
             }
 
-            using (var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true))
-            {
-                var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, fs, config, excludeLineIfStart, ct);
-                if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, fs, config, excludeLineIfStart, crusher, ct);
+            if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-                string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-                _logger.Success($"✔ {action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
-            }
+            string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
+            string brainTag = crusher != null ? "🧠 " : "✔ ";
+            string brainInfo = crusher != null ? " | BrainMode ON" : "";
+            _logger.Success($"{brainTag}{action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)}{brainInfo} | Tokens: ~{genResult.Value / 4}");
 
             return Result.Success();
         }
         else
         {
             using var ms = new MemoryStream();
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, ct);
-            if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-            if (brainMode)
+            // Write Brain Mode dictionary header first
+            if (crusher != null)
             {
-                ms.Position = 0;
-                using var reader = new StreamReader(ms, Encoding.UTF8);
-                var rawContent = await reader.ReadToEndAsync(ct);
-
-                var crusher = new BrainCrusher();
-                var crushed = crusher.GetDictionaryHeader() + crusher.Crush(rawContent);
-                var crushedBytes = Encoding.UTF8.GetBytes(crushed);
-
-                using var crushedMs = new MemoryStream(crushedBytes);
-                var clipResult = await _clipboard.CopyToClipboardAsync(crushedMs, config.Limits, appendMode, ct);
-                if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
-
-                _logger.Success($"🧠 Copied: {fileCount} files | Size: {Formatting.FormatSize(crushedBytes.Length)} | BrainMode ON | Tokens: ~{crushedBytes.Length / 4}");
-
-                return Result.Success();
+                var headerBytes = Encoding.UTF8.GetBytes(crusher.GetDictionaryHeader());
+                await ms.WriteAsync(headerBytes, ct);
             }
 
-            ms.Position = 0;
-            
-            var clipResult2 = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
-            if (!clipResult2.IsSuccess) return Result.Failure(clipResult2.Error!);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, crusher, ct);
+            if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-            _logger.Success($"✔ Copied: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            ms.Position = 0;
+
+            var clipResult = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
+            if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
+
+            string brainTag = crusher != null ? "🧠 " : "✔ ";
+            string brainInfo = crusher != null ? " | BrainMode ON" : "";
+            _logger.Success($"{brainTag}Copied: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)}{brainInfo} | Tokens: ~{genResult.Value / 4}");
 
             return Result.Success();
         }

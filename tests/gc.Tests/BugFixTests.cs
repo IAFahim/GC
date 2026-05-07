@@ -131,9 +131,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents, 
             output, 
-            config, null,
-            CancellationToken.None
-        );
+            config, null, null, CancellationToken.None);
 
         // Assert
         Assert.False(result.IsSuccess);
@@ -275,9 +273,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            config, null,
-            CancellationToken.None
-        );
+            config, null, null, CancellationToken.None);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -307,9 +303,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            config, null,
-            CancellationToken.None
-        );
+            config, null, null, CancellationToken.None);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -344,9 +338,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            config, null,
-            CancellationToken.None
-        );
+            config, null, null, CancellationToken.None);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -373,9 +365,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            config, null,
-            CancellationToken.None
-        );
+            config, null, null, CancellationToken.None);
 
         // Assert
         Assert.True(result.IsSuccess);
@@ -403,9 +393,7 @@ public class BugFixTests
         var result = await generator.GenerateMarkdownStreamingAsync(
             fileContents,
             output,
-            config, null,
-            CancellationToken.None
-        );
+            config, null, null, CancellationToken.None);
 
         // Assert
         Assert.True(result.IsSuccess);

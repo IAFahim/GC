@@ -44,7 +44,7 @@ public class Phase2PerformanceTests : IDisposable
         }
 
         using var ms = new MemoryStream();
-        var result = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, CancellationToken.None);
+        var result = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var output = Encoding.UTF8.GetString(ms.ToArray());
@@ -70,7 +70,7 @@ public class Phase2PerformanceTests : IDisposable
         
         var entries = new List<FileContent> { new(new FileEntry(path, "txt", "text", -1), null, -1) };
         using var ms = new MemoryStream();
-        var result = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, CancellationToken.None);
+        var result = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(ms.ToArray().Length, result.Value);

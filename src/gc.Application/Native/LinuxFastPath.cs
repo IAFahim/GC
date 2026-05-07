@@ -9,7 +9,7 @@ public static class LinuxFastPath
 {
     public const int O_RDONLY = 0x0000;
     public const int O_NOATIME = 0x40000;
-    
+
     public const int POSIX_FADV_SEQUENTIAL = 2;
     public const int POSIX_FADV_WILLNEED = 3;
     public const int POSIX_FADV_DONTNEED = 4;

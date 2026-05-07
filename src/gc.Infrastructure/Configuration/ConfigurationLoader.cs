@@ -159,8 +159,8 @@ public sealed class ConfigurationLoader
 
             var typeInfo = GcJsonSerializerContext.Default.GcConfiguration;
             var config = JsonSerializer.Deserialize(json, typeInfo);
-            return config != null 
-                ? Result<GcConfiguration>.Success(config) 
+            return config != null
+                ? Result<GcConfiguration>.Success(config)
                 : Result<GcConfiguration>.Failure($"Failed to deserialize configuration from {filePath}");
         }
         catch (Exception ex)
@@ -252,12 +252,12 @@ public sealed class ConfigurationLoader
                 {
                     foreach (var ext in kvp.Value.Extensions) mergedExtensions.Add(ext);
                 }
-                
+
                 result[kvp.Key] = existing with
                 {
                     Extensions = mergedExtensions.ToArray(),
-                    Description = string.IsNullOrWhiteSpace(kvp.Value.Description) 
-                        ? existing.Description 
+                    Description = string.IsNullOrWhiteSpace(kvp.Value.Description)
+                        ? existing.Description
                         : kvp.Value.Description
                 };
             }

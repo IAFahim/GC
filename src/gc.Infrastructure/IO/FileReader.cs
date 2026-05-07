@@ -90,7 +90,7 @@ public sealed class FileReader : IFileReader
             using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
             using var reader = new StreamReader(stream, Utf8NoBom);
             var content = await reader.ReadToEndAsync(ct);
-            
+
             return Result<FileContent>.Success(new FileContent(entry, content, stream.Length));
         }
         catch (IOException ex)
@@ -130,7 +130,7 @@ public sealed class FileReader : IFileReader
             using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
             using var reader = new StreamReader(stream, Utf8NoBom);
             var content = await reader.ReadToEndAsync(ct);
-            
+
             return Result<FileContent>.Success(new FileContent(entry, content, stream.Length));
         }
         catch (IOException ex)

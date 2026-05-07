@@ -314,57 +314,57 @@ public sealed class FileDiscovery : IFileDiscovery
             var buffer = ArrayPool<byte>.Shared.Rent(65536);
             try
             {
-            int bytesRead;
-            var position = 0;
+                int bytesRead;
+                var position = 0;
 
-            while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(position, buffer.Length - position), ct)) > 0)
-            {
-                var totalBytes = position + bytesRead;
-                var start = 0;
-
-                for (var i = 0; i < totalBytes; i++)
+                while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(position, buffer.Length - position), ct)) > 0)
                 {
-                    if (buffer[i] == 0)
+                    var totalBytes = position + bytesRead;
+                    var start = 0;
+
+                    for (var i = 0; i < totalBytes; i++)
                     {
-                        var span = buffer.AsSpan(start, i - start);
-                        if (span.Length > 0)
+                        if (buffer[i] == 0)
                         {
-                            bool shouldAdd = true;
-                            if (config.MaxDepth.HasValue)
+                            var span = buffer.AsSpan(start, i - start);
+                            if (span.Length > 0)
                             {
-                                var depth = span.Count((byte)'/') + span.Count((byte)'\\');
-                                if (depth > config.MaxDepth.Value)
+                                bool shouldAdd = true;
+                                if (config.MaxDepth.HasValue)
                                 {
-                                    shouldAdd = false;
+                                    var depth = span.Count((byte)'/') + span.Count((byte)'\\');
+                                    if (depth > config.MaxDepth.Value)
+                                    {
+                                        shouldAdd = false;
+                                    }
+                                }
+
+                                if (shouldAdd)
+                                {
+                                    files.Add(Encoding.UTF8.GetString(span));
                                 }
                             }
-
-                            if (shouldAdd)
-                            {
-                                files.Add(Encoding.UTF8.GetString(span));
-                            }
+                            start = i + 1;
                         }
-                        start = i + 1;
                     }
-                }
 
-                if (start < totalBytes)
-                {
-                    var remaining = totalBytes - start;
-                    if (remaining >= buffer.Length)
+                    if (start < totalBytes)
                     {
-                        _logger.Error($"Buffer overflow detected in git ls-files parsing. Remaining: {remaining}, Buffer: {buffer.Length}");
-                        try { process.Kill(true); } catch { }
-                        break;
+                        var remaining = totalBytes - start;
+                        if (remaining >= buffer.Length)
+                        {
+                            _logger.Error($"Buffer overflow detected in git ls-files parsing. Remaining: {remaining}, Buffer: {buffer.Length}");
+                            try { process.Kill(true); } catch { }
+                            break;
+                        }
+                        Array.Copy(buffer, start, buffer, 0, remaining);
+                        position = remaining;
                     }
-                    Array.Copy(buffer, start, buffer, 0, remaining);
-                    position = remaining;
+                    else
+                    {
+                        position = 0;
+                    }
                 }
-                else
-                {
-                    position = 0;
-                }
-            }
             }
             finally
             {
@@ -404,7 +404,7 @@ public sealed class FileDiscovery : IFileDiscovery
         {
             ct.ThrowIfCancellationRequested();
             var (currentDir, depth) = queue.Dequeue();
-            
+
             var realPath = Path.GetFullPath(currentDir);
             if (config.FollowSymlinks)
             {
@@ -450,7 +450,7 @@ public sealed class FileDiscovery : IFileDiscovery
                                 }
                                 catch { }
                             }
-                            
+
                             queue.Enqueue((dir, depth + 1));
                         }
                     }

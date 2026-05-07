@@ -573,7 +573,7 @@ public class LoaderTests
         var loader = CreateLoader();
         var dir = loader.GetConfigDirectory();
         Assert.False(string.IsNullOrEmpty(dir));
-        Assert.True(dir.Contains("gc"));
+        Assert.Contains("gc", dir);
     }
 
     [Fact]
@@ -582,7 +582,7 @@ public class LoaderTests
         var loader = CreateLoader();
         var dir = loader.GetSystemConfigDirectory();
         Assert.False(string.IsNullOrEmpty(dir));
-        Assert.True(dir.Contains("gc"));
+        Assert.Contains("gc", dir);
     }
 
     [Fact]

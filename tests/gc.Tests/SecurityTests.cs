@@ -25,7 +25,7 @@ public class SecurityTests : IDisposable
         }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
-        
+
         var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
         _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
@@ -131,7 +131,7 @@ public class Test
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.Contains("normal.cs", content);
         Assert.DoesNotContain("test.bin", content);
@@ -161,7 +161,7 @@ public class Test
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.Contains("normal.cs", content);
         Assert.DoesNotContain("test.exe", content);
@@ -247,7 +247,7 @@ public class Test
             // Should not crash, should skip the file
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("✔ Exported", result.StandardOutput);
-            
+
             var content = File.ReadAllText(outputFile);
             Assert.Contains("Error reading file", content);
             Assert.Contains("unreadable.cs", content);

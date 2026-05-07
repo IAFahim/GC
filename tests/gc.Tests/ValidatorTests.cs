@@ -143,7 +143,7 @@ public class ValidatorTests
         var result = new ConfigurationValidator().Validate(config).Value;
 
         Assert.NotNull(result);
-        Assert.True(result.Warnings.Any(w => w.Contains("Limits") && w.Contains("null")));
+        Assert.Contains(result.Warnings, w => w.Contains("Limits") && w.Contains("null"));
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class ValidatorTests
         var result = new ConfigurationValidator().Validate(config).Value;
 
         Assert.NotNull(result);
-        Assert.True(result.Warnings.Any(w => w.Contains("Filters") && w.Contains("null")));
+        Assert.Contains(result.Warnings, w => w.Contains("Filters") && w.Contains("null"));
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class ValidatorTests
         var result = new ConfigurationValidator().Validate(config).Value;
 
         Assert.NotNull(result);
-        Assert.True(result.Warnings.Any(w => w.Contains("Markdown") && w.Contains("null")));
+        Assert.Contains(result.Warnings, w => w.Contains("Markdown") && w.Contains("null"));
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public class ValidatorTests
         var result = new ConfigurationValidator().Validate(config).Value;
 
         Assert.NotNull(result);
-        Assert.True(result.Warnings.Any(w => w.Contains("Output") && w.Contains("null")));
+        Assert.Contains(result.Warnings, w => w.Contains("Output") && w.Contains("null"));
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class ValidatorTests
         var result = new ConfigurationValidator().Validate(config).Value;
 
         Assert.NotNull(result);
-        Assert.True(result.Warnings.Any(w => w.Contains("Logging") && w.Contains("null")));
+        Assert.Contains(result.Warnings, w => w.Contains("Logging") && w.Contains("null"));
     }
 
     // ── Markdown validation ─────────────────────────────────────────────
@@ -380,7 +380,7 @@ public class ValidatorTests
         var result = new ConfigurationValidator().Validate(config).Value;
 
         Assert.NotNull(result);
-        Assert.True(result.Warnings.Any(w => w.Contains("presets") && w.Contains("No presets")));
+        Assert.Contains(result.Warnings, w => w.Contains("presets") && w.Contains("No presets"));
     }
 
     // ── ValidateMemorySize edge cases ───────────────────────────────────
@@ -515,7 +515,7 @@ public class ValidatorTests
         var result = new ConfigurationValidator().Validate(config).Value;
 
         Assert.NotNull(result);
-        Assert.True(result.Warnings.Any(w => w.Contains("Discovery") && w.Contains("null")));
+        Assert.Contains(result.Warnings, w => w.Contains("Discovery") && w.Contains("null"));
     }
 
     [Fact]
@@ -526,7 +526,7 @@ public class ValidatorTests
         var result = new ConfigurationValidator().Validate(config).Value;
 
         Assert.NotNull(result);
-        Assert.True(result.Warnings.Any(w => w.Contains("Language mappings") && w.Contains("null")));
+        Assert.Contains(result.Warnings, w => w.Contains("Language mappings") && w.Contains("null"));
     }
 
     [Fact]
@@ -537,7 +537,7 @@ public class ValidatorTests
         var result = new ConfigurationValidator().Validate(config).Value;
 
         Assert.NotNull(result);
-        Assert.True(result.Warnings.Any(w => w.Contains("presets") && w.Contains("default")));
+        Assert.Contains(result.Warnings, w => w.Contains("presets") && w.Contains("default"));
     }
 
     [Fact]

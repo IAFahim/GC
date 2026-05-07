@@ -48,15 +48,15 @@ public class Phase2PerformanceTests : IDisposable
 
         Assert.True(result.IsSuccess);
         var output = Encoding.UTF8.GetString(ms.ToArray());
-        
+
         // Assert output order is strictly file_00 to file_49
         for (int i = 0; i < 49; i++)
         {
             var idxA = output.IndexOf($"file_{i:D2}.txt");
-            var idxB = output.IndexOf($"file_{i+1:D2}.txt");
+            var idxB = output.IndexOf($"file_{i + 1:D2}.txt");
             Assert.True(idxA != -1, $"Missing file_{i:D2}.txt");
-            Assert.True(idxB != -1, $"Missing file_{i+1:D2}.txt");
-            Assert.True(idxA < idxB, $"Out of order: file_{i:D2} vs file_{i+1:D2}");
+            Assert.True(idxB != -1, $"Missing file_{i + 1:D2}.txt");
+            Assert.True(idxA < idxB, $"Out of order: file_{i:D2} vs file_{i + 1:D2}");
         }
     }
 
@@ -67,7 +67,7 @@ public class Phase2PerformanceTests : IDisposable
         var content = "direct utf8 test content";
         var path = Path.Combine(_tempDir, "utf8.txt");
         await File.WriteAllTextAsync(path, content);
-        
+
         var entries = new List<FileContent> { new(new FileEntry(path, "txt", "text", -1), null, -1) };
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, null, CancellationToken.None);

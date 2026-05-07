@@ -25,7 +25,7 @@ public static class Program
 
         var logger = new ConsoleLogger();
         var configLoader = new ConfigurationLoader(logger);
-        
+
         var configResult = await configLoader.LoadConfigAsync();
         var config = configResult.Value ?? new GcConfiguration();
 
@@ -60,7 +60,7 @@ public static class Program
         var clipboard = new ClipboardService(logger);
         var validator = new ConfigurationValidator();
         var configService = new ConfigurationService(logger, validator);
-        
+
         var useCase = new GenerateContextUseCase(discovery, filter, reader, generator, clipboard, logger);
 
         var exitCode = await ExecuteAsync(cliArgs, config, useCase, configService, logger, cts.Token);

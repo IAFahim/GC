@@ -29,7 +29,7 @@ public class ReleaseBinaryTests : IDisposable
                 };
                 return Task.FromResult(response);
             }
-            
+
             // For non-GitHub URLs, return 404
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         }
@@ -47,7 +47,7 @@ public class ReleaseBinaryTests : IDisposable
         }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
-        
+
         var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
         _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
@@ -203,7 +203,7 @@ public class ReleaseBinaryTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.Contains("test.cs", content);
 
@@ -226,7 +226,7 @@ public class ReleaseBinaryTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.Contains("test.cs", content);
         Assert.DoesNotContain("test.js", content);
@@ -251,7 +251,7 @@ public class ReleaseBinaryTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.Contains("test.cs", content);
         Assert.Contains("test.js", content);
@@ -275,7 +275,7 @@ public class ReleaseBinaryTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.DoesNotContain("src/test.cs", content);
         Assert.Contains("test.cs", content);
@@ -371,7 +371,7 @@ public class ReleaseBinaryTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.DoesNotContain("test.bin", content);
 
@@ -394,7 +394,7 @@ public class ReleaseBinaryTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.DoesNotContain("large.txt", content);
 
@@ -443,7 +443,7 @@ public class ReleaseBinaryTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.Contains("test.py", content);
 

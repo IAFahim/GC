@@ -213,7 +213,7 @@ public class ConfigurationTests
     {
         // Arrange
         var loader = new ConfigurationLoader(new ConsoleLogger());
-        
+
         // Act
         var result = await loader.LoadConfigFromFileAsync("/nonexistent/config.json");
 

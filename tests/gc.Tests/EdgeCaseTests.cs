@@ -22,7 +22,7 @@ public class EdgeCaseTests : IDisposable
         }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
-        
+
         var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
         _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
@@ -144,7 +144,7 @@ public class Test
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.Contains("special.cs", content);
 
@@ -164,7 +164,7 @@ public class Test
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.Contains("mixed.cs", content);
 
@@ -200,7 +200,7 @@ public class Test
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.Contains("longline.cs", content);
 
@@ -291,7 +291,7 @@ public class Test
 
             Assert.Equal(0, result.ExitCode);
             Assert.Contains("✔ Exported", result.StandardOutput);
-            
+
             var content = File.ReadAllText(outputFile);
             Assert.Contains("readonly.cs", content);
 
@@ -349,7 +349,7 @@ public class Test
         // Should include file at exactly max size
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var outputContent = File.ReadAllText(outputFile);
         Assert.Contains("maxsize.txt", outputContent);
 
@@ -369,7 +369,7 @@ public class Test
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        
+
         var content = File.ReadAllText(outputFile);
         Assert.Contains("dir1/test.cs", content);
         Assert.Contains("dir2/test.cs", content);

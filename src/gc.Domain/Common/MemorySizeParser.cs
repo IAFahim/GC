@@ -56,16 +56,16 @@ public static class MemorySizeParser
 
         if (double.TryParse(size, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
         {
-            double threshold = isB ? 100000000000 : (isKB ? 100000000 : 100000); 
+            double threshold = isB ? 100000000000 : (isKB ? 100000000 : 100000);
             if (value > threshold)
                 return DefaultMemoryBytes;
-            
+
             if (double.IsInfinity(value) || double.IsNaN(value))
                 return DefaultMemoryBytes;
-            
+
             if (value > (double)long.MaxValue / multiplier)
                 return DefaultMemoryBytes;
-            
+
             double result = value * multiplier;
             if (result > long.MaxValue || double.IsInfinity(result) || result < 0)
                 return DefaultMemoryBytes;

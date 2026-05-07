@@ -237,13 +237,13 @@ public sealed class CliParser
             case ParseState.Extensions: ProcessExtensions(arg, extensions); break;
             case ParseState.Excludes: excludes.Add(arg.Replace('\\', '/')); break;
             case ParseState.Presets: presets.Add(arg.ToLowerInvariant()); break;
-            case ParseState.ExcludeLineIfStart: 
+            case ParseState.ExcludeLineIfStart:
                 var v = arg.Equals("\\n") ? "\n" : arg;
                 excludeLineIfStart.Add(v);
                 break;
             case ParseState.Output: output = arg; break;
             case ParseState.MaxMemory: maxMemoryBytes = MemorySizeParser.Parse(arg); break;
-            case ParseState.Depth: 
+            case ParseState.Depth:
                 if (int.TryParse(arg, out var d)) depth = d;
                 break;
             case ParseState.ClusterDir: clusterDir = arg.Replace('\\', '/'); break;
@@ -279,7 +279,7 @@ public sealed class CliParser
 
         return false;
     }
-    
+
     private static string StateToFlagName(ParseState state)
     {
         return state switch

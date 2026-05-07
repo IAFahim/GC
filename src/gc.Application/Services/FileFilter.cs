@@ -132,7 +132,7 @@ public sealed class FileFilter
                     matchesExtension = true;
                 }
             }
-            
+
             if (!matchesExtension) return false;
         }
 

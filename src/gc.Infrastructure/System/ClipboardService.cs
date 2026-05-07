@@ -51,7 +51,7 @@ public sealed class ClipboardService : IClipboardService
         try
         {
             var maxClipboardSize = limits.GetMaxClipboardSizeBytes();
-            
+
             if (stream.CanSeek)
             {
                 if (stream.Length > maxClipboardSize)
@@ -78,7 +78,7 @@ public sealed class ClipboardService : IClipboardService
                     newContent = existingContent + Environment.NewLine + newContent;
                 }
             }
-            
+
             if (stream.CanSeek)
             {
                 stream.Position = 0;
@@ -120,7 +120,7 @@ public sealed class ClipboardService : IClipboardService
     {
         var maxClipboardSize = limits.GetMaxClipboardSizeBytes();
         var contentBytes = Utf8NoBom.GetByteCount(content);
-        
+
         if (contentBytes > maxClipboardSize)
         {
             return Result.Failure($"Content size ({contentBytes} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");

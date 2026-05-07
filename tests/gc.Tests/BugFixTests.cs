@@ -129,8 +129,8 @@ public class BugFixTests
         // Act
         using var output = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(
-            fileContents, 
-            output, 
+            fileContents,
+            output,
             config, null, null, CancellationToken.None);
 
         // Assert
@@ -370,7 +370,7 @@ public class BugFixTests
         // Assert
         Assert.True(result.IsSuccess);
         var generatedContent = Encoding.UTF8.GetString(output.ToArray());
-        
+
         Assert.Contains("_Project Structure:_", generatedContent);
         Assert.Contains("test.cs", generatedContent);
     }
@@ -401,7 +401,7 @@ public class BugFixTests
         var reportedBytes = result.Value;
 
         Assert.Equal(actualBytes, reportedBytes);
-        
+
         var generatedContent = Encoding.UTF8.GetString(output.ToArray());
         Assert.Contains(multibyteContent, generatedContent);
     }
@@ -435,7 +435,7 @@ public class BugFixTests
         // Assert - Should NOT contain other backend languages that aren't C/C++
         // Note: Based on the explore results, PresetCpp incorrectly includes rs, go, swift
         // These tests document the CURRENT behavior, which may be a bug
-        
+
         // Check what we expect NOT to be there
         Assert.DoesNotContain("py", cppExtensions);
         Assert.DoesNotContain("java", cppExtensions);
@@ -535,7 +535,7 @@ public class BugFixTests
             using var stream = result.Value;
             Assert.NotNull(stream);
             Assert.True(stream.CanRead);
-            
+
             // Verify we can read asynchronously
             var buffer = new byte[1024];
             var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length));
@@ -817,8 +817,8 @@ public class BugFixTests
         {
             var discovery = new FileDiscovery(_logger);
             var config = BuiltInPresets.GetDefaultConfiguration();
-            config = config with 
-            { 
+            config = config with
+            {
                 Discovery = config.Discovery with { Mode = "git" }
             };
 

@@ -31,25 +31,25 @@ public class MarkdownGeneratorTests
         var generator = new MarkdownGenerator(_logger, _reader);
         var entry = new FileEntry("test.cs", "cs", "cs", 100);
         var content = "using System;\n// This is a comment\npublic class Test {\n  // Another comment\n}\n\n";
-        
+
         var fileContents = new List<FileContent> { new(entry, content, content.Length) };
         using var output = new MemoryStream();
-        
+
         var excludes = new[] { "//", "\n" };
 
         var result = await generator.GenerateMarkdownStreamingAsync(
-            fileContents, 
-            output, 
-            _config, 
+            fileContents,
+            output,
+            _config,
             excludes, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var str = Encoding.UTF8.GetString(output.ToArray());
-        
+
         Assert.Contains("using System;", str);
         Assert.Contains("public class Test {", str);
         Assert.Contains("}", str);
-        
+
         // Excluded
         Assert.DoesNotContain("// This is a comment", str);
         Assert.DoesNotContain("// Another comment", str);
@@ -60,31 +60,31 @@ public class MarkdownGeneratorTests
     {
         var generator = new MarkdownGenerator(_logger, _reader);
         var tempFile = Path.GetTempFileName();
-        
+
         try
         {
             await File.WriteAllTextAsync(tempFile, "using System;\r\n// A comment\npublic class Test {\n  // Another comment\r\n}");
             var entry = new FileEntry(tempFile, "cs", "cs", 100);
-            
+
             // Content is null so it falls back to streaming
             var fileContents = new List<FileContent> { new(entry, null, 100) };
             using var output = new MemoryStream();
-            
+
             var excludes = new[] { "//", "\n" };
 
             var result = await generator.GenerateMarkdownStreamingAsync(
-                fileContents, 
-                output, 
-                _config, 
+                fileContents,
+                output,
+                _config,
                 excludes, null, CancellationToken.None);
 
             Assert.True(result.IsSuccess);
             var str = Encoding.UTF8.GetString(output.ToArray());
-            
+
             Assert.Contains("using System;", str);
             Assert.Contains("public class Test {", str);
             Assert.Contains("}", str);
-            
+
             // Excluded
             Assert.DoesNotContain("// A comment", str);
             Assert.DoesNotContain("// Another comment", str);
@@ -101,16 +101,16 @@ public class MarkdownGeneratorTests
         var generator = new MarkdownGenerator(_logger, _reader);
         var entry = new FileEntry("test.cs", "cs", "cs", 100);
         var content = "using System;\n\npublic class Test {}";
-        
+
         var fileContents = new List<FileContent> { new(entry, content, content.Length) };
         using var output = new MemoryStream();
-        
+
         var excludes = new[] { "\n" };
 
         var result = await generator.GenerateMarkdownStreamingAsync(
-            fileContents, 
-            output, 
-            _config, 
+            fileContents,
+            output,
+            _config,
             excludes, null, CancellationToken.None);
 
         Assert.True(result.IsSuccess);

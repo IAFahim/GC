@@ -47,7 +47,7 @@ public sealed class TestRunner
             };
 
             using var process = new Process { StartInfo = psi };
-            
+
             process.OutputDataReceived += (s, e) => { if (e.Data != null) Console.WriteLine(e.Data); };
             process.ErrorDataReceived += (s, e) => { if (e.Data != null) Console.Error.WriteLine(e.Data); };
 

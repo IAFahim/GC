@@ -396,6 +396,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "-h" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.True(result.Value.ShowHelp);
     }
 
@@ -405,6 +406,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "-v" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.True(result.Value.Verbose);
     }
 
@@ -414,6 +416,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--test" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.True(result.Value.RunTests);
     }
 
@@ -423,6 +426,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--benchmark" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.True(result.Value.RunRealBenchmark);
     }
 
@@ -432,6 +436,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--init-config" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.True(result.Value.InitConfig);
     }
 
@@ -441,6 +446,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--validate-config" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.True(result.Value.ValidateConfig);
     }
 
@@ -450,6 +456,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--dump-config" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.True(result.Value.DumpConfig);
     }
 
@@ -459,6 +466,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--no-append" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.False(result.Value.Append);
     }
 
@@ -468,6 +476,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "grab", "src", "brain" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.Contains("src", result.Value.Paths);
         Assert.True(result.Value.BrainMode);
     }
@@ -478,6 +487,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "horde" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.True(result.Value.Cluster);
     }
 

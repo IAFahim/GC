@@ -3,6 +3,7 @@ using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
 using gc.Application.Services;
+using System.Text;
 
 namespace gc.Application.UseCases;
 
@@ -49,6 +50,7 @@ public sealed class GenerateContextUseCase
         string? outputFile,
         bool appendMode = false,
         IEnumerable<string>? excludeLineIfStart = null,
+        bool brainMode = false,
         CancellationToken ct = default)
     {
         var discoveryResult = await _discovery.DiscoverFilesAsync(rootPath, config, ct);
@@ -73,7 +75,7 @@ public sealed class GenerateContextUseCase
         // Stream contents lazily
         var contents = entries.Select(e => new FileContent(e, null, e.Size));
 
-        return await WriteOutputAsync(contents, entries.Count, rootPath, config, outputFile, appendMode, excludeLineIfStart, ct);
+        return await WriteOutputAsync(contents, entries.Count, rootPath, config, outputFile, appendMode, excludeLineIfStart, brainMode, ct);
     }
 
     /// <summary>
@@ -89,6 +91,7 @@ public sealed class GenerateContextUseCase
         string? outputFile,
         bool appendMode = false,
         IEnumerable<string>? excludeLineIfStart = null,
+        bool brainMode = false,
         CancellationToken ct = default)
     {
         var clusterConfig = config.Discovery?.Cluster ?? new ClusterConfiguration();
@@ -208,7 +211,7 @@ public sealed class GenerateContextUseCase
 
         _logger.Success($"Processing {totalFiles} files from {sorted.Count} repos...");
 
-        return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode, excludeLineIfStart, ct);
+        return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode, excludeLineIfStart, brainMode, ct);
     }
 
     /// <summary>
@@ -255,6 +258,7 @@ public sealed class GenerateContextUseCase
         string? outputFile,
         bool appendMode,
         IEnumerable<string>? excludeLineIfStart,
+        bool brainMode,
         CancellationToken ct)
     {
         if (!string.IsNullOrEmpty(outputFile))
@@ -269,13 +273,38 @@ public sealed class GenerateContextUseCase
             bool shouldAppend = appendMode && File.Exists(outputFile);
             FileMode fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
 
-            using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-            
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, fs, config, excludeLineIfStart, ct);
-            if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
+            if (brainMode)
+            {
+                // BrainMode: generate to memory first, crush, then write
+                using var ms = new MemoryStream();
+                var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, ct);
+                if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-            string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-            _logger.Success($"✔ {action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+                ms.Position = 0;
+                using var reader = new StreamReader(ms, Encoding.UTF8);
+                var rawContent = await reader.ReadToEndAsync(ct);
+
+                var crusher = new BrainCrusher();
+                var crushed = crusher.GetDictionaryHeader() + crusher.Crush(rawContent);
+                var crushedBytes = Encoding.UTF8.GetBytes(crushed);
+
+                using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                await fs.WriteAsync(crushedBytes, ct);
+
+                string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
+                _logger.Success($"🧠 {action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(crushedBytes.Length)} | BrainMode ON | Tokens: ~{crushedBytes.Length / 4}");
+
+                return Result.Success();
+            }
+
+            using (var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true))
+            {
+                var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, fs, config, excludeLineIfStart, ct);
+                if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
+
+                string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
+                _logger.Success($"✔ {action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            }
 
             return Result.Success();
         }
@@ -285,10 +314,29 @@ public sealed class GenerateContextUseCase
             var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, ct);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
+            if (brainMode)
+            {
+                ms.Position = 0;
+                using var reader = new StreamReader(ms, Encoding.UTF8);
+                var rawContent = await reader.ReadToEndAsync(ct);
+
+                var crusher = new BrainCrusher();
+                var crushed = crusher.GetDictionaryHeader() + crusher.Crush(rawContent);
+                var crushedBytes = Encoding.UTF8.GetBytes(crushed);
+
+                using var crushedMs = new MemoryStream(crushedBytes);
+                var clipResult = await _clipboard.CopyToClipboardAsync(crushedMs, config.Limits, appendMode, ct);
+                if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
+
+                _logger.Success($"🧠 Copied: {fileCount} files | Size: {Formatting.FormatSize(crushedBytes.Length)} | BrainMode ON | Tokens: ~{crushedBytes.Length / 4}");
+
+                return Result.Success();
+            }
+
             ms.Position = 0;
             
-            var clipResult = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
-            if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
+            var clipResult2 = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
+            if (!clipResult2.IsSuccess) return Result.Failure(clipResult2.Error!);
 
             _logger.Success($"✔ Copied: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
 

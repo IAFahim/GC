@@ -193,6 +193,7 @@ public static class Program
                 cliArgs.OutputFile,
                 cliArgs.Append,
                 cliArgs.ExcludeLineIfStart,
+                cliArgs.BrainMode,
                 ct);
 
             if (!result.IsSuccess)
@@ -213,6 +214,7 @@ public static class Program
             cliArgs.OutputFile,
             cliArgs.Append,
             cliArgs.ExcludeLineIfStart,
+            cliArgs.BrainMode,
             ct);
 
         if (!normalResult.IsSuccess)
@@ -234,20 +236,21 @@ DISCOVERY:
     -d, --depth <number>             Maximum directory depth to penetrate
 
 FILTERING:
-    -p, --paths <paths>              Filter by starting paths
-    -e, --extension <ext>            Filter by extension
-    -x, --exclude <path>             Exclude folder, path or pattern
-    --exclude-line-if-start <string> Exclude lines starting with this string
+    -g, grab, -p, --paths <paths>    Filter by starting paths
+    -t, type, -e, --extension <ext>  Filter by extension
+    -y, yeet, -x, --exclude <path>   Exclude folder, path or pattern
+    -z, zap, --exclude-line-if-start Exclude lines starting with this string
     --preset <name>                  Use a built-in preset (web,backend,dotnet,etc)
 
 OUTPUT:
-    -o, --output <file>              Save output to file instead of clipboard
+    -s, spit, -o, --output <file>    Save output to file instead of clipboard
+    -b, brain, --brain               Squeeze output for LLMs (token crush mode)
     --append                         Append to current clipboard/file content
     --no-append                      Do not append (default)
     --no-sort                        Do not sort output by file path
 
 CLUSTER MODE:
-    --cluster                        Enable cluster mode (batch process repos)
+    horde, --cluster                 Enable cluster mode (batch process repos)
     --cluster-dir <path>             Directory to scan for repos (default: CWD)
     --cluster-depth <number>         Max depth to scan for repos (default: 2)
 

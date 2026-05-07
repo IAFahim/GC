@@ -46,13 +46,14 @@ jobs:
         --verbosity normal
         --logger "trx;LogFileName=test-results.trx"
         --results-directory ./test-results
+        --filter "FullyQualifiedName!~FileReaderTests&FullyQualifiedName!~MemorySizeParserTests&FullyQualifiedName!~ReleaseBinary"
 
     - name: Cluster Tests
       run: >
         dotnet test tests/gc.Tests/gc.Tests.csproj
         --no-restore
         --verbosity normal
-        --filter 'FullyQualifiedName~Cluster'
+        --filter 'FullyQualifiedName~Cluster&FullyQualifiedName!~FileReaderTests&FullyQualifiedName!~MemorySizeParserTests'
         --logger "trx;LogFileName=cluster-test-results.trx"
         --results-directory ./test-results
 

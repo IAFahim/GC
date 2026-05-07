@@ -497,22 +497,27 @@ namespace MyApp
         var parser = new CliParser();
         var result1 = parser.Parse(new[] { "--Paths", "src" }, new GcConfiguration());
         Assert.True(result1.IsSuccess);
+        Assert.NotNull(result1.Value);
         Assert.Contains("src", result1.Value.Paths);
 
         var result2 = parser.Parse(new[] { "--Extension", "cs" }, new GcConfiguration());
         Assert.True(result2.IsSuccess);
+        Assert.NotNull(result2.Value);
         Assert.Contains("cs", result2.Value.Extensions);
 
         var result3 = parser.Parse(new[] { "--Exclude", "tests" }, new GcConfiguration());
         Assert.True(result3.IsSuccess);
+        Assert.NotNull(result3.Value);
         Assert.Contains("tests", result3.Value.Excludes);
 
         var result4 = parser.Parse(new[] { "--Output", "out.txt" }, new GcConfiguration());
         Assert.True(result4.IsSuccess);
+        Assert.NotNull(result4.Value);
         Assert.Equal("out.txt", result4.Value.OutputFile);
 
         var result5 = parser.Parse(new[] { "--Depth", "3" }, new GcConfiguration());
         Assert.True(result5.IsSuccess);
+        Assert.NotNull(result5.Value);
         Assert.Equal(3, result5.Value.Depth);
     }
 
@@ -522,6 +527,7 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "grab", "src\\\\folder" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
         Assert.Contains("src//folder", result.Value.Paths); // backslashes converted to forward slashes
     }
 

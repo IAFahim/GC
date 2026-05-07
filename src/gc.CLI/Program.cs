@@ -46,16 +46,13 @@ public static class Program
         if (cliArgs.RunTests) { TestRunner.RunTests(); return 0; }
         if (cliArgs.RunRealBenchmark) { await RealBenchmark.RunRealBenchmarkAsync(logger); return 0; }
 
-        // Setup History
         var historyService = new HistoryService(configLoader.GetConfigDirectory(), logger);
 
-        // Handle --history
         if (cliArgs.ShowHistory)
         {
             return await HistoryMenu.ShowAsync(historyService, parser, config, cliArgs.HistoryIndex, cts.Token);
         }
 
-        // Setup UseCase
         var discovery = new FileDiscovery(logger);
         var filter = new FileFilter(logger);
         var reader = new FileReader(logger);
@@ -68,7 +65,6 @@ public static class Program
 
         var exitCode = await ExecuteAsync(cliArgs, config, useCase, configService, logger, cts.Token);
 
-        // Record successful runs in history
         if (exitCode == 0)
         {
             await historyService.AddEntryAsync(
@@ -108,7 +104,6 @@ public static class Program
             };
         }
 
-        // Apply CLI max memory override to config so domain services see it
         if (cliArgs.MaxMemoryBytes > 0)
         {
             config = config with
@@ -131,7 +126,6 @@ public static class Program
             };
         }
 
-        // Handle cluster mode
         if (cliArgs.Cluster)
         {
             var clusterDir = string.IsNullOrEmpty(cliArgs.ClusterDir)
@@ -144,14 +138,11 @@ public static class Program
                 return 1;
             }
 
-            // Cluster mode preserves repo-by-repo order from BuildClusterContents.
-            // Sorting would break the interleaved header/file structure.
             config = config with
             {
                 Output = config.Output with { SortByPath = false }
             };
 
-            // Apply cluster depth if specified via CLI
             if (cliArgs.ClusterDepth.HasValue)
             {
                 var existingCluster = config.Discovery?.Cluster ?? new ClusterConfiguration();
@@ -169,7 +160,6 @@ public static class Program
             }
             else if (config.Discovery?.Cluster == null || !config.Discovery.Cluster.Enabled)
             {
-                // Enable cluster mode with defaults
                 config = config with
                 {
                     Discovery = (config.Discovery ?? new DiscoveryConfiguration()) with

@@ -30,8 +30,6 @@ public sealed class ConfigurationService
         if (File.Exists(configPath))
         {
             _logger.Info($"Configuration file already exists: {configPath}");
-            // In a real CLI we would ask, but here we just fail if it exists and we can't overwrite
-            // Or we could take an 'overwrite' parameter.
             return Result.Failure($"Configuration file already exists: {configPath}. Manual intervention required to overwrite.");
         }
 

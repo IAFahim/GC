@@ -45,7 +45,6 @@ public sealed class ConsoleLogger : ILogger
             }
         }
 
-        // Write to stderr for errors, stdout for everything else
         if (level == LogLevel.Error)
         {
             Console.Error.WriteLine(output);

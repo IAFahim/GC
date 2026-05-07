@@ -3,17 +3,8 @@ using System.Text;
 
 namespace gc.Application.Services;
 
-/// <summary>
-/// Suffix Array + LCP array for finding longest repeated substrings (phrases).
-/// O(N log N) construction via prefix-doubling with radix sort.
-/// Used by DynamicCompressor for phrase-level compression.
-/// </summary>
 public static class SuffixArray
 {
-    /// <summary>
-    /// Finds repeated substrings of minimum length that appear at least minFrequency times.
-    /// Returns candidates sorted by savings (length * frequency) descending.
-    /// </summary>
     public static List<PhraseCandidate> FindRepeatedPhrases(
         string text,
         int minPhraseLength = 6,
@@ -24,11 +15,9 @@ public static class SuffixArray
         if (text.Length < minPhraseLength * 2)
             return [];
 
-        // Build suffix array
         var sa = Build(text);
         var n = sa.Length;
 
-        // Build LCP array using Kasai's algorithm
         var rank = new int[n];
         for (var i = 0; i < n; i++) rank[sa[i]] = i;
 
@@ -46,7 +35,6 @@ public static class SuffixArray
             }
         }
 
-        // Extract candidate phrases from LCP peaks
         var seen = new HashSet<string>();
         var candidates = new List<PhraseCandidate>();
 
@@ -57,33 +45,31 @@ public static class SuffixArray
             var phraseLen = Math.Min(lcp[i], maxPhraseLength);
             var phrase = text.Substring(sa[i], phraseLen);
 
-            // Clean up: trim to word boundaries
+            if (phrase.Contains('\n') || phrase.Contains('\r'))
+                continue;
+
             phrase = TrimToWordBoundary(phrase, text, sa[i]);
             if (phrase.Length < minPhraseLength) continue;
 
-            // Skip phrases that are mostly whitespace or punctuation
             if (!IsUsefulPhrase(phrase)) continue;
 
             if (!seen.Add(phrase)) continue;
 
-            // Count actual occurrences using simple search
             var freq = CountOccurrences(text, phrase);
             if (freq < minFrequency) continue;
 
-            var savings = (phrase.Length - 2) * freq; // -2 for the replacement symbol cost
+            var savings = (phrase.Length - 2) * freq;
             if (savings > 0)
             {
                 candidates.Add(new PhraseCandidate(phrase, freq, savings));
             }
         }
 
-        // Deduplicate: remove substrings of longer phrases with higher savings
         candidates.Sort((a, b) => b.Savings.CompareTo(a.Savings));
 
         var filtered = new List<PhraseCandidate>();
         foreach (var c in candidates)
         {
-            // Skip if this phrase is a substring of an already-selected phrase with higher savings
             var isSubstr = false;
             foreach (var f in filtered)
             {
@@ -103,9 +89,6 @@ public static class SuffixArray
         return filtered;
     }
 
-    /// <summary>
-    /// Build suffix array using prefix-doubling with radix sort. O(N log N).
-    /// </summary>
     public static int[] Build(string text)
     {
         var n = text.Length;
@@ -115,7 +98,6 @@ public static class SuffixArray
         var rank = new int[n];
         var tmp = new int[n];
 
-        // Initial ranking based on character
         for (var i = 0; i < n; i++)
         {
             sa[i] = i;
@@ -124,7 +106,6 @@ public static class SuffixArray
 
         for (var k = 1; k < n; k *= 2)
         {
-            // Sort by (rank[i], rank[i+k])
             Array.Sort(sa, (a, b) =>
             {
                 var cmp = rank[a].CompareTo(rank[b]);
@@ -134,7 +115,6 @@ public static class SuffixArray
                 return ra.CompareTo(rb);
             });
 
-            // Compute new ranks
             tmp[sa[0]] = 0;
             for (var i = 1; i < n; i++)
             {
@@ -148,7 +128,6 @@ public static class SuffixArray
 
             Array.Copy(tmp, rank, n);
 
-            // All ranks unique — early termination
             if (rank[sa[n - 1]] == n - 1) break;
         }
 
@@ -158,15 +137,12 @@ public static class SuffixArray
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string TrimToWordBoundary(string phrase, string text, int start)
     {
-        // Trim trailing partial words
         var end = phrase.Length;
         while (end > 1 && char.IsLetterOrDigit(phrase[end - 1]) && end < phrase.Length)
             end--;
 
-        // Also trim if the next char in text is also an identifier char (partial word)
         if (start + end < text.Length && char.IsLetterOrDigit(text[start + end]))
         {
-            // Back up to last word boundary
             while (end > 0 && char.IsLetterOrDigit(phrase[end - 1]))
                 end--;
         }
@@ -183,7 +159,6 @@ public static class SuffixArray
             if (char.IsLetterOrDigit(c) || c == '_' || c == '.')
                 alphaCount++;
         }
-        // At least 50% should be meaningful characters
         return alphaCount >= phrase.Length * 0.5;
     }
 
@@ -203,7 +178,4 @@ public static class SuffixArray
     }
 }
 
-/// <summary>
-/// A candidate phrase for dynamic compression.
-/// </summary>
 public readonly record struct PhraseCandidate(string Phrase, int Frequency, int Savings);

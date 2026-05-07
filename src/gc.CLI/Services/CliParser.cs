@@ -42,7 +42,7 @@ public sealed class CliParser
         var validateConfig = false;
         var dumpConfig = false;
         var maxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes);
-        var appendMode = false; // default to overwrite
+        var appendMode = false;
         var force = false;
         var noSort = false;
         int? depth = configuration.Discovery.MaxDepth;
@@ -73,7 +73,6 @@ public sealed class CliParser
 
             if (TryGetNewState(arg, out var newState))
             {
-                // HordeMarker is a valueless state — it just enables cluster mode
                 if (newState == ParseState.HordeMarker)
                 {
                     cluster = true;
@@ -91,7 +90,6 @@ public sealed class CliParser
                 continue;
             }
 
-            // Check if this is a numeric index for --history
             if (showHistory && historyIndex is null && int.TryParse(arg, out var idx) && idx > 0)
             {
                 historyIndex = idx;
@@ -116,13 +114,11 @@ public sealed class CliParser
             }
         }
 
-        // Validate final parser state: if a SINGLE-VALUE flag is still waiting for its value, that's an error
         if (state != ParseState.None && IsSingleValueState(state))
         {
             return Result<CliArguments>.Failure($"Missing value for argument: {StateToFlagName(state)}");
         }
 
-        // If unknown flag found, show help
         if (unknownFlagFound)
         {
             showHelp = true;
@@ -281,7 +277,6 @@ public sealed class CliParser
             return true;
         }
 
-        // Unknown flag (starts with - but wasn't recognized)
         return false;
     }
     

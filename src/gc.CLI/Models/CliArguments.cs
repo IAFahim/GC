@@ -28,24 +28,11 @@ public sealed record CliArguments
     public int? HistoryIndex { get; init; }
     public GcConfiguration? Configuration { get; init; }
 
-    /// <summary>
-    /// Enable Brain Mode — squeeze output for LLMs (dict map + space kill + comment strip).
-    /// </summary>
     public bool BrainMode { get; init; }
 
-    // Cluster mode options
-    /// <summary>
-    /// Enable cluster mode — scan for multiple git repos in the working directory.
-    /// </summary>
     public bool Cluster { get; init; }
 
-    /// <summary>
-    /// Specify a different directory to scan for repos (instead of CWD).
-    /// </summary>
     public string ClusterDir { get; init; } = string.Empty;
 
-    /// <summary>
-    /// Maximum depth to scan for repos within the cluster directory.
-    /// </summary>
     public int? ClusterDepth { get; init; }
 }

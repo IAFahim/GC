@@ -5,26 +5,12 @@ using gc.Domain.Interfaces;
 
 namespace gc.Application.Services;
 
-/// <summary>
-/// Brain Mode tokenizer — squeezes code for LLM context windows.
-/// Strips comments, collapses whitespace, maps common keywords to short tokens.
-/// Targets ~40% token reduction for C#-heavy codebases.
-/// 
-/// Architecture:
-/// - BrainTrie for O(L) keyword matching (L = word length)
-/// - CrushBlock() for per-code-block crushing (called from MarkdownGenerator)
-/// - Crush() kept for standalone use (tests, debugging)
-/// - Uncrush() for round-trip decode
-/// </summary>
 public sealed class BrainCrusher : IBrainCrusher
 {
-    /// <summary>
-    /// Trie node for O(L) whole-word keyword lookup.
-    /// </summary>
     private sealed class TrieNode
     {
         public Dictionary<char, TrieNode> Children = new();
-        public string? Token; // non-null = this path completes a keyword
+        public string? Token;
     }
 
     private readonly TrieNode _trieRoot;
@@ -39,15 +25,7 @@ public sealed class BrainCrusher : IBrainCrusher
         _trieRoot = BuildTrie(map);
     }
 
-    // =====================================================================
-    // Public API
-    // =====================================================================
 
-    /// <summary>
-    /// Crush a code block (content inside fences only).
-    /// This is the per-block API called by MarkdownGenerator during streaming.
-    /// Safe for individual code blocks — no fence detection needed here.
-    /// </summary>
     public string CrushBlock(string code)
     {
         if (string.IsNullOrEmpty(code)) return code;
@@ -55,10 +33,6 @@ public sealed class BrainCrusher : IBrainCrusher
         return CollapseAndMap(stripped);
     }
 
-    /// <summary>
-    /// Crush arbitrary content (standalone use). 
-    /// Strips comments, collapses whitespace, applies token mapping.
-    /// </summary>
     public string Crush(string content)
     {
         if (string.IsNullOrEmpty(content)) return content;
@@ -66,9 +40,6 @@ public sealed class BrainCrusher : IBrainCrusher
         return CollapseAndMap(stripped);
     }
 
-    /// <summary>
-    /// Decodes a crushed string back to readable form (for debugging).
-    /// </summary>
     public string Uncrush(string crushed)
     {
         if (string.IsNullOrEmpty(crushed)) return crushed;
@@ -82,7 +53,6 @@ public sealed class BrainCrusher : IBrainCrusher
             var ch = crushed[i];
             var matched = false;
 
-            // Try to match a token prefix (!, #, $, %)
             if (i + 1 < len && (ch == '!' || ch == '#' || ch == '$' || ch == '%'))
             {
                 var candidate = crushed.Substring(i, 2);
@@ -104,9 +74,6 @@ public sealed class BrainCrusher : IBrainCrusher
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Gets the dictionary header to prepend to crushed output so LLMs can decode.
-    /// </summary>
     public string GetDictionaryHeader()
     {
         var sb = new StringBuilder(512);
@@ -119,14 +86,8 @@ public sealed class BrainCrusher : IBrainCrusher
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Exposes the token map for testing/inspection.
-    /// </summary>
     public IReadOnlyDictionary<string, string> GetTokenMap() => _tokenMap;
 
-    // =====================================================================
-    // Comment stripping (phase 1)
-    // =====================================================================
 
     private static string StripComments(string content)
     {
@@ -240,9 +201,6 @@ public sealed class BrainCrusher : IBrainCrusher
         return sb.ToString();
     }
 
-    // =====================================================================
-    // Whitespace collapse + trie-based token mapping (phase 2)
-    // =====================================================================
 
     private string CollapseAndMap(string stripped)
     {
@@ -289,7 +247,6 @@ public sealed class BrainCrusher : IBrainCrusher
                 lastWasSpace = false;
             }
 
-            // Try trie lookup at this position
             if (TryMatchTrie(stripped, i, len, out var replacement, out var advance))
             {
                 result.Append(replacement);
@@ -307,21 +264,15 @@ public sealed class BrainCrusher : IBrainCrusher
         return result.ToString();
     }
 
-    /// <summary>
-    /// O(L) trie-based whole-word keyword match. L = word length.
-    /// Walks the trie character by character, then checks word boundaries.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool TryMatchTrie(string source, int start, int len, out string replacement, out int advance)
     {
         replacement = string.Empty;
         advance = 0;
 
-        // Must be at word boundary — preceded by non-identifier char or start
         if (start > 0 && IsIdentifierChar(source[start - 1]))
             return false;
 
-        // Walk the trie, tracking the longest keyword match
         var node = _trieRoot;
         var bestMatch = -1;
         var bestToken = string.Empty;
@@ -338,7 +289,6 @@ public sealed class BrainCrusher : IBrainCrusher
 
             if (node.Token != null)
             {
-                // Potential match — but must check word boundary ahead
                 if (pos >= len || !IsIdentifierChar(source[pos]))
                 {
                     bestMatch = pos;
@@ -363,19 +313,14 @@ public sealed class BrainCrusher : IBrainCrusher
         return char.IsLetterOrDigit(ch) || ch == '_';
     }
 
-    // =====================================================================
-    // Token dictionary + trie construction
-    // =====================================================================
 
     private static Dictionary<string, string> BuildTokenMap() => new(StringComparer.Ordinal)
     {
-        // Access modifiers
         ["public"] = "!1",
         ["private"] = "!2",
         ["protected"] = "!3",
         ["internal"] = "!4",
 
-        // Type modifiers
         ["static"] = "!5",
         ["readonly"] = "!6",
         ["sealed"] = "!7",
@@ -386,7 +331,6 @@ public sealed class BrainCrusher : IBrainCrusher
         ["const"] = "!c",
         ["volatile"] = "!d",
 
-        // Declaration keywords
         ["class"] = "!e",
         ["struct"] = "!f",
         ["record"] = "!g",
@@ -403,7 +347,6 @@ public sealed class BrainCrusher : IBrainCrusher
         ["false"] = "!r",
         ["null"] = "!s",
 
-        // Control flow
         ["if"] = "#1",
         ["else"] = "#2",
         ["for"] = "#3",
@@ -420,7 +363,6 @@ public sealed class BrainCrusher : IBrainCrusher
         ["throw"] = "#e",
         ["yield"] = "#f",
 
-        // Async/LINQ
         ["async"] = "$1",
         ["await"] = "$2",
         ["Task"] = "$3",
@@ -431,7 +373,6 @@ public sealed class BrainCrusher : IBrainCrusher
         ["where"] = "$8",
         ["select"] = "$9",
 
-        // Value types
         ["string"] = "%1",
         ["int"] = "%2",
         ["bool"] = "%3",

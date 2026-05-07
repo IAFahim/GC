@@ -24,7 +24,6 @@ public sealed class FileReader : IFileReader
                 return Result<Stream>.Failure($"File not found: {path}");
             }
 
-            // Using FileShare.ReadWrite to avoid locking issues as much as possible
             var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
             return Result<Stream>.Success(stream);
         }
@@ -56,7 +55,6 @@ public sealed class FileReader : IFileReader
                 return Result<Stream>.Failure($"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes): {path}");
             }
 
-            // Using FileShare.ReadWrite to avoid locking issues as much as possible
             var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
             return Result<Stream>.Success(stream);
         }
@@ -83,7 +81,6 @@ public sealed class FileReader : IFileReader
                 return Result<FileContent>.Failure($"File not found: {entry.Path}");
             }
 
-            // Check if binary before reading fully
             var isBinary = await IsBinaryFileAsync(entry.Path, ct);
             if (isBinary)
             {
@@ -124,7 +121,6 @@ public sealed class FileReader : IFileReader
                 return Result<FileContent>.Failure($"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes): {entry.Path}");
             }
 
-            // Check if binary before reading fully
             var isBinary = await IsBinaryFileAsync(entry.Path, ct);
             if (isBinary)
             {

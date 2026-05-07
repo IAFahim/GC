@@ -34,9 +34,6 @@ public sealed class FileDiscovery : IFileDiscovery
                 return await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
             }
 
-            // Phase 0.2: In auto mode, skip IsGitRepositoryAsync entirely.
-            // Just try git ls-files directly — if it fails, fall back to filesystem.
-            // This eliminates one process spawn (~2-5ms) on every run.
             if (mode == "auto")
             {
                 var gitFiles = await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
@@ -55,11 +52,6 @@ public sealed class FileDiscovery : IFileDiscovery
         }
     }
 
-    /// <summary>
-    /// Discovers all git repositories within a cluster directory.
-    /// Scans the directory tree looking for .git folders/submodules and returns info about each repo.
-    /// Handles edge cases: nested repos, submodules, permission errors, empty dirs, symlinks.
-    /// </summary>
     public async Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(string clusterRoot, ClusterConfiguration clusterConfig, CancellationToken ct = default)
     {
         try
@@ -76,7 +68,6 @@ public sealed class FileDiscovery : IFileDiscovery
                 "__pycache__", "venv", ".env"
             };
 
-            // Add user-specified skip directories
             if (clusterConfig.SkipDirectories != null)
             {
                 foreach (var skip in clusterConfig.SkipDirectories)
@@ -98,13 +89,11 @@ public sealed class FileDiscovery : IFileDiscovery
                 return Result<IReadOnlyList<RepoInfo>>.Success(repos);
             }
 
-            // Validate each discovered repo
             for (int i = 0; i < repos.Count; i++)
             {
                 var repo = repos[i];
                 if (!repo.IsValid)
                 {
-                    // Already marked invalid during scan
                     continue;
                 }
 
@@ -112,7 +101,6 @@ public sealed class FileDiscovery : IFileDiscovery
                 repos[i] = repo with { IsValid = isValid, Error = isValid ? null : "Git validation failed" };
             }
 
-            // Filter to only valid repos
             var validRepos = repos.Where(r => r.IsValid).ToList();
             var invalidCount = repos.Count - validRepos.Count;
 
@@ -139,11 +127,6 @@ public sealed class FileDiscovery : IFileDiscovery
         }
     }
 
-    /// <summary>
-    /// Recursively scans a directory for git repositories.
-    /// Handles edge cases: symlink cycles, permission errors, nested git repos.
-    /// Stops descending into a directory once a .git is found (it's a repo root, not a parent).
-    /// </summary>
     private async Task ScanForGitReposAsync(
         string currentDir,
         string clusterRoot,
@@ -156,7 +139,6 @@ public sealed class FileDiscovery : IFileDiscovery
     {
         ct.ThrowIfCancellationRequested();
 
-        // Resolve real path to detect symlink cycles
         string realPath;
         try
         {
@@ -181,16 +163,13 @@ public sealed class FileDiscovery : IFileDiscovery
 
         if (!visitedRealPaths.Add(realPath))
         {
-            // Symlink cycle detected
             _logger.Debug($"Skipping already-visited path (possible symlink cycle): {currentDir}");
             return;
         }
 
-        // Check if this directory is itself a git repo
         bool isGitRepo = false;
         try
         {
-            // Check for .git directory (standard repo) or .git file (submodule/worktree)
             var gitPath = Path.Combine(currentDir, ".git");
             if (Directory.Exists(gitPath) || File.Exists(gitPath))
             {
@@ -212,18 +191,13 @@ public sealed class FileDiscovery : IFileDiscovery
                 RootPath = currentDir,
                 RelativePath = relativePath,
                 Name = name,
-                IsValid = true // Will be validated later
+                IsValid = true
             });
             _logger.Debug($"Found git repo: {relativePath}");
 
-            // IMPORTANT: Do NOT descend into a git repo's subdirectories looking for more repos
-            // UNLESS we want to support nested repos (submodules). For submodules, .git is a file
-            // pointing to ../.git/modules/..., and the submodule's own submodules would be in .git/modules/.
-            // We skip descending to avoid duplicate discovery of parent repos.
             return;
         }
 
-        // Not a git repo — scan subdirectories if we haven't exceeded max depth
         if (currentDepth >= maxDepth)
         {
             return;
@@ -251,31 +225,24 @@ public sealed class FileDiscovery : IFileDiscovery
 
             var dirName = Path.GetFileName(subdir);
 
-            // Skip ignored directories
             if (skipDirs.Contains(dirName))
             {
                 continue;
             }
 
-            // Skip hidden directories (start with .) unless they might be project roots
-            // e.g., don't skip .config, .github repos
             if (dirName.StartsWith('.') && dirName != ".github")
             {
-                // Still scan .github directories but skip most hidden dirs
                 if (dirName.Length > 1 && !dirName.Equals(".github", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
             }
 
-            // Skip symlink directories when FollowSymlinks is false
             try
             {
                 var subdirInfo = new DirectoryInfo(subdir);
                 if ((subdirInfo.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
                 {
-                    // Symlink — still scan it (cycle detection is handled above)
-                    // but log it for debug visibility
                     _logger.Debug($"Following symlink: {subdir}");
                 }
             }
@@ -342,10 +309,8 @@ public sealed class FileDiscovery : IFileDiscovery
             using var process = Process.Start(psi);
             if (process == null) return Result<IEnumerable<string>>.Failure("Failed to start git process");
 
-            // Phase 1.3: Pre-size list to avoid repeated resizing (typical repos have 50-500 files)
             var files = new List<string>(256);
             var stream = process.StandardOutput.BaseStream;
-            // Phase 0.5: 64KB buffer instead of 4KB — reduces read syscalls by 16x
             var buffer = ArrayPool<byte>.Shared.Rent(65536);
             try
             {
@@ -383,16 +348,12 @@ public sealed class FileDiscovery : IFileDiscovery
                     }
                 }
 
-                // Handle remaining partial data
                 if (start < totalBytes)
                 {
                     var remaining = totalBytes - start;
-                    // Prevent buffer overflow: if remaining data is too large, we have a problem
                     if (remaining >= buffer.Length)
                     {
-                        // This should never happen, but guard against it
                         _logger.Error($"Buffer overflow detected in git ls-files parsing. Remaining: {remaining}, Buffer: {buffer.Length}");
-                        // CRITICAL: Must kill process before breaking to avoid pipe deadlock
                         try { process.Kill(true); } catch { }
                         break;
                     }
@@ -477,7 +438,6 @@ public sealed class FileDiscovery : IFileDiscovery
                         var dirName = Path.GetFileName(dir);
                         if (!ignoredDirs.Contains(dirName))
                         {
-                            // Skip symlinks when FollowSymlinks is false to prevent infinite loops
                             if (!config.FollowSymlinks)
                             {
                                 try
@@ -485,7 +445,6 @@ public sealed class FileDiscovery : IFileDiscovery
                                     var dirInfo = new DirectoryInfo(dir);
                                     if ((dirInfo.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
                                     {
-                                        // This is a symlink, skip it
                                         continue;
                                     }
                                 }

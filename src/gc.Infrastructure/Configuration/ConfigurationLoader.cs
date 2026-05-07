@@ -60,7 +60,6 @@ public sealed class ConfigurationLoader
         var config = BuiltInPresets.GetDefaultConfiguration();
         _logger.Debug("Loaded built-in default configuration");
 
-        // System Config
         var systemConfigPath = Path.Combine(GetSystemConfigDirectory(), "config.json");
         if (File.Exists(systemConfigPath))
         {
@@ -71,7 +70,6 @@ public sealed class ConfigurationLoader
             }
         }
 
-        // User Config
         var userConfigPath = Path.Combine(GetConfigDirectory(), "config.json");
         if (File.Exists(userConfigPath))
         {
@@ -82,7 +80,6 @@ public sealed class ConfigurationLoader
             }
         }
 
-        // Project Config
         var projectConfigPath = FindProjectConfig();
         if (projectConfigPath != null)
         {

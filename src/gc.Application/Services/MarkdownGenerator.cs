@@ -96,12 +96,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 SafeFileHandle handle;
                                 if (OperatingSystem.IsLinux())
                                 {
-                                    // Phase 3.2: O_NOATIME and Phase 3.3: posix_fadvise(SEQUENTIAL)
-                                    // O_RDONLY = 0, O_NOATIME = 0x40000
                                     int fd = gc.Application.Native.LinuxFastPath.open(content.Entry.Path, 0x40000);
                                     if (fd < 0)
                                     {
-                                        // Fallback if O_NOATIME fails (e.g. not owner)
                                         fd = gc.Application.Native.LinuxFastPath.open(content.Entry.Path, 0);
                                     }
                                     if (fd >= 0)
@@ -217,7 +214,6 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                             actualContent = actualContent.TrimEnd(' ', '\t', '\r', '\n');
 
-                            // Brain Mode: crush only the code block content, never headers/fences
                             if (brainCrusher != null)
                             {
                                 actualContent = brainCrusher.CrushBlock(actualContent);
@@ -255,15 +251,12 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                             if (ready.Length == -1)
                             {
-                                // Fallback for massive files (streamed sequentially to avoid OOM)
-                                // Not implemented here to keep test small, we'll just skip them in this draft
                                 var errorMsg = $"[File too large for fast streaming: {content.Entry.DisplayPath ?? content.Entry.Path}]";
                                 WriteStringLine(writer, errorMsg);
                                 totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                 continue;
                             }
 
-                            // Phase 1.4: Binary check using SearchValues — SIMD accelerated via AVX2/SSE2
                             int checkLen = Math.Min(ready.Length, 4096);
                             bool isBinary = ready.Buffer!.AsSpan(0, checkLen).ContainsAny(NullByte);
 
@@ -292,7 +285,6 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                             long contentBytesWritten = 0;
 
-                            // Brain Mode: decode buffer → crush → write crushed content
                             if (brainCrusher != null)
                             {
                                 var rawText = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length);
@@ -389,7 +381,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             projectStructureBytes += Utf8NoBom.GetByteCount($"{config.Markdown.Fence}text") + NewlineByteCount;
             foreach (var path in fileList)
             {
-                if (path.StartsWith('[')) continue; // Skip virtual entries
+                if (path.StartsWith('[')) continue;
                 projectStructureBytes += Utf8NoBom.GetByteCount(path) + NewlineByteCount;
             }
             projectStructureBytes += Utf8NoBom.GetByteCount(config.Markdown.Fence) + NewlineByteCount;
@@ -432,7 +424,6 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
         foreach (var path in filePaths)
         {
-            // Skip virtual entries (cluster headers/separators) — they're metadata, not real files
             if (path.StartsWith('[')) continue;
             WriteStringLine(writer, path);
         }

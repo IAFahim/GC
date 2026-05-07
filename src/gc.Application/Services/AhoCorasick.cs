@@ -4,22 +4,16 @@ using System.Text;
 
 namespace gc.Application.Services;
 
-/// <summary>
-/// Aho-Corasick multi-pattern string matcher.
-/// O(N + M + Z) where N = text length, M = total pattern length, Z = match count.
-/// Used by DynamicCompressor for single-pass multi-token replacement.
-/// </summary>
 internal sealed class AhoCorasick
 {
     private readonly int[] _gotoFunc;
     private readonly int[] _fail;
-    private readonly int[] _output; // -1 = no output, else index into _patterns
+    private readonly int[] _output;
     private readonly string[] _patterns;
     private readonly int _alphabetSize;
     private readonly int _root;
     private readonly int _nodeCount;
 
-    // Compact alphabet: map chars to 0..alphabetSize-1
     private readonly Dictionary<char, int> _charMap;
     private readonly char[] _reverseCharMap;
 
@@ -27,7 +21,6 @@ internal sealed class AhoCorasick
     {
         _patterns = patterns;
 
-        // Build compact character mapping from all patterns
         var chars = new HashSet<char>();
         foreach (var p in patterns)
             foreach (var c in p)
@@ -44,7 +37,6 @@ internal sealed class AhoCorasick
         }
         _alphabetSize = chars.Count;
 
-        // Upper bound on nodes: sum of all pattern lengths + 1 (root)
         var maxNodes = patterns.Sum(p => p.Length) + 1;
         _gotoFunc = new int[maxNodes * _alphabetSize];
         Array.Fill(_gotoFunc, -1);
@@ -53,9 +45,8 @@ internal sealed class AhoCorasick
         Array.Fill(_output, -1);
 
         _root = 0;
-        _nodeCount = 1; // root is node 0
+        _nodeCount = 1;
 
-        // Build goto function and output
         for (var i = 0; i < patterns.Length; i++)
         {
             var currentState = _root;
@@ -73,10 +64,8 @@ internal sealed class AhoCorasick
             _output[currentState] = i;
         }
 
-        // Build failure function (BFS)
         var queue = new Queue<int>();
 
-        // Depth-1 nodes fail to root
         for (var a = 0; a < _alphabetSize; a++)
         {
             var s = Goto(_root, a);
@@ -105,7 +94,6 @@ internal sealed class AhoCorasick
                         state = _fail[state];
                     _fail[s] = Goto(state, a);
 
-                    // Merge output (longer match wins)
                     if (_output[s] == -1)
                         _output[s] = _output[_fail[s]];
                 }
@@ -113,10 +101,6 @@ internal sealed class AhoCorasick
         }
     }
 
-    /// <summary>
-    /// Replaces all pattern occurrences in the input with corresponding replacements.
-    /// Uses longest-match semantics (greedy).
-    /// </summary>
     public string ReplaceAll(string input, string[] replacements)
     {
         if (input.Length == 0) return input;

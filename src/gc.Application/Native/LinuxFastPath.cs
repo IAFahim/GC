@@ -52,13 +52,11 @@ public static class LinuxFastPath
                     }
                     catch
                     {
-                        // Ignore individual file errors
                     }
                 }
             }
             catch
             {
-                // Ignore catastrophic errors
             }
         });
     }

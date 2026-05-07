@@ -68,7 +68,6 @@ public sealed class ConfigurationValidator
                 errors.Add($"Invalid DiscoveryMode: '{discovery.Mode}'. Must be: auto, git, or filesystem");
         }
 
-        // Validate cluster configuration if present
         if (discovery.Cluster != null)
         {
             ValidateCluster(discovery.Cluster, errors, warnings);

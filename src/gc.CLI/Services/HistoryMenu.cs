@@ -31,7 +31,6 @@ public static class HistoryMenu
 
         PrintHistory(history);
 
-        // If a preselected index was provided, use it directly
         if (preselectedIndex.HasValue)
         {
             if (preselectedIndex.Value < 1 || preselectedIndex.Value > history.Count)
@@ -45,7 +44,6 @@ public static class HistoryMenu
                 history[preselectedIndex.Value - 1], ct);
         }
 
-        // Interactive mode
         Console.Write("Select a number to run (Enter to cancel): ");
         var input = Console.ReadLine()?.Trim();
 
@@ -99,7 +97,6 @@ public static class HistoryMenu
 
         Environment.CurrentDirectory = entry.Directory;
 
-        // Re-parse the saved arguments (filter out --history to avoid infinite loop)
         var cleanArgs = entry.Arguments
             .Where(a => !a.Equals("--history", StringComparison.OrdinalIgnoreCase))
             .ToArray();
@@ -113,7 +110,6 @@ public static class HistoryMenu
 
         var cliArgs = parseResult.Value!;
 
-        // Set up services and execute
         var logger = new gc.Infrastructure.Logging.ConsoleLogger();
         var discovery = new gc.Infrastructure.Discovery.FileDiscovery(logger);
         var filter = new gc.Application.Services.FileFilter(logger);
@@ -126,7 +122,6 @@ public static class HistoryMenu
 
         var exitCode = await Program.ExecuteAsync(cliArgs, config, useCase, configService, logger, ct);
 
-        // Bump this entry to the top of history
         if (exitCode == 0)
         {
             await historyService.AddEntryAsync(entry.Directory, entry.Arguments, ct);

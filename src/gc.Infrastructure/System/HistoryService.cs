@@ -24,15 +24,12 @@ public sealed class HistoryService : IHistoryService
         {
             var entries = await LoadInternalAsync(ct);
 
-            // Remove duplicate entry (same directory + arguments)
             entries.RemoveAll(e =>
                 string.Equals(e.Directory, directory, StringComparison.Ordinal) &&
                 e.Arguments.SequenceEqual(arguments));
 
-            // Insert at top
             entries.Insert(0, new HistoryEntry(directory, arguments, DateTime.UtcNow));
 
-            // Cap the list
             if (entries.Count > MaxHistoryEntries)
                 entries.RemoveRange(MaxHistoryEntries, entries.Count - MaxHistoryEntries);
 
@@ -42,7 +39,6 @@ public sealed class HistoryService : IHistoryService
         catch (Exception ex)
         {
             _logger.Debug($"Failed to save history: {ex.Message}");
-            // History saving should never crash the main operation
             return Result.Failure(ex.Message);
         }
     }
@@ -53,13 +49,10 @@ public sealed class HistoryService : IHistoryService
         {
             var entries = await LoadInternalAsync(ct);
 
-            // Filter out deleted directories
             var pruned = entries.Where(e => Directory.Exists(e.Directory)).ToList();
 
-            // Sort by LastRun descending
             pruned.Sort((a, b) => b.LastRun.CompareTo(a.LastRun));
 
-            // Save pruned list back to keep file clean
             if (pruned.Count != entries.Count)
                 await SaveInternalAsync(pruned, ct);
 

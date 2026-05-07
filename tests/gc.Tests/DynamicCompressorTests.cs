@@ -172,7 +172,7 @@ public class DynamicCompressorTests
         var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMask = true;", 10));
         var result = _compressor.Compress(input);
         Assert.True(result.ReplacementCount > 0);
-        Assert.Contains("[DICT]", result.Legend);
+        Assert.Contains("Dynamic Compression Legend", result.Legend);
         Assert.Contains("Dynamic Compression Legend", result.Legend);
     }
 

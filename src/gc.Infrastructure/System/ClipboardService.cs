@@ -60,7 +60,6 @@ public sealed class ClipboardService : IClipboardService
                 }
             }
 
-            // Read the stream contents
             string newContent;
             if (stream.CanSeek)
             {
@@ -190,11 +189,10 @@ public sealed class ClipboardService : IClipboardService
 
     private async Task<bool> CopyToWindowsAsync(Stream stream, CancellationToken ct)
     {
-        // Try clip.exe natively first (much faster and avoids PowerShell truncation)
         var success = await RunClipboardProcessAsync("clip.exe", "", stream, ct);
         if (!success && stream.CanSeek)
         {
-            stream.Position = 0; // Reset stream for fallback
+            stream.Position = 0;
             success = await RunClipboardProcessAsync("powershell.exe", "-Command \"$input | Out-String | Set-Clipboard\"", stream, ct);
         }
         return success;
@@ -207,11 +205,10 @@ public sealed class ClipboardService : IClipboardService
 
     private async Task<bool> CopyToLinuxAsync(Stream stream, CancellationToken ct)
     {
-        // Try wl-copy (Wayland), then xclip (X11)
         var success = await RunClipboardProcessAsync("wl-copy", "", stream, ct);
         if (!success && stream.CanSeek)
         {
-            stream.Position = 0; // Reset stream for fallback
+            stream.Position = 0;
             success = await RunClipboardProcessAsync("xclip", "-selection clipboard", stream, ct);
         }
         return success;
@@ -235,7 +232,6 @@ public sealed class ClipboardService : IClipboardService
             using var process = Process.Start(psi);
             if (process == null) return false;
 
-            // Copy stream to standard input
             await inputStream.CopyToAsync(process.StandardInput.BaseStream, ct);
             await process.StandardInput.BaseStream.FlushAsync(ct);
             process.StandardInput.Close();

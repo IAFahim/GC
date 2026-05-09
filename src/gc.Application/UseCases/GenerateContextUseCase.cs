@@ -9,6 +9,12 @@ namespace gc.Application.UseCases;
 
 public sealed class GenerateContextUseCase
 {
+    private const string LlmContextHeader =
+        "[Context compressed by gc+sqz for efficiency. " +
+        "This contains the full source code — references like [→L], [×N], «A» are structural markers. " +
+        "IMPORTANT: When writing code or answering, use the ORIGINAL full identifiers and patterns shown here. " +
+        "Do NOT use abbreviated symbols or short-form in your output. Respond as if you received uncompressed source.]\n\n";
+
     private readonly IFileDiscovery _discovery;
     private readonly FileFilter _filter;
     private readonly IFileReader _reader;
@@ -239,7 +245,8 @@ public sealed class GenerateContextUseCase
 
         if (compress && !sqzService!.IsAvailable)
         {
-            _logger.Warning("sqz not found — compression disabled. Install: curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh");
+            _logger.Warning(SqzCompressionService.InstallHint);
+            _logger.Warning("Compression disabled for this run.");
             compress = false;
             sqzService = null;
         }
@@ -265,16 +272,24 @@ public sealed class GenerateContextUseCase
                 using var reader = new StreamReader(ms, Encoding.UTF8);
                 var rawOutput = await reader.ReadToEndAsync(ct);
 
-                var dynResult = dynamicCompressor!.Compress(rawOutput);
-                var afterDynamic = dynResult.Output;
+                // Phase 1: Strip comments + collapse whitespace (always beneficial)
+                var afterCrush = crusher!.Crush(rawOutput);
 
-                var afterCrush = crusher!.Crush(afterDynamic);
-
-                var finalOutput = dynResult.Legend + crusher.GetDictionaryHeader() + afterCrush;
+                string finalOutput;
+                string dynInfo = "";
 
                 if (compress)
                 {
-                    finalOutput = await sqzService!.CompressAsync(finalOutput, noCache);
+                    // sqz is available: skip DynamicCompressor (its symbol substitution
+                    // destroys structural patterns sqz relies on). Just minify → sqz.
+                    finalOutput = LlmContextHeader + await sqzService!.CompressAsync(afterCrush, noCache);
+                }
+                else
+                {
+                    // No sqz: use BPE-style DynamicCompressor as fallback compression
+                    var dynResult = dynamicCompressor!.Compress(afterCrush);
+                    finalOutput = dynResult.Legend + dynResult.Output;
+                    dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
                 }
 
                 var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
@@ -283,7 +298,6 @@ public sealed class GenerateContextUseCase
                 await fs.WriteAsync(finalBytes, ct);
 
                 string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-                string dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
                 _logger.Success($"{action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
 
                 return Result.Success();
@@ -300,7 +314,7 @@ public sealed class GenerateContextUseCase
                 var rawOutput = await reader.ReadToEndAsync(ct);
 
                 var compressedOutput = await sqzService!.CompressAsync(rawOutput, noCache);
-                var finalBytes = Encoding.UTF8.GetBytes(compressedOutput);
+                var finalBytes = Encoding.UTF8.GetBytes(LlmContextHeader + compressedOutput);
 
                 using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
                 await fs.WriteAsync(finalBytes, ct);
@@ -364,7 +378,7 @@ public sealed class GenerateContextUseCase
                 var rawOutput = await reader.ReadToEndAsync(ct);
 
                 var compressedOutput = await sqzService!.CompressAsync(rawOutput, noCache);
-                var finalBytes = Encoding.UTF8.GetBytes(compressedOutput);
+                var finalBytes = Encoding.UTF8.GetBytes(LlmContextHeader + compressedOutput);
 
                 using var finalMs = new MemoryStream(finalBytes);
                 finalMs.Position = 0;

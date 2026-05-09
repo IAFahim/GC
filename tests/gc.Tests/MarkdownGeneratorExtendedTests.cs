@@ -772,10 +772,10 @@ public class MarkdownGeneratorExtendedTests
         ms.Position = 0;
         var output = Encoding.UTF8.GetString(ms.ToArray());
 
-        // Code should be crushed: "public" → "!1", "static" → "!5", "void" → "!l"
-        Assert.Contains("!1", output);   // public
-        Assert.Contains("!5", output);   // static
-        Assert.Contains("!l", output);   // void
+        // v2: Brain mode strips comments and collapses whitespace, but keeps keywords
+        Assert.Contains("public", output);
+        Assert.Contains("static", output);
+        Assert.Contains("void", output);
         // Comment should be stripped
         Assert.DoesNotContain("comment", output);
     }
@@ -798,8 +798,9 @@ public class MarkdownGeneratorExtendedTests
 
         // File path header should be preserved as-is (not crushed)
         Assert.Contains("src/public/X.cs", output);
-        // But code inside fences should be crushed
-        Assert.Contains("!1 !e", output); // public class
+        // v2: keywords preserved, just whitespace/comment minified
+        Assert.Contains("public", output);
+        Assert.Contains("class", output);
     }
 
     [Fact]

@@ -161,6 +161,109 @@ public static class SuffixArray
         return sa;
     }
 
+    /// <summary>
+    /// Builds the LCP (Longest Common Prefix) array using Kasai's algorithm in O(N).
+    /// </summary>
+    public static int[] BuildLCP(string text, int[] sa)
+    {
+        var n = text.Length;
+        var rank = new int[n];
+        var lcp = new int[n];
+
+        for (var i = 0; i < n; i++)
+            rank[sa[i]] = i;
+
+        var h = 0;
+        for (var i = 0; i < n; i++)
+        {
+            if (rank[i] > 0)
+            {
+                var j = sa[rank[i] - 1];
+                while (i + h < n && j + h < n && text[i + h] == text[j + h])
+                    h++;
+                lcp[rank[i]] = h;
+                if (h > 0) h--;
+            }
+        }
+
+        return lcp;
+    }
+
+    /// <summary>
+    /// Extracts maximal repeated substrings from text using suffix array + LCP.
+    /// Returns candidates sorted by (length - 1) * frequency descending.
+    /// </summary>
+    public static List<PhraseCandidate> ExtractMaximalPhrases(
+        string text,
+        int minLength = 10,
+        int minFrequency = 2,
+        int maxCandidates = 50)
+    {
+        var n = text.Length;
+        if (n < minLength * 2)
+            return [];
+
+        var sa = Build(text);
+        var lcp = BuildLCP(text, sa);
+
+        // Collect candidate phrases from LCP array
+        var candidateMap = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        for (var i = 1; i < n; i++)
+        {
+            if (lcp[i] >= minLength)
+            {
+                var phrase = text.Substring(sa[i], lcp[i]);
+                candidateMap.TryGetValue(phrase, out var count);
+                candidateMap[phrase] = count + 1;
+            }
+        }
+
+        // Verify frequency by scanning the full text
+        var results = new List<PhraseCandidate>();
+        foreach (var kvp in candidateMap)
+        {
+            var freq = CountOccurrences(text, kvp.Key);
+            if (freq >= minFrequency)
+            {
+                var savings = (kvp.Key.Length - 1) * freq;
+                results.Add(new PhraseCandidate(kvp.Key, freq, savings));
+            }
+        }
+
+        // Sort by (length - 1) * frequency descending
+        results.Sort((a, b) => b.Savings.CompareTo(a.Savings));
+
+        // Deduplicate: remove candidates that are substrings of a higher-ranked candidate
+        var filtered = new List<PhraseCandidate>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var c in results)
+        {
+            if (!seen.Add(c.Phrase))
+                continue;
+
+            var isSubstr = false;
+            foreach (var f in filtered)
+            {
+                if (f.Phrase.Contains(c.Phrase, StringComparison.Ordinal))
+                {
+                    isSubstr = true;
+                    break;
+                }
+            }
+
+            if (!isSubstr)
+            {
+                filtered.Add(c);
+                if (filtered.Count >= maxCandidates)
+                    break;
+            }
+        }
+
+        return filtered;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsIdentStart(char c) => char.IsLetter(c) || c == '_';
 

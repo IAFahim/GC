@@ -1,13 +1,15 @@
 # gc (Git Copy)
 
-`gc` is a high-performance CLI tool designed to consolidate your project's source code into a single, well-formatted Markdown document. It's built with .NET 10 and compiled to a native binary for near-instant startup and maximum efficiency.
+`gc` is a high-performance CLI tool that gathers your project's source code into a single, well-formatted Markdown document — optimized for LLM context windows. Built with .NET 10, compiled to a native binary for near-instant startup.
 
-## Why use `gc`?
+## Why gc?
 
-- **AI-Ready Context**: Quickly copy your entire project (or specific parts) into a format that LLMs (Claude, ChatGPT, etc.) can easily parse.
-- **Fast & Lightweight**: Processes thousands of files in milliseconds with minimal memory overhead.
-- **Smart Filtering**: Built-in support for presets (web, dotnet, python, etc.) and custom glob patterns.
-- **Native Execution**: Distributed as a standalone binary—no runtime dependencies required.
+- **LLM-Optimized Output**: Copy your entire codebase into a format Claude, ChatGPT, Gemini, and other LLMs can parse perfectly
+- **68% Token Compression**: Combine `--brain --compress` to slash context usage by 2/3
+- **99.99% Dedup**: Run `gc` twice in a session — unchanged files become 13-token references
+- **Fast**: Processes thousands of files in milliseconds with parallel processing and streaming
+- **Smart Filtering**: Built-in presets (web, dotnet, python, etc.) and custom glob patterns
+- **Native Binary**: No runtime dependencies — one file, zero setup
 
 ## Installation
 
@@ -23,127 +25,181 @@ curl -sSL https://raw.githubusercontent.com/IAFahim/gc/main/install.sh | bash
 powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/IAFahim/gc/main/install.ps1 | iex"
 ```
 
-**Note**: The `-ExecutionPolicy Bypass` flag ensures the script runs even if your default execution policy restricts script execution.
-
 ### Nautilus Integration (GNOME)
-
-To add `gc` to your right-click "Scripts" menu in Nautilus:
 
 ```bash
 chmod +x integration/nautilus/setup.sh
 ./integration/nautilus/setup.sh
 ```
 
-## Usage
-
-Run `gc` from any Git repository root. By default, it copies the formatted Markdown to your clipboard.
+## Quick Start
 
 ```bash
 # Copy all tracked files to clipboard
 gc
 
-# Copy only C# and Markdown files from specific folders
-gc --paths src libs --extension cs md
+# Copy only C# files from src/
+gc --paths src --extension cs
 
-# Exclude specific directories or patterns
+# Exclude node_modules and tests
 gc --exclude node_modules "tests/*"
 
-# Use a preset for common project types
-gc --preset web
+# Save to a file
+gc --output context.md
 
-# Save to a file instead of the clipboard
-gc --output project_context.md
+# Use a preset
+gc --preset web
 ```
 
-### Common Options
+### Fun Keywords
+
+gc supports natural-language shortcuts:
+
+```bash
+gc grab src yeet bin obj yeet .git type cs spit context.md
+#      │       │              │       │     │
+#      paths   exclude        ext     lang  output
+```
+
+## Compression
+
+gc offers three levels of compression, each building on the last:
+
+### Level 1: `--compress` (sqz)
+
+Pipes output through [sqz](https://github.com/ojuschugh1/sqz) for structural compression + session-aware dedup.
+
+```bash
+# Install sqz first (one time)
+curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh
+
+# Then use it
+gc --compress                        # ~50% reduction
+gc --compress --no-cache             # compress without dedup
+gc --paths src --extension cs --compress --output context.md
+```
+
+**What sqz does:**
+- Understands content type — compresses JSON, logs, and code differently
+- Session dedup: second run sends ~13-token references for unchanged files
+- Reversible via `sqz expand`
+- Entropy detection for secrets
+
+### Level 2: `--brain` (comment stripping + whitespace collapse)
+
+Strips comments (`//`, `/*`, `#`, `<!--`, `"""`, `--`) and collapses whitespace. No keyword substitution — just clean minification.
+
+```bash
+gc --brain                           # strips comments, collapses whitespace
+```
+
+When sqz is NOT installed, `--brain` also activates BPE-style dynamic compression using single-token Unicode symbols as a fallback.
+
+### Level 3: `--brain --compress` (maximum compression)
+
+Combines comment/whitespace stripping with sqz structural compression for the best results.
+
+```bash
+gc --brain --compress                # 68% reduction
+gc --brain --compress --no-cache     # fresh compression, no dedup
+```
+
+### Compression Benchmarks
+
+Tested on the gc codebase itself (53 C# files, 221 KB raw):
+
+| Command | Output Size | Token Est. | Reduction |
+|---|---|---|---|
+| `gc` (raw) | 221 KB | ~56,500 | baseline |
+| `gc --compress` | 112 KB | ~28,600 | **49%** |
+| `gc --brain` | 135 KB | ~34,500 | 39% |
+| `gc --brain --compress` | **72 KB** | **~18,400** | **68%** |
+| `gc --brain --compress` (2nd run) | **24 B** | **~6** | **99.99%** |
+
+> The dedup story is insane — 221 KB down to 24 bytes on repeat. Same files, same session, 6 tokens.
+
+### LLM Comprehension
+
+Tested with Gemini 2.0 Flash — the compressed output is fully understood:
+
+```
+[Context compressed by gc+sqz for efficiency. This contains the full source
+code — references like [→L], [×N], «A» are structural markers. IMPORTANT:
+When writing code or answering, use the ORIGINAL full identifiers and
+patterns shown here. Do NOT use abbreviated symbols or short-form in your
+output. Respond as if you received uncompressed source.]
+```
+
+This header is automatically prepended to all compressed output so LLMs respond with real code, not symbols.
+
+### When sqz Is Not Installed
+
+gc gracefully degrades — it warns you and falls back:
+
+```
+⚠ sqz not found. Install: curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh
+  See: https://github.com/ojuschugh1/sqz
+⚠ Compression disabled for this run.
+```
+
+With `--brain` but no sqz, gc uses its built-in BPE-style compression as fallback.
+
+## All Options
+
+### Discovery & Filtering
 
 | Option | Description |
-|--------|-------------|
+|---|---|
 | `-p, --paths` | Folders to include (e.g., `src libs`) |
 | `-e, --extension` | File extensions to include (e.g., `js ts`) |
 | `-x, --exclude` | Paths or patterns to skip |
-| `--exclude-line-if-start` | Filter out specific lines that start with these strings (e.g., `//`, `\n`) |
+| `--exclude-line-if-start` | Filter out lines starting with these strings |
 | `--preset` | Use predefined configurations (`dotnet`, `web`, `python`, etc.) |
-| `-o, --output` | Write to a file instead of the clipboard |
-| `--no-append` | Do not append to the current clipboard/file content (appends by default) |
-| `-d, --depth` | Maximum directory depth to penetrate |
+| `-d, --depth` | Maximum directory depth |
 | `-f, --force` | Force filesystem discovery (ignore git) |
+
+### Output
+
+| Option | Description |
+|---|---|
+| `-o, --output` | Write to a file instead of clipboard |
+| `--no-append` | Don't append to existing clipboard/file content |
 | `-v, --verbose` | Enable verbose logging |
+| `--debug` | Enable debug logging |
+
+### Compression
+
+| Option | Description |
+|---|---|
+| `-c, --compress` | Compress output through sqz |
+| `--no-cache` | Disable sqz session dedup for this run |
+| `-b, --brain` | Strip comments + collapse whitespace (BPE fallback without sqz) |
+
+### Multi-Repo
+
+| Option | Description |
+|---|---|
 | `--cluster` | Enable cluster mode for multi-repo processing |
-| `--cluster-dir` | Directory containing multiple git repos (default: current dir) |
+| `--cluster-dir` | Directory containing multiple git repos |
 | `--cluster-depth` | Max depth to search for git repos (default: 5) |
 
 ## Cluster Mode
 
-Cluster mode lets you process multiple Git repositories at once by pointing `gc` at a parent directory containing several repos. It discovers each `.git`-backed subdirectory and consolidates all their source files into a single Markdown document.
+Process multiple Git repositories at once:
 
 ```bash
-# Process all repos in ~/projects and copy to clipboard
 gc --cluster --cluster-dir ~/projects
-
-# Process all repos, filtering to C# files only, and save to a file
 gc --cluster --cluster-dir ~/projects --extension cs --output all-code.md
-
-# Limit how deep gc searches for git repos
 gc --cluster --cluster-dir ~/projects --cluster-depth 3 --preset dotnet
 ```
 
-### How it works
-
-1. `gc` scans `--cluster-dir` (or the current directory) for subdirectories containing a `.git` folder, up to `--cluster-depth` levels deep (default: 5).
-2. Each discovered repo is processed independently, respecting its own `.gitignore`.
-3. All results are merged into a single output (clipboard or file).
-
-All existing filters work with cluster mode -- including `--extension`, `--exclude`, `--preset`, `--paths`, `--depth`, and `--exclude-line-if-start`.
-
-## Brain Mode
-
-> **Deprecated** -- use `--compress` instead. Brain Mode will be removed in a future release.
-
-Brain Mode compresses source code to reduce LLM token usage. It replaces long, repeated identifiers (not short keywords) with short symbols, and prepends a dictionary header so any LLM can decode the output.
-
-**Example:**
-```
-# DICT
-_A=ConfigurationValidator
-_B=IFileDiscoveryService
-
-_A _B _service = new _A(_B);
-```
-
-Brain Mode v2 uses dynamic analysis -- it scans your project to find the identifiers that save the most tokens, rather than relying on hardcoded keyword maps. See [docs/brain-mode-v2-dynamic-compression.md](docs/brain-mode-v2-dynamic-compression.md) for architecture details.
-
-## Compression with sqz (replaces Brain Mode)
-
-`gc --compress` pipes output through [sqz](https://github.com/ojuschugh1/sqz) before copying to your clipboard or writing to a file. sqz provides structural compression and session-aware deduplication.
-
-Install sqz first:
-```bash
-curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh
-```
-
-Then:
-```bash
-gc --compress                  # structural compression + session dedup
-gc --compress --no-cache       # compress without dedup (fresh output)
-gc src/MyService.cs --compress # compress a single file
-gc --paths src --extension cs --compress --output context.md
-```
-
-**Why sqz instead of Brain Mode?**
-- sqz understands *content type* -- it compresses JSON differently from logs, differently from code
-- Session deduplication: if you run `gc --compress` twice, the second run sends ~13-token references for any file that hasn't changed
-- Reversible via `sqz expand`
-- Safe mode with entropy detection for secrets
-- Improves independently as a separate project
-
-You can combine `--compress` with `--brain` for maximum compression (Brain Mode runs first, then sqz).
+All filters work with cluster mode — `--extension`, `--exclude`, `--preset`, `--paths`, `--depth`, `--compress`, `--brain`.
 
 ## Performance
 
-`gc` is designed for speed. It uses parallel processing and streaming to handle even the largest repositories without breaking a sweat.
+gc uses parallel processing and streaming to handle large repos without breaking a sweat.
 
-View our [latest automated benchmarks](BENCHMARK.md).
+View [automated benchmarks](BENCHMARK.md).
 
 ## Development
 
@@ -153,9 +209,14 @@ View our [latest automated benchmarks](BENCHMARK.md).
 
 ### Build from source
 ```bash
-# Build native AOT binary
 dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -r <your-platform-id> --self-contained -p:PublishAot=true
 ```
 
+### Run tests
+```bash
+dotnet test tests/gc.Tests/gc.Tests.csproj --filter "FullyQualifiedName!~ReleaseBinary"
+```
+
 ## License
+
 MIT

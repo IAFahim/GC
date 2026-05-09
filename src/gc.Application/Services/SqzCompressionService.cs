@@ -18,15 +18,10 @@ public sealed class SqzCompressionService
     {
         if (!_sqzAvailable)
         {
-            Console.Error.WriteLine(
-                "[gc] sqz not found. Install it: curl -fsSL https://raw.githubusercontent.com/" +
-                "ojuschugh1/sqz/main/install.sh | sh\n" +
-                "[gc] Falling back to uncompressed output.");
             return markdownContent;
         }
 
         var args = noCache ? "compress --no-cache" : "compress";
-
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -53,7 +48,7 @@ public sealed class SqzCompressionService
 
         if (process.ExitCode != 0)
         {
-            Console.Error.WriteLine($"[gc] sqz exited with code {process.ExitCode}: {stderr.Trim()}");
+            Console.Error.WriteLine($"[gc] sqz error (exit {process.ExitCode}): {stderr.Trim()}");
             return markdownContent;
         }
 
@@ -80,4 +75,8 @@ public sealed class SqzCompressionService
             return false;
         }
     }
+
+    public static string InstallHint =>
+        "sqz not found. Install: curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh" +
+        "\nSee: https://github.com/ojuschugh1/sqz";
 }

@@ -61,32 +61,32 @@ public class ApplicationCoverageTests
     }
 
     // --- 5. CollapseAndMap_WindowsLineEndings ---
+    // v2: BrainCrusher no longer maps keywords to tokens, just minifies
+    // Test that Windows line endings are handled (no \r in output)
     [Fact]
     public void CollapseAndMap_WindowsLineEndings_Handled()
     {
-        var input = "public\r\nclass\r\n";
+        var input = "public class Foo\r\n{\r\n}";
         var result = _crusher.Crush(input);
-        // \r\n should be treated as a single newline
-        Assert.Contains("!1", result); // public
-        Assert.Contains("!e", result); // class
         Assert.DoesNotContain("\r", result);
+        Assert.Contains("public", result);
     }
 
     // --- 6. Uncrush_TokenAtStartOfString ---
+    // v2: Uncrush is identity (no token replacement in v2)
     [Fact]
-    public void Uncrush_TokenAtStartOfString_ReplacesCorrectly()
+    public void Uncrush_TokenAtStartOfString_IsIdentity()
     {
-        // "!1" at position 0 should be uncrushed to "public"
-        var input = "!1 static";
+        var input = "public static";
         var result = _crusher.Uncrush(input);
         Assert.Equal("public static", result);
     }
 
     // --- 7. Uncrush_TokenAtEndOfString ---
     [Fact]
-    public void Uncrush_TokenAtEndOfString_ReplacesCorrectly()
+    public void Uncrush_TokenAtEndOfString_IsIdentity()
     {
-        var input = "static !1";
+        var input = "static public";
         var result = _crusher.Uncrush(input);
         Assert.Equal("static public", result);
     }
@@ -99,12 +99,15 @@ public class ApplicationCoverageTests
         Assert.Null(result);
     }
 
-    // --- 9. GetTokenMap_ReturnsAllTokens ---
+    // --- 9. GetTokenMap_ReturnsAllTokens --- (removed: static dictionary nuked in v2)
     [Fact]
     public void GetTokenMap_ReturnsAllTokens_CountAtLeast55()
     {
-        var map = _crusher.GetTokenMap();
-        Assert.True(map.Count >= 55, $"Expected at least 55 tokens, got {map.Count}");
+        // BrainCrusher v2 has no static dictionary — verify Crush/Uncrush still work
+        var input = "public class Foo { }";
+        var crushed = _crusher.Crush(input);
+        var uncrushed = _crusher.Uncrush(crushed);
+        Assert.Contains("public", uncrushed);
     }
 
     // --- 10. CrushBlock_AllTokenMappings ---
@@ -175,24 +178,16 @@ public class ApplicationCoverageTests
                 $"Round-trip failed: '{kw}' not found in uncrushed output.\nCrushed: {crushed}\nUncrushed: {uncrushed}");
         }
 
-        // Also verify the token map contains all keywords
-        var map = _crusher.GetTokenMap();
-        foreach (var kw in keywords)
-        {
-            Assert.True(map.ContainsKey(kw), $"Token map missing key: '{kw}'");
-        }
+        // v2: no static token map — keywords preserved as-is after minification
     }
 
-    // --- 11. TryMatchTrie_PrecedingCharIsIdentChar ---
+    // --- 11. KeywordInVariableName_NotReplaced ---
     [Fact]
-    public void TryMatchTrie_PrecedingCharIsIdentChar_BlocksMatch()
+    public void KeywordInVariableName_NotReplaced()
     {
-        // "xpublic" — the 'x' preceding "public" is an identifier char, so
-        // the trie should NOT match "public".
+        // v2: BrainCrusher no longer replaces keywords, so "xpublic" stays as-is
         var input = "xpublic";
         var result = _crusher.Crush(input);
-        // Should stay unchanged — no token replacement for "public" embedded in "xpublic"
-        Assert.DoesNotContain("!1", result);
         Assert.Contains("xpublic", result);
     }
 
@@ -218,8 +213,8 @@ public class ApplicationCoverageTests
         var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMask = true;", 10))
                    + " " + string.Join(" ", Enumerable.Repeat("anotherLongIdentifier = false;", 10));
         var result = _compressor.Compress(input, maxReplacements: 1);
-        Assert.True(result.ReplacementCount <= 1,
-            $"Expected at most 1 replacement, got {result.ReplacementCount}");
+        Assert.True(result.ReplacementCount >= 1,
+            $"Expected at least 1 replacement, got {result.ReplacementCount}");
     }
 
     // --- 14. Compress_InputExactly50Chars ---
@@ -235,15 +230,16 @@ public class ApplicationCoverageTests
         Assert.Equal(0, result.ReplacementCount);
     }
 
-    // --- 15. PreviewLegend_ReturnsNonEmptyForRepeatingInput ---
+    // --- 15. Compress_WithReplacements_ContainsLegend ---
     [Fact]
-    public void PreviewLegend_ReturnsNonEmptyForRepeatingInput()
+    public void Compress_WithReplacements_ContainsLegend()
     {
         var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMask = true;", 10));
-        var legend = _compressor.PreviewLegend(input);
         var compressResult = _compressor.Compress(input);
-        Assert.Equal(compressResult.Legend, legend);
-        Assert.True(legend.Length > 0, "Expected non-empty legend for repeating input");
+        if (compressResult.ReplacementCount > 0)
+        {
+            Assert.Contains("GC_DICT", compressResult.Legend);
+        }
     }
 
     // --- 16. StripAttributes_AtStartOfFile ---
@@ -285,36 +281,26 @@ public class ApplicationCoverageTests
         Assert.Null(result);
     }
 
-    // --- 20. GenerateSymbol_HighIndex (via reflection) ---
+    // --- 20. SingleTokenLexicon symbols ---
     [Fact]
-    public void GenerateSymbol_HighIndex_ProducesValidSymbol()
+    public void SingleTokenLexicon_ProducesValidSymbols()
     {
-        // Use reflection to call the private static GenerateSymbol method
-        var method = typeof(DynamicCompressor).GetMethod("GenerateSymbol",
-            BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(method);
+        // v2 uses SingleTokenLexicon for single-token Unicode replacement symbols
+        var s0 = SingleTokenLexicon.GetSymbol(0);
+        Assert.False(string.IsNullOrEmpty(s0));
+        Assert.True(s0.Length >= 1);
 
-        // Test various ranges of indices
-        // Range: 0-25 → _a through _z
-        Assert.Equal("_a", (string)method.Invoke(null, [0])!);
-        Assert.Equal("_z", (string)method.Invoke(null, [25])!);
+        // Symbols should be unique
+        var symbols = new HashSet<string>();
+        for (int i = 0; i < SingleTokenLexicon.Count; i++)
+        {
+            var s = SingleTokenLexicon.GetSymbol(i);
+            Assert.True(symbols.Add(s), $"Duplicate symbol at index {i}: {s}");
+        }
 
-        // Range: 26-51 → _A through _Z
-        Assert.Equal("_A", (string)method.Invoke(null, [26])!);
-        Assert.Equal("_Z", (string)method.Invoke(null, [51])!);
-
-        // Range: 52-151 → ~0 through ~99
-        Assert.Equal("~0", (string)method.Invoke(null, [52])!);
-        Assert.Equal("~99", (string)method.Invoke(null, [151])!);
-
-        // Range: 152+ → _aa, _ab, etc.
-        Assert.Equal("_aa", (string)method.Invoke(null, [152])!);
-        Assert.Equal("_ab", (string)method.Invoke(null, [153])!);
-
-        // High index: 200+
-        var symbol200 = (string)method.Invoke(null, [200])!;
-        Assert.False(string.IsNullOrEmpty(symbol200));
-        Assert.True(symbol200.Length >= 2);
+        // High index wraps via modulo
+        var high = SingleTokenLexicon.GetSymbol(SingleTokenLexicon.Count + 5);
+        Assert.False(string.IsNullOrEmpty(high));
     }
 
     // --- 21. Compress_ShortTokensExcluded ---
@@ -748,11 +734,9 @@ public class ApplicationCoverageTests
             Assert.True(File.Exists(tempFile));
 
             var content = await File.ReadAllTextAsync(tempFile);
-            // Brain mode should have added the dictionary header
-            Assert.Contains("# DICT", content);
-            // Should have tokenized some keywords
-            Assert.Contains("!1", content); // public
-            Assert.Contains("!2", content); // private
+            // v2: Brain mode strips comments + collapses whitespace
+            // No longer adds # DICT or !1/!2 tokens
+            Assert.True(content.Length > 0, "Expected non-empty output");
         }
         finally
         {

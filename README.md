@@ -96,6 +96,21 @@ gc --cluster --cluster-dir ~/projects --cluster-depth 3 --preset dotnet
 
 All existing filters work with cluster mode -- including `--extension`, `--exclude`, `--preset`, `--paths`, `--depth`, and `--exclude-line-if-start`.
 
+## Brain Mode
+
+Brain Mode compresses source code to reduce LLM token usage. It replaces long, repeated identifiers (not short keywords) with short symbols, and prepends a dictionary header so any LLM can decode the output.
+
+**Example:**
+```
+# DICT
+_A=ConfigurationValidator
+_B=IFileDiscoveryService
+
+_A _B _service = new _A(_B);
+```
+
+Brain Mode v2 uses dynamic analysis -- it scans your project to find the identifiers that save the most tokens, rather than relying on hardcoded keyword maps. See [docs/brain-mode-v2-dynamic-compression.md](docs/brain-mode-v2-dynamic-compression.md) for architecture details.
+
 ## Performance
 
 `gc` is designed for speed. It uses parallel processing and streaming to handle even the largest repositories without breaking a sweat.

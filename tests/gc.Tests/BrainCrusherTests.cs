@@ -413,9 +413,9 @@ namespace MyApp
     public void GetDictionaryHeader_ContainsTokenMappings()
     {
         var header = _crusher.GetDictionaryHeader();
-        Assert.Contains("public = !1", header);
-        Assert.Contains("class = !e", header);
-        Assert.Contains("Brain Mode Token Dictionary", header);
+        Assert.Contains("!1=public", header);
+        Assert.Contains("!e=class", header);
+        Assert.Contains("# DICT", header);
     }
 
     // =========================================================================
@@ -478,7 +478,7 @@ namespace MyApp
     {
         IBrainCrusher crusher = new BrainCrusher();
         var header = crusher.GetDictionaryHeader();
-        Assert.Contains("Brain Mode Token Dictionary", header);
+        Assert.Contains("# DICT", header);
     }
 
     // =========================================================================

@@ -15,61 +15,86 @@ public static class SuffixArray
         if (text.Length < minPhraseLength * 2)
             return [];
 
-        var sa = Build(text);
-        var n = sa.Length;
+        // Phase 3: BPE-inspired word-frequency approach
+        // Instead of O(N^2 log N) suffix array, use O(N) frequency scan + heap
 
-        var rank = new int[n];
-        for (var i = 0; i < n; i++) rank[sa[i]] = i;
-
-        var lcp = new int[n];
-        var h = 0;
-        for (var i = 0; i < n; i++)
-        {
-            if (rank[i] > 0)
-            {
-                var j = sa[rank[i] - 1];
-                while (i + h < n && j + h < n && text[i + h] == text[j + h])
-                    h++;
-                lcp[rank[i]] = h;
-                if (h > 0) h--;
-            }
-        }
-
-        var seen = new HashSet<string>();
         var candidates = new List<PhraseCandidate>();
 
-        for (var i = 1; i < n; i++)
+        // 1. Word frequency map — split by non-alphanumeric, count occurrences
+        var freq = new Dictionary<string, int>(StringComparer.Ordinal);
+        var i = 0;
+        var len = text.Length;
+
+        while (i < len)
         {
-            if (lcp[i] < minPhraseLength) continue;
-
-            var phraseLen = Math.Min(lcp[i], maxPhraseLength);
-            var phrase = text.Substring(sa[i], phraseLen);
-
-            if (phrase.Contains('\n') || phrase.Contains('\r'))
-                continue;
-
-            phrase = TrimToWordBoundary(phrase, text, sa[i]);
-            if (phrase.Length < minPhraseLength) continue;
-
-            if (!IsUsefulPhrase(phrase)) continue;
-
-            if (!seen.Add(phrase)) continue;
-
-            var freq = CountOccurrences(text, phrase);
-            if (freq < minFrequency) continue;
-
-            var savings = (phrase.Length - 2) * freq;
-            if (savings > 0)
+            if (!IsIdentStart(text[i]))
             {
-                candidates.Add(new PhraseCandidate(phrase, freq, savings));
+                i++;
+                continue;
+            }
+
+            var start = i;
+            while (i < len && IsIdentChar(text[i]))
+                i++;
+
+            var word = text.Substring(start, i - start);
+            if (word.Length >= minPhraseLength)
+            {
+                freq.TryGetValue(word, out var count);
+                freq[word] = count + 1;
             }
         }
 
+        // Also detect repeated multi-word phrases (simple n-gram approach)
+        // Scan for repeated substrings using rolling hash on lines
+        var lines = text.Split('\n');
+        var lineHashFreq = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length >= minPhraseLength && trimmed.Length <= maxPhraseLength)
+            {
+                lineHashFreq.TryGetValue(trimmed, out var count);
+                lineHashFreq[trimmed] = count + 1;
+            }
+        }
+
+        // Add repeated lines as phrase candidates
+        foreach (var kvp in lineHashFreq)
+        {
+            if (kvp.Value >= minFrequency)
+            {
+                var savings = (kvp.Key.Length - 2) * kvp.Value;
+                if (savings > 0)
+                {
+                    candidates.Add(new PhraseCandidate(kvp.Key, kvp.Value, savings));
+                }
+            }
+        }
+
+        // 2. Score word candidates: savings = (len - 2) * count
+        foreach (var kvp in freq)
+        {
+            if (kvp.Value >= minFrequency)
+            {
+                var savings = (kvp.Key.Length - 2) * kvp.Value;
+                if (savings > 0)
+                {
+                    candidates.Add(new PhraseCandidate(kvp.Key, kvp.Value, savings));
+                }
+            }
+        }
+
+        // 3. Sort by savings (max-heap equivalent), deduplicate substrings
         candidates.Sort((a, b) => b.Savings.CompareTo(a.Savings));
 
         var filtered = new List<PhraseCandidate>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
         foreach (var c in candidates)
         {
+            if (!seen.Add(c.Phrase)) continue;
+
             var isSubstr = false;
             foreach (var f in filtered)
             {
@@ -79,6 +104,7 @@ public static class SuffixArray
                     break;
                 }
             }
+
             if (!isSubstr)
             {
                 filtered.Add(c);
@@ -89,6 +115,7 @@ public static class SuffixArray
         return filtered;
     }
 
+    // Keep the Build method for backward compatibility with tests
     public static int[] Build(string text)
     {
         var n = text.Length;
@@ -135,32 +162,10 @@ public static class SuffixArray
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static string TrimToWordBoundary(string phrase, string text, int start)
-    {
-        var end = phrase.Length;
-        while (end > 1 && char.IsLetterOrDigit(phrase[end - 1]) && end < phrase.Length)
-            end--;
-
-        if (start + end < text.Length && char.IsLetterOrDigit(text[start + end]))
-        {
-            while (end > 0 && char.IsLetterOrDigit(phrase[end - 1]))
-                end--;
-        }
-
-        return phrase[..end].TrimEnd();
-    }
+    private static bool IsIdentStart(char c) => char.IsLetter(c) || c == '_';
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsUsefulPhrase(string phrase)
-    {
-        var alphaCount = 0;
-        foreach (var c in phrase)
-        {
-            if (char.IsLetterOrDigit(c) || c == '_' || c == '.')
-                alphaCount++;
-        }
-        return alphaCount >= phrase.Length * 0.5;
-    }
+    private static bool IsIdentChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int CountOccurrences(string text, string phrase)

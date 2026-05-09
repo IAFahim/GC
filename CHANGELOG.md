@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Brain Mode v2: Dynamic LLM-Optimized Compression** -- replaces hardcoded keyword dictionaries with project-specific identifier deduplication
+  - `CodeLexer`: Zero-allocation `ref struct` lexer that extracts identifiers >= 6 chars from source code, skipping all comment/string forms (C-style, hash, SQL, HTML, triple-quote)
+  - `FrequencyAnalyzer`: Multi-threaded identifier frequency counter with thread-local dictionaries and ROI scoring
+  - `IdentifierRankedEntry`: Score model combining frequency and estimated token savings
+  - `IdentifierRanker`: Generic ranking utility for score-based sorting
+  - 50 dedicated tests for full branch coverage of lexer state machine and analyzer
 - **Cluster Mode**: Process multiple Git repositories in a single command with `--cluster` flag
   - `--cluster-dir` to specify parent directory containing repos
   - `--cluster-depth` to control recursion depth for repo discovery

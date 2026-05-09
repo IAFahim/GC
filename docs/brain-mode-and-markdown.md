@@ -1,6 +1,8 @@
-# Brain Mode and Markdown Output
+# Brain Mode v1 (Static) and Markdown Output
 
-This document explains how gc builds markdown context output, how Brain Mode works, and how the dynamic compression layer fits into the pipeline.
+> **Note**: Brain Mode v2 replaces the static keyword dictionary with dynamic, project-specific identifier compression. See [brain-mode-v2-dynamic-compression.md](brain-mode-v2-dynamic-compression.md) for the new architecture.
+
+This document explains how gc builds markdown context output, how Brain Mode v1 works, and how the dynamic compression layer fits into the pipeline.
 
 ## Overview
 

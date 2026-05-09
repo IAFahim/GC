@@ -749,7 +749,7 @@ public class ApplicationCoverageTests
 
             var content = await File.ReadAllTextAsync(tempFile);
             // Brain mode should have added the dictionary header
-            Assert.Contains("Brain Mode Token Dictionary", content);
+            Assert.Contains("# DICT", content);
             // Should have tokenized some keywords
             Assert.Contains("!1", content); // public
             Assert.Contains("!2", content); // private

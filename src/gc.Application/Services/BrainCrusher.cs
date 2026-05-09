@@ -25,7 +25,6 @@ public sealed class BrainCrusher : IBrainCrusher
         _trieRoot = BuildTrie(map);
     }
 
-
     public string CrushBlock(string code)
     {
         if (string.IsNullOrEmpty(code)) return code;
@@ -53,7 +52,8 @@ public sealed class BrainCrusher : IBrainCrusher
             var ch = crushed[i];
             var matched = false;
 
-            if (i + 1 < len && (ch == '!' || ch == '#' || ch == '$' || ch == '%'))
+            // Try 2-char tokens: prefix ! # $ % &
+            if (i + 1 < len && (ch == '!' || ch == '#' || ch == '$' || ch == '%' || ch == '&'))
             {
                 var candidate = crushed.Substring(i, 2);
                 if (_reverseMap.TryGetValue(candidate, out var keyword))
@@ -76,11 +76,11 @@ public sealed class BrainCrusher : IBrainCrusher
 
     public string GetDictionaryHeader()
     {
-        var sb = new StringBuilder(512);
-        sb.AppendLine("# Brain Mode Token Dictionary");
+        var sb = new StringBuilder(1024);
+        sb.AppendLine("# DICT");
         foreach (var kvp in _tokenMap)
         {
-            sb.AppendLine($"# {kvp.Key} = {kvp.Value}");
+            sb.AppendLine($"{kvp.Value}={kvp.Key}");
         }
         sb.AppendLine();
         return sb.ToString();
@@ -88,6 +88,10 @@ public sealed class BrainCrusher : IBrainCrusher
 
     public IReadOnlyDictionary<string, string> GetTokenMap() => _tokenMap;
 
+    // =========================================================================
+    // Phase 1: Universal Syntax Minifier
+    // Agnostic state machine handles: //, /* */, #, <!-- -->, triple-quotes, --, strings
+    // =========================================================================
 
     private static string StripComments(string content)
     {
@@ -100,11 +104,82 @@ public sealed class BrainCrusher : IBrainCrusher
         var inChar = false;
         var inSingleLineComment = false;
         var inMultiLineComment = false;
+        var inHashComment = false;
+        var inHtmlComment = false;
+        var inTripleQuote = false;
+        var inSqlComment = false;
 
         while (i < len)
         {
             var ch = span[i];
 
+            // --- Triple-quote string (Python """ or ''' docstrings) ---
+            if (inTripleQuote)
+            {
+                if (ch == '"' && i + 2 < len && span[i + 1] == '"' && span[i + 2] == '"')
+                {
+                    sb.Append("\"\"\"");
+                    i += 3;
+                    inTripleQuote = false;
+                    continue;
+                }
+                if (ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
+                {
+                    sb.Append("'''");
+                    i += 3;
+                    inTripleQuote = false;
+                    continue;
+                }
+                sb.Append(ch);
+                if (ch == '\\' && i + 1 < len)
+                {
+                    i++;
+                    sb.Append(span[i]);
+                }
+                i++;
+                continue;
+            }
+
+            // --- SQL single-line comment (--) ---
+            if (inSqlComment)
+            {
+                if (ch == '\n')
+                {
+                    inSqlComment = false;
+                    sb.Append('\n');
+                }
+                i++;
+                continue;
+            }
+
+            // --- HTML comment (<!-- -->) ---
+            if (inHtmlComment)
+            {
+                if (ch == '-' && i + 2 < len && span[i + 1] == '-' && span[i + 2] == '>')
+                {
+                    inHtmlComment = false;
+                    i += 3;
+                    sb.Append(' ');
+                    continue;
+                }
+                if (ch == '\n') sb.Append('\n');
+                i++;
+                continue;
+            }
+
+            // --- Hash comment (# ... \n) for Python, Ruby, Shell, YAML, TOML ---
+            if (inHashComment)
+            {
+                if (ch == '\n')
+                {
+                    inHashComment = false;
+                    sb.Append('\n');
+                }
+                i++;
+                continue;
+            }
+
+            // --- C-style multi-line comment (/* ... */) ---
             if (inMultiLineComment)
             {
                 if (ch == '*' && i + 1 < len && span[i + 1] == '/')
@@ -119,6 +194,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
+            // --- C-style / JS / Java single-line comment (// ... \n) ---
             if (inSingleLineComment)
             {
                 if (ch == '\n')
@@ -130,6 +206,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
+            // --- Double-quoted string ---
             if (inString)
             {
                 sb.Append(ch);
@@ -146,6 +223,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
+            // --- Single-quoted char/string ---
             if (inChar)
             {
                 sb.Append(ch);
@@ -162,23 +240,67 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
-            if (ch == '/' && i + 1 < len)
+            // ========== Not inside any string/comment — detect patterns ==========
+
+            // Triple-quote start: """ or '''
+            if (ch == '"' && i + 2 < len && span[i + 1] == '"' && span[i + 2] == '"')
             {
-                var next = span[i + 1];
-                if (next == '/')
-                {
-                    inSingleLineComment = true;
-                    i += 2;
-                    continue;
-                }
-                if (next == '*')
-                {
-                    inMultiLineComment = true;
-                    i += 2;
-                    continue;
-                }
+                inTripleQuote = true;
+                sb.Append("\"\"\"");
+                i += 3;
+                continue;
+            }
+            if (ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
+            {
+                inTripleQuote = true;
+                sb.Append("'''");
+                i += 3;
+                continue;
             }
 
+            // SQL comment -- (must check before string detection)
+            if (ch == '-' && i + 1 < len && span[i + 1] == '-')
+            {
+                inSqlComment = true;
+                i += 2;
+                continue;
+            }
+
+            // HTML comment <!--
+            if (ch == '<' && i + 3 < len && span[i + 1] == '!' && span[i + 2] == '-' && span[i + 3] == '-')
+            {
+                inHtmlComment = true;
+                i += 4;
+                continue;
+            }
+
+            // C-style // comment
+            if (ch == '/' && i + 1 < len && span[i + 1] == '/')
+            {
+                inSingleLineComment = true;
+                i += 2;
+                continue;
+            }
+
+            // C-style /* comment
+            if (ch == '/' && i + 1 < len && span[i + 1] == '*')
+            {
+                inMultiLineComment = true;
+                i += 2;
+                continue;
+            }
+
+            // Hash comment: # outside of string context
+            // Be careful: # in C# is preprocessor directives, not comments
+            // We strip them anyway since they're noise for LLM compression
+            if (ch == '#')
+            {
+                inHashComment = true;
+                i++;
+                continue;
+            }
+
+            // String start
             if (ch == '"')
             {
                 inString = true;
@@ -186,6 +308,8 @@ public sealed class BrainCrusher : IBrainCrusher
                 i++;
                 continue;
             }
+
+            // Char start
             if (ch == '\'')
             {
                 inChar = true;
@@ -201,6 +325,9 @@ public sealed class BrainCrusher : IBrainCrusher
         return sb.ToString();
     }
 
+    // =========================================================================
+    // Whitespace collapse + trie-based token replacement in single pass
+    // =========================================================================
 
     private string CollapseAndMap(string stripped)
     {
@@ -313,14 +440,23 @@ public sealed class BrainCrusher : IBrainCrusher
         return char.IsLetterOrDigit(ch) || ch == '_';
     }
 
+    // =========================================================================
+    // Phase 2: Universal Static Dictionary
+    // Top keywords from C#, JS/TS, Python, Go, Rust, Java, C++, Ruby, SQL
+    // Mapped to rare Unicode 1-char tokens for LLM-friendliness
+    // Prefix groups: ! (access/modifiers), # (control flow), $ (async/misc),
+    //                % (types/collections), & (multi-language)
+    // =========================================================================
 
     private static Dictionary<string, string> BuildTokenMap() => new(StringComparer.Ordinal)
     {
+        // --- C# access modifiers → !1-!9 ---
         ["public"] = "!1",
         ["private"] = "!2",
         ["protected"] = "!3",
         ["internal"] = "!4",
 
+        // --- C# type modifiers → !5-!d ---
         ["static"] = "!5",
         ["readonly"] = "!6",
         ["sealed"] = "!7",
@@ -331,6 +467,7 @@ public sealed class BrainCrusher : IBrainCrusher
         ["const"] = "!c",
         ["volatile"] = "!d",
 
+        // --- C# type keywords → !e-!s ---
         ["class"] = "!e",
         ["struct"] = "!f",
         ["record"] = "!g",
@@ -347,6 +484,7 @@ public sealed class BrainCrusher : IBrainCrusher
         ["false"] = "!r",
         ["null"] = "!s",
 
+        // --- Control flow → #1-#f ---
         ["if"] = "#1",
         ["else"] = "#2",
         ["for"] = "#3",
@@ -363,6 +501,7 @@ public sealed class BrainCrusher : IBrainCrusher
         ["throw"] = "#e",
         ["yield"] = "#f",
 
+        // --- Async / LINQ / misc C# → $1-$9 ---
         ["async"] = "$1",
         ["await"] = "$2",
         ["Task"] = "$3",
@@ -373,6 +512,7 @@ public sealed class BrainCrusher : IBrainCrusher
         ["where"] = "$8",
         ["select"] = "$9",
 
+        // --- C# common types → %1-%b ---
         ["string"] = "%1",
         ["int"] = "%2",
         ["bool"] = "%3",
@@ -384,6 +524,48 @@ public sealed class BrainCrusher : IBrainCrusher
         ["List"] = "%9",
         ["Dictionary"] = "%a",
         ["IEnumerable"] = "%b",
+
+        // --- Multi-language universal keywords → &1-&9, &a-&f ---
+        // JavaScript / TypeScript
+        ["function"] = "&1",
+        ["let"] = "&2",
+        ["import"] = "&4",
+        ["export"] = "&5",
+        ["default"] = "&6",
+        ["typeof"] = "&7",
+        ["instanceof"] = "&8",
+
+        // Python
+        ["def"] = "&9",
+        ["lambda"] = "&a",
+        ["with"] = "&b",
+        ["as"] = "&c",
+        ["pass"] = "&d",
+        ["from"] = "&e",
+        ["raise"] = "&f",
+
+        // Go
+        ["func"] = "&g",
+        ["go"] = "&h",
+        ["defer"] = "&i",
+        ["chan"] = "&j",
+        ["package"] = "&k",
+        ["range"] = "&l",
+        ["map"] = "&m",
+
+        // Rust
+        ["fn"] = "&n",
+        ["mut"] = "&p",
+        ["impl"] = "&q",
+        ["pub"] = "&r",
+        ["crate"] = "&s",
+        ["mod"] = "&t",
+        ["use"] = "&u",
+        ["match"] = "&v",
+        ["loop"] = "&w",
+        ["self"] = "&x",
+        ["super"] = "&y",
+        ["trait"] = "&z",
     };
 
     private static TrieNode BuildTrie(Dictionary<string, string> map)

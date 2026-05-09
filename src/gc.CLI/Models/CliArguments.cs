@@ -30,6 +30,10 @@ public sealed record CliArguments
 
     public bool BrainMode { get; init; }
 
+    public bool Compress { get; init; }
+
+    public bool NoCache { get; init; }
+
     public bool Cluster { get; init; }
 
     public string ClusterDir { get; init; } = string.Empty;

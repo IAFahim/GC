@@ -184,6 +184,8 @@ public static class Program
                 cliArgs.Append,
                 cliArgs.ExcludeLineIfStart,
                 cliArgs.BrainMode,
+                cliArgs.Compress,
+                cliArgs.NoCache,
                 ct);
 
             if (!result.IsSuccess)
@@ -205,6 +207,8 @@ public static class Program
             cliArgs.Append,
             cliArgs.ExcludeLineIfStart,
             cliArgs.BrainMode,
+            cliArgs.Compress,
+            cliArgs.NoCache,
             ct);
 
         if (!normalResult.IsSuccess)
@@ -234,7 +238,9 @@ FILTERING:
 
 OUTPUT:
     -s, spit, -o, --output <file>    Save output to file instead of clipboard
-    -b, brain, --brain               Squeeze output for LLMs (token crush mode)
+    -b, brain, --brain               [DEPRECATED] Squeeze output for LLMs (token crush mode)
+    -c, compress, --compress         Compress output using sqz (structural + session dedup)
+    --no-cache                       Disable sqz dedup cache (fresh output)
     --append                         Append to current clipboard/file content
     --no-append                      Do not append (default)
     --no-sort                        Do not sort output by file path

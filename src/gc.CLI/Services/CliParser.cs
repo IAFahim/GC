@@ -49,6 +49,8 @@ public sealed class CliParser
         var showHistory = false;
         int? historyIndex = null;
         var brainMode = false;
+        var compress = false;
+        var noCache = false;
         var cluster = false;
         var clusterDir = string.Empty;
         int? clusterDepth = null;
@@ -85,7 +87,7 @@ public sealed class CliParser
 
             if (IsFlag(arg, out var flagType))
             {
-                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort, ref showHistory, ref brainMode, ref cluster);
+                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort, ref showHistory, ref brainMode, ref compress, ref noCache, ref cluster);
                 state = ParseState.None;
                 continue;
             }
@@ -149,6 +151,8 @@ public sealed class CliParser
             ShowHistory = showHistory,
             HistoryIndex = historyIndex,
             BrainMode = brainMode,
+            Compress = compress,
+            NoCache = noCache,
             Configuration = configuration,
             Cluster = cluster,
             ClusterDir = clusterDir,
@@ -175,13 +179,15 @@ public sealed class CliParser
             "-f" or "--force" or "--Force" => "force",
             "--history" or "--History" => "history",
             "-b" or "--brain" or "brain" => "brain",
+            "-c" or "--compress" or "compress" => "compress",
+            "--no-cache" or "--No-Cache" => "no-cache",
             "--cluster" or "--Cluster" => "cluster",
             _ => string.Empty
         };
         return !string.IsNullOrEmpty(flagType);
     }
 
-    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort, ref bool showHistory, ref bool brainMode, ref bool cluster)
+    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort, ref bool showHistory, ref bool brainMode, ref bool compress, ref bool noCache, ref bool cluster)
     {
         switch (flagType)
         {
@@ -200,6 +206,8 @@ public sealed class CliParser
             case "force": force = true; break;
             case "history": showHistory = true; break;
             case "brain": brainMode = true; break;
+            case "compress": compress = true; break;
+            case "no-cache": noCache = true; break;
             case "cluster": cluster = true; break;
         }
     }

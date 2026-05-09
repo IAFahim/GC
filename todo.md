@@ -1,136 +1,201 @@
-This is a brilliant architectural pivot. You have realized a fundamental truth
-about Large Language Models (LLMs): Hardcoded dictionaries for standard
-programming keywords actually hurt token limits and LLM comprehension.
+## The Vision: gc as the *collector*, sqz as the *compressor*
 
-Here is why: LLM tokenizers (like OpenAI's tiktoken) already compress common
-words. The word public is 1 token. If you replace it with !1, that is often
-tokenized as 2 tokens (! and 1). You saved characters, but increased the token
-count, while simultaneously destroying the LLM's semantic context.
+sqz is localed here its a sperate git repo btw not mine.
 
-To build a revolutionarily fast, universally language-agnostic, LLM-optimized
-compression system, we must shift from Hardcoded Keyword Replacement to Dynamic
-Structural & Identifier Deduplication.
+Right now gc does two things: **gather** (great) and **Brain Mode compress** (weak, because identifier substitution is a blunt instrument). sqz does one thing: **compress intelligently** (great). They're a natural split.
 
-Here is your step-by-step master plan to build the perfect "Brain Mode"
-compression system.
+The cleanest end product would be:
 
-Phase 1: The Core Philosophy (LLM-First Tokenization)
+```
+gc → [rich Markdown] → sqz compress → clipboard/file
+```
 
-Before writing code, we must define the rules of LLM compression:
+Brain Mode gets deprecated. `--brain` becomes `--compress` (or just a flag) that shells out to sqz.
 
-1.  Ignore Short Words: Do not compress anything under ~6 characters (e.g., if,
-    for, class). They are already 1 token.
-2.  Target Project-Specific Identifiers: Compress long variable names, class
-    names, and namespaces (e.g., ConfigurationValidatorFactory = 5+ tokens -> _A
-    = 1 token).
-3.  Target Repeated Blocks: (The "Paragraph/Branch" grouping). If a 10-line
-    boilerplate method or license header appears in 50 files, replace the whole
-    block with a macro ($MACRO_1$).
-4.  Use Single-Token Replacements: Use symbols that the LLM natively tokenizes
-    as a single token (e.g., _A, _B, α, β, Γ).
+---
 
-Phase 2: Ultra-Fast Language-Agnostic Lexing
+## What the UX Looks Like
 
-To find what to compress, you need to extract identifiers without knowing the
-language.
+```bash
+# Today (Brain Mode - your own compressor, mediocre)
+gc --brain
 
-  - TODO 1: Implement a Zero-Allocation Universal Lexer.
-      - Create a ref struct CodeLexer that takes a ReadOnlySpan<char>.
-      - It should yield only valid identifiers (e.g., [a-zA-Z_][a-zA-Z0-9_]*).
-      - It should skip strings and comments rapidly.
-  - TODO 2: Multi-threaded Global Frequency Map.
-      - Instead of compressing file-by-file, do a first pass over all files to
-        build a global ConcurrentDictionary<string, int>.
-      - Only add identifiers where Length >= 6.
-      - Keep track of (Frequency * TokenLengthEstimation) = SavingsScore.
+# New (pipes through sqz, session-aware dedup + structural compression)
+gc --compress
 
-Phase 3: The "Macro" System (Block & Paragraph Deduplication)
+# Same file read again later in the same AI session?
+gc src/MyService.cs --compress   # returns a 13-token §ref§ instead of 500 tokens
 
-This answers your requirement to "branch/group long paragraphs in the most
-optimal way." We will use Content-Defined Chunking (CDC) or Line-based Rolling
-Hashes.
+# Save to file (sqz still runs)
+gc --compress --output context.md
 
-  - TODO 3: Implement Line-Based Rabin-Karp / XxHash3.
-      - Use .NET's System.IO.Hashing.XxHash3 (it is blazingly fast and SIMD
-        accelerated).
-      - Hash every trimmed, non-empty line of code.
-  - TODO 4: Detect Repeated N-Grams of Lines.
-      - Look for sequences of 3 or more lines that have the exact same hashes
-        across multiple files.
-      - Example: Standard getter/setters, repeated error-handling blocks,
-        repetitive imports.
-  - TODO 5: Macro Extraction.
-      - Pull these repeated blocks into a global dictionary.
-      - Assign them a macro identifier (e.g., [BLOCK_1]).
+# Full power combo
+gc --paths src --extension cs --compress --no-cache
+```
 
-Phase 4: Calculating "Return on Investment" (ROI)
+---
 
-We only want to compress things that actually save tokens and don't overwhelm
-the LLM with a massive dictionary.
+## The C# Integration (how gc calls sqz)
 
-  - TODO 6: The LLM ROI Algorithm.
-      - For every candidate (identifier or code block), calculate: TokensSaved =
-        (EstimatedTokens(Original) - EstimatedTokens(Symbol)) * Occurrences.
-      - Subtract the cost of putting it in the dictionary: DictionaryOverhead =
-        EstimatedTokens(Symbol) + EstimatedTokens(Original) + 3 (for the
-        A=Original\n syntax).
-      - Filter out any candidate where TokensSaved - DictionaryOverhead <= 0.
-  - TODO 7: Sort and Cull.
-      - Take the Top N items sorted by net token savings. (Limit N to
-        maybe 100-200 to prevent context confusion for the AI).
+This is the key piece — gc spawns sqz as a child process, piping Markdown through it:
 
-Phase 5: The Single-Token Dictionary Generation
+```csharp
+// src/gc.CLI/Services/CompressionService.cs
 
-  - TODO 8: Generate LLM-Safe Symbols.
-      - Map your sorted candidates to short, single-token ASCII identifiers.
-      - Best practice: _A through _Z, _aa through _zz. Do NOT use things like !1
-        or ~#, as tokenizers usually split punctuation and numbers into separate
-        tokens.
+public class SqzCompressionService
+{
+    private readonly bool _sqzAvailable;
 
-Phase 6: Hyper-Fast Multi-String Replacement (The Engine)
+    public SqzCompressionService()
+    {
+        _sqzAvailable = IsSqzInstalled();
+    }
 
-Your current AhoCorasick is good, but can be optimized for this specific LLM use
-case.
+    public async Task<string> CompressAsync(string markdownContent, bool noCache = false)
+    {
+        if (!_sqzAvailable)
+        {
+            // Graceful fallback: warn user, return uncompressed
+            Console.Error.WriteLine(
+                "[gc] sqz not found. Install it: curl -fsSL https://raw.githubusercontent.com/" +
+                "ojuschugh1/sqz/main/install.sh | sh\n" +
+                "[gc] Falling back to uncompressed output.");
+            return markdownContent;
+        }
 
-  - TODO 9: Build a Word-Boundary Aho-Corasick.
-      - Ensure the matcher only replaces on word boundaries. (You don't want to
-        replace config inside IConfigurationProvider).
-  - TODO 10: One-Pass Global Replacement.
-      - Stream the files through the Aho-Corasick tree.
-      - Replace both the Macro Blocks (Phase 3) and the Identifiers (Phase 2) in
-        a single O(N) pass.
+        var args = noCache ? "compress --no-cache" : "compress";
 
-Phase 7: Context Assembly & AI Prompt Injection
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "sqz",
+                Arguments = args,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                StandardInputEncoding = Encoding.UTF8,
+                StandardOutputEncoding = Encoding.UTF8,
+            }
+        };
 
-The LLM needs to know how to read your compressed code.
+        process.Start();
 
-  - TODO 11: Generate the "Brain Header".
-      - Prepend the final output with a precise system prompt.
-      - Example Prompt:
-    # SYSTEM: COMPRESSED CONTEXT
-    This code has been minified to save tokens. Expand identifiers and blocks using this dictionary:
+        await process.StandardInput.WriteAsync(markdownContent);
+        process.StandardInput.Close();
 
-    ## MACROS (Blocks)
-    [M1] = public async Task<Result> ExecuteAsync(CancellationToken ct) {
-    [M2] = _logger.Log(LogLevel.Error, "Exception occurred", ex);
+        var compressed = await process.StandardOutput.ReadToEndAsync();
+        await process.WaitForExitAsync();
 
-    ## DICT (Identifiers)
-    _A = ConfigurationValidatorFactory
-    _B = IFileDiscoveryService
-    _C = GenerateMarkdownStreamingAsync
+        return process.ExitCode == 0 ? compressed : markdownContent;
+    }
 
-    # CODE
+    private static bool IsSqzInstalled()
+    {
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo
+            {
+                FileName = "sqz",
+                Arguments = "--version",
+                RedirectStandardOutput = true,
+                UseShellExecute = false
+            });
+            p?.WaitForExit(1000);
+            return p?.ExitCode == 0;
+        }
+        catch { return false; }
+    }
+}
+```
 
-Summary of what to delete/refactor from your current code:
+---
 
-1.  Delete BuiltInPresets.cs Keyword mapping: Throw away the hardcoded C#, Rust,
-    Go keywords (!1, #f, etc.).
-2.  Refactor BrainCrusher.cs: It should no longer contain hardcoded maps. It
-    should become DynamicBrainCrusher that accepts the dynamic dictionary built
-    during the discovery phase.
-3.  Refactor DynamicCompressor.cs: Combine it with BrainCrusher. Instead of just
-    replacing token with _x, add the Block/Macro detection (Phase 3).
-4.  Replace SuffixArray.cs: Suffix arrays operate on characters, which creates
-    overlapping junk substrings (e.g., finding tionValida). Replace it with a
-    Line-by-Line Token Hasher (XxHash3) which operates on logical code
-    boundaries.
+## CLI Changes (Options.cs / your arg parser)
+
+```csharp
+// Remove or deprecate:
+[Option("brain", HelpText = "...")]
+public bool Brain { get; set; }
+
+// Add:
+[Option('c', "compress", HelpText =
+    "Compress output using sqz before writing to clipboard/file. " +
+    "Requires sqz to be installed (https://github.com/ojuschugh1/sqz). " +
+    "Replaces --brain with session-aware dedup and structural compression.")]
+public bool Compress { get; set; }
+
+[Option("no-cache", HelpText =
+    "Pass --no-cache to sqz (disable dedup for this run).")]
+public bool NoCache { get; set; }
+```
+
+And in your pipeline, after building the Markdown string, before writing:
+
+```csharp
+if (options.Compress)
+{
+    var sqz = new SqzCompressionService();
+    output = await sqz.CompressAsync(output, options.NoCache);
+}
+// then → clipboard or file
+```
+
+---
+
+## Why This Is Strictly Better Than Brain Mode
+
+| | Brain Mode (yours) | sqz --compress |
+|---|---|---|
+| Method | Replace long identifiers with `_A`, `_B`... | Structural summaries + dedup cache |
+| Session-aware | ❌ No | ✅ Yes (same file = 13 tokens on repeat) |
+| Git diff / JSON | ❌ Not handled | ✅ Per-command formatters |
+| Reversible | Sort of (has a dict header) | ✅ `sqz expand` |
+| Safe for secrets | ❌ Doesn't know | ✅ Entropy detection, safe mode |
+| Maintained by you | You have to maintain it | ✅ Separate project, improves independently |
+
+The **dedup angle** is especially powerful for your use case. When someone does:
+```bash
+gc --paths src --compress     # full output, compressed
+# ... makes edits ...
+gc --paths src --compress     # repeated files → §ref§ tokens, 92% smaller
+```
+
+That's something Brain Mode can never do because it has no memory across invocations.
+
+---
+
+## README Section to Add
+
+````markdown
+## Compression with sqz (replaces Brain Mode)
+
+`gc --compress` pipes output through [sqz](https://github.com/ojuschugh1/sqz)
+before copying to your clipboard. Install sqz first:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh
+```
+
+Then:
+
+```bash
+gc --compress                  # structural compression + session dedup
+gc --compress --no-cache       # compress without dedup (fresh output)
+```
+
+**Why sqz instead of Brain Mode?**  
+sqz understands *content type* — it compresses JSON differently from logs,
+differently from code. It also deduplicates across runs in a session: if you
+run `gc --compress` twice, the second run sends ~13-token references for any
+file that hasn't changed. Brain Mode can't do either.
+
+> `--brain` is deprecated and will be removed in a future release.
+````
+
+---
+
+## The Bond in One Sentence
+
+**gc owns the *what* (which files, which repo, which shape of Markdown) — sqz owns the *how small* (compression strategy, dedup, safe mode).** Neither needs to know the other's internals. gc just needs sqz on `$PATH` and one pipe. That's the whole integration surface, and it's the right one.

@@ -98,6 +98,8 @@ All existing filters work with cluster mode -- including `--extension`, `--exclu
 
 ## Brain Mode
 
+> **Deprecated** -- use `--compress` instead. Brain Mode will be removed in a future release.
+
 Brain Mode compresses source code to reduce LLM token usage. It replaces long, repeated identifiers (not short keywords) with short symbols, and prepends a dictionary header so any LLM can decode the output.
 
 **Example:**
@@ -110,6 +112,32 @@ _A _B _service = new _A(_B);
 ```
 
 Brain Mode v2 uses dynamic analysis -- it scans your project to find the identifiers that save the most tokens, rather than relying on hardcoded keyword maps. See [docs/brain-mode-v2-dynamic-compression.md](docs/brain-mode-v2-dynamic-compression.md) for architecture details.
+
+## Compression with sqz (replaces Brain Mode)
+
+`gc --compress` pipes output through [sqz](https://github.com/ojuschugh1/sqz) before copying to your clipboard or writing to a file. sqz provides structural compression and session-aware deduplication.
+
+Install sqz first:
+```bash
+curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh
+```
+
+Then:
+```bash
+gc --compress                  # structural compression + session dedup
+gc --compress --no-cache       # compress without dedup (fresh output)
+gc src/MyService.cs --compress # compress a single file
+gc --paths src --extension cs --compress --output context.md
+```
+
+**Why sqz instead of Brain Mode?**
+- sqz understands *content type* -- it compresses JSON differently from logs, differently from code
+- Session deduplication: if you run `gc --compress` twice, the second run sends ~13-token references for any file that hasn't changed
+- Reversible via `sqz expand`
+- Safe mode with entropy detection for secrets
+- Improves independently as a separate project
+
+You can combine `--compress` with `--brain` for maximum compression (Brain Mode runs first, then sqz).
 
 ## Performance
 

@@ -42,6 +42,8 @@ public sealed class GenerateContextUseCase
         bool appendMode = false,
         IEnumerable<string>? excludeLineIfStart = null,
         bool brainMode = false,
+        bool compress = false,
+        bool noCache = false,
         CancellationToken ct = default)
     {
         var discoveryResult = await _discovery.DiscoverFilesAsync(rootPath, config, ct);
@@ -64,7 +66,7 @@ public sealed class GenerateContextUseCase
 
         var contents = entries.Select(e => new FileContent(e, null, e.Size));
 
-        return await WriteOutputAsync(contents, entries.Count, rootPath, config, outputFile, appendMode, excludeLineIfStart, brainMode, ct);
+        return await WriteOutputAsync(contents, entries.Count, rootPath, config, outputFile, appendMode, excludeLineIfStart, brainMode, compress, noCache, ct);
     }
 
     public async Task<Result> ExecuteClusterAsync(
@@ -77,6 +79,8 @@ public sealed class GenerateContextUseCase
         bool appendMode = false,
         IEnumerable<string>? excludeLineIfStart = null,
         bool brainMode = false,
+        bool compress = false,
+        bool noCache = false,
         CancellationToken ct = default)
     {
         var clusterConfig = config.Discovery?.Cluster ?? new ClusterConfiguration();
@@ -184,7 +188,7 @@ public sealed class GenerateContextUseCase
 
         _logger.Success($"Processing {totalFiles} files from {sorted.Count} repos...");
 
-        return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode, excludeLineIfStart, brainMode, ct);
+        return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode, excludeLineIfStart, brainMode, compress, noCache, ct);
     }
 
     private IEnumerable<FileContent> BuildClusterContents(
@@ -225,10 +229,20 @@ public sealed class GenerateContextUseCase
         bool appendMode,
         IEnumerable<string>? excludeLineIfStart,
         bool brainMode,
+        bool compress,
+        bool noCache,
         CancellationToken ct)
     {
         var crusher = brainMode ? new BrainCrusher() : null;
         var dynamicCompressor = brainMode ? new DynamicCompressor() : null;
+        SqzCompressionService? sqzService = compress ? new SqzCompressionService() : null;
+
+        if (compress && !sqzService!.IsAvailable)
+        {
+            _logger.Warning("sqz not found — compression disabled. Install: curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh");
+            compress = false;
+            sqzService = null;
+        }
 
         if (!string.IsNullOrEmpty(outputFile))
         {
@@ -257,6 +271,12 @@ public sealed class GenerateContextUseCase
                 var afterCrush = crusher!.Crush(afterDynamic);
 
                 var finalOutput = dynResult.Legend + crusher.GetDictionaryHeader() + afterCrush;
+
+                if (compress)
+                {
+                    finalOutput = await sqzService!.CompressAsync(finalOutput, noCache);
+                }
+
                 var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
 
                 using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
@@ -265,6 +285,28 @@ public sealed class GenerateContextUseCase
                 string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
                 string dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
                 _logger.Success($"{action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
+
+                return Result.Success();
+            }
+
+            if (compress)
+            {
+                using var ms = new MemoryStream();
+                var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, null, ct);
+                if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
+
+                ms.Position = 0;
+                using var reader = new StreamReader(ms, Encoding.UTF8);
+                var rawOutput = await reader.ReadToEndAsync(ct);
+
+                var compressedOutput = await sqzService!.CompressAsync(rawOutput, noCache);
+                var finalBytes = Encoding.UTF8.GetBytes(compressedOutput);
+
+                using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                await fs.WriteAsync(finalBytes, ct);
+
+                string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
+                _logger.Success($"✔ {action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | Compressed (sqz) | Tokens: ~{finalBytes.Length / 4}");
 
                 return Result.Success();
             }
@@ -296,6 +338,12 @@ public sealed class GenerateContextUseCase
                 var afterCrush = crusher!.Crush(dynResult.Output);
 
                 var finalOutput = dynResult.Legend + crusher.GetDictionaryHeader() + afterCrush;
+
+                if (compress)
+                {
+                    finalOutput = await sqzService!.CompressAsync(finalOutput, noCache);
+                }
+
                 var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
 
                 using var finalMs = new MemoryStream(finalBytes);
@@ -305,6 +353,25 @@ public sealed class GenerateContextUseCase
 
                 string dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
                 _logger.Success($"✔ Copied: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
+
+                return Result.Success();
+            }
+
+            if (compress)
+            {
+                ms.Position = 0;
+                using var reader = new StreamReader(ms, Encoding.UTF8);
+                var rawOutput = await reader.ReadToEndAsync(ct);
+
+                var compressedOutput = await sqzService!.CompressAsync(rawOutput, noCache);
+                var finalBytes = Encoding.UTF8.GetBytes(compressedOutput);
+
+                using var finalMs = new MemoryStream(finalBytes);
+                finalMs.Position = 0;
+                var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
+                if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
+
+                _logger.Success($"✔ Copied: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | Compressed (sqz) | Tokens: ~{finalBytes.Length / 4}");
 
                 return Result.Success();
             }

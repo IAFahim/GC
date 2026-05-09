@@ -87,4 +87,98 @@ public class CliParserTests
         Assert.True(result.IsSuccess);
         Assert.True(result.Value!.NoSort);
     }
+
+    [Fact]
+    public void Parse_CompressFlag_SetsCompress()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new[] { "--compress" };
+
+        var result = parser.Parse(args, config);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.Compress);
+    }
+
+    [Fact]
+    public void Parse_CompressShortFlag_SetsCompress()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new[] { "-c" };
+
+        var result = parser.Parse(args, config);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.Compress);
+    }
+
+    [Fact]
+    public void Parse_CompressKeyword_SetsCompress()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new[] { "compress" };
+
+        var result = parser.Parse(args, config);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.Compress);
+    }
+
+    [Fact]
+    public void Parse_NoCacheFlag_SetsNoCache()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new[] { "--no-cache" };
+
+        var result = parser.Parse(args, config);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.NoCache);
+    }
+
+    [Fact]
+    public void Parse_CompressWithNoCache_BothSet()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new[] { "--compress", "--no-cache" };
+
+        var result = parser.Parse(args, config);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.Compress);
+        Assert.True(result.Value!.NoCache);
+    }
+
+    [Fact]
+    public void Parse_CompressAndBrain_BothSet()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new[] { "--compress", "--brain" };
+
+        var result = parser.Parse(args, config);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.Compress);
+        Assert.True(result.Value!.BrainMode);
+    }
+
+    [Fact]
+    public void Parse_DefaultCompressAndNoCache_AreFalse()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+        var args = new string[] { };
+
+        var result = parser.Parse(args, config);
+
+        Assert.True(result.IsSuccess);
+        Assert.False(result.Value!.Compress);
+        Assert.False(result.Value!.NoCache);
+    }
 }

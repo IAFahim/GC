@@ -342,7 +342,7 @@ namespace MyApp
         var result = await useCase.ExecuteAsync(
             "/tmp", new GcConfiguration(),
             Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
-            null, false, null, false, CancellationToken.None);
+            null, false, null, false, false, false, CancellationToken.None);
         Assert.True(result.IsSuccess);
     }
 
@@ -363,7 +363,7 @@ namespace MyApp
         var result = await useCase.ExecuteAsync(
             "/tmp", new GcConfiguration(),
             Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
-            null, false, null, false, cts.Token);
+            null, false, null, false, false, false, cts.Token);
         // When cancelled, may still return success if cleanup happened before cancellation
         // Just verify it doesn't crash
         Assert.NotNull(result);

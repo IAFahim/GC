@@ -31,7 +31,7 @@ public sealed class DynamicCompressor
             return new CompressResult(text, "", 0, 0);
 
         var rawCandidates = SuffixArray.ExtractMaximalPhrases(codeOnlyText, MinPhraseLength, MinPhraseFrequency, maxReplacements * 3);
-        
+
         if (rawCandidates.Count == 0)
             return new CompressResult(text, "", 0, 0);
 
@@ -41,7 +41,7 @@ public sealed class DynamicCompressor
         {
             var trimmed = c.Phrase.Trim();
             if (trimmed.Length < MinPhraseLength) continue;
-            
+
             ref var count = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(refinedMap, trimmed, out _);
             count += c.Frequency;
         }
@@ -78,8 +78,9 @@ public sealed class DynamicCompressor
         // Phase 2: Context-aware replacement (only in code blocks)
         var output = ReplaceInCodeBlocks(text, finalCandidates, symbolMap);
         var legend = BuildLegend(symbolMap);
-        
-        var totalSaved = finalCandidates.Sum(c => {
+
+        var totalSaved = finalCandidates.Sum(c =>
+        {
             var tokens = TokenEstimator.EstimateTokens(c.Phrase);
             return (tokens * c.Frequency) - (3 + tokens + c.Frequency);
         });
@@ -125,14 +126,14 @@ public sealed class DynamicCompressor
         // Languages we want to harvest identifiers from
         return lang switch
         {
-            "cs" or "csharp" or "js" or "javascript" or "ts" or "typescript" or 
-            "py" or "python" or "rs" or "rust" or "go" or "java" or "c" or "cpp" or 
-            "h" or "hpp" or "swift" or "kt" or "kotlin" or "rb" or "ruby" or 
+            "cs" or "csharp" or "js" or "javascript" or "ts" or "typescript" or
+            "py" or "python" or "rs" or "rust" or "go" or "java" or "c" or "cpp" or
+            "h" or "hpp" or "swift" or "kt" or "kotlin" or "rb" or "ruby" or
             "php" or "sh" or "bash" or "ps1" or "lua" => true,
-            
+
             // Skip data-heavy or highly repetitive structural languages
             "xml" or "json" or "yaml" or "yml" or "log" or "txt" or "csv" or "md" or "sql" => false,
-            
+
             _ => true
         };
     }

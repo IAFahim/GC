@@ -214,7 +214,7 @@ public static class SuffixArray
             if (lcp[i] >= minLength)
             {
                 var phrase = text.Substring(sa[i], lcp[i]);
-                
+
                 // Skip phrases with newlines to avoid breaking the legend format
                 if (phrase.Contains('\n') || phrase.Contains('\r'))
                     continue;

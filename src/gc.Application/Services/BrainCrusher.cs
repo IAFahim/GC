@@ -278,10 +278,17 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
-            if (char.IsWhiteSpace(ch))
+            if (ch == ' ' || ch == '\t')
             {
-                if (!lineIsEmpty)
+                if (lineIsEmpty)
+                {
+                    // Preserve leading whitespace for indentation-sensitive languages
+                    result.Append(ch);
+                }
+                else
+                {
                     lastWasSpace = true;
+                }
                 i++;
                 continue;
             }

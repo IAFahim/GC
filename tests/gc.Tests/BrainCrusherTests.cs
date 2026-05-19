@@ -117,11 +117,14 @@ public class BrainCrusherTests
     }
 
     [Fact]
-    public void Crush_LeadingTrailingWhitespace_Trimmed()
+    public void Crush_LeadingIndentation_Preserved()
     {
         var input = "   public void Foo()   ";
         var result = _crusher.Crush(input);
-        Assert.DoesNotContain("   ", result);
+        // Leading spaces are preserved for indentation safety (flawless mode)
+        Assert.StartsWith("   ", result);
+        // Trailing spaces are still trimmed
+        Assert.False(result.EndsWith("   "));
     }
 
     // =========================================================================

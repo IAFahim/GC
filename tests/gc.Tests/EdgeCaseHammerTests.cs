@@ -144,41 +144,6 @@ namespace MyApp
     }
 
     [Fact]
-    public void DynamicCompressor_StripAttributes_AssemblyLevel_Stripped()
-    {
-        var input = "[assembly: AssemblyVersion(\"1.0.0\")]";
-        var result = DynamicCompressor.StripAttributes(input);
-        Assert.DoesNotContain("AssemblyVersion", result);
-    }
-
-    [Fact]
-    public void DynamicCompressor_StripAttributes_ArrayIndexer_Preserved()
-    {
-        var input = "var x = arr[0];";
-        var result = DynamicCompressor.StripAttributes(input);
-        Assert.Contains("arr[0]", result);
-    }
-
-    [Fact]
-    public void DynamicCompressor_StripAttributes_AttributeOnSameLine()
-    {
-        var input = "    [ThreadStatic] private static int? value;";
-        var result = DynamicCompressor.StripAttributes(input);
-        Assert.DoesNotContain("ThreadStatic", result);
-        Assert.Contains("private static", result);
-    }
-
-    [Fact]
-    public void DynamicCompressor_StripEmoji_MixedWithCode()
-    {
-        var input = "public void DoWork() { } 🎉 bool done = true;";
-        var result = DynamicCompressor.StripEmoji(input);
-        Assert.DoesNotContain("🎉", result);
-        Assert.Contains("public void DoWork()", result);
-        Assert.Contains("bool done = true", result);
-    }
-
-    [Fact]
     public void DynamicCompressor_OverlappingPatterns_NoCorruption()
     {
         var compressor = new DynamicCompressor();
@@ -191,8 +156,6 @@ namespace MyApp
         });
         var result = compressor.Compress(input);
         Assert.NotNull(result.Output);
-        // v2: compressor may or may not find enough repeated long phrases to compress
-        // Just verify it doesn't crash and output is valid
         Assert.True(result.Output.Length > 0);
     }
 

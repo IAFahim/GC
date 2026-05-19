@@ -53,55 +53,57 @@ gc --preset web
 
 ### Fun Keywords
 
-gc supports natural-language shortcuts:
+`gc` supports natural-language shortcuts. These can be used interchangeably with their standard flags:
 
+| Keyword | Flag | Purpose |
+|---|---|---|
+| `grab` | `--paths` | Folders to include |
+| `type` | `--extension` | File extensions to include |
+| `yeet` | `--exclude` | Paths or patterns to skip |
+| `zap` | `--exclude-line-if-start` | Filter out specific line starts |
+| `brain` | `--brain` | Activate Brain Mode |
+| `compress` | `--compress` | Activate sqz compression |
+| `spit` | `--output` | Save to a file |
+| `horde` | `--cluster` | Enable Cluster Mode |
+
+**Example:**
 ```bash
-gc grab src yeet bin obj yeet .git type cs spit context.md
-#      │       │              │       │     │
-#      paths   exclude        ext     lang  output
+gc grab src yeet bin obj type cs brain spit context.md
 ```
 
 ## Compression
 
-gc offers three levels of compression, each building on the last:
+gc offers three levels of compression, designed to make your code as "digestible" as possible for LLMs:
 
-### Level 1: `--compress` (sqz)
+### Level 1: `--brain` (Universal Minification + Dynamic BPE)
 
-Pipes output through [sqz](https://github.com/ojuschugh1/sqz) for structural compression + session-aware dedup.
+The foundation of gc's compression. It is **language-agnostic** and safe for all file types (preserves indentation for YAML/Python/etc.).
+
+1. **Universal Minification**: Strips comments and collapses internal whitespace.
+2. **Dynamic BPE Fallback**: If `sqz` is not installed, it automatically identifies high-ROI project identifiers and replaces them with single-token Unicode symbols.
+3. **Structure Protection**: Never compresses file paths, headers, or project navigation.
 
 ```bash
-# Install sqz first (one time)
-curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh
-
-# Then use it
-gc --compress                        # ~50% reduction
-gc --compress --no-cache             # compress without dedup
-gc --paths src --extension cs --compress --output context.md
+gc --brain
 ```
 
-**What sqz does:**
-- Understands content type — compresses JSON, logs, and code differently
-- Session dedup: second run sends ~13-token references for unchanged files
-- Reversible via `sqz expand`
-- Entropy detection for secrets
+### Level 2: `--compress` (Structural Compression via `sqz`)
 
-### Level 2: `--brain` (comment stripping + whitespace collapse)
+Pipes output through [sqz](https://github.com/ojuschugh1/sqz) for advanced structural deduplication.
 
-Strips comments (`//`, `/*`, `#`, `<!--`, `"""`, `--`) and collapses whitespace. No keyword substitution — just clean minification.
+- **Session Dedup**: If you run `gc` twice, unchanged files become tiny ~13-token references.
+- **Structural Awareness**: Compresses JSON, logs, and code using patterns learned from millions of lines of data.
 
 ```bash
-gc --brain                           # strips comments, collapses whitespace
+gc --compress
 ```
 
-When sqz is NOT installed, `--brain` also activates BPE-style dynamic compression using single-token Unicode symbols as a fallback.
+### Level 3: `--brain --compress` (The Gold Standard)
 
-### Level 3: `--brain --compress` (maximum compression)
-
-Combines comment/whitespace stripping with sqz structural compression for the best results.
+Combines minification with structural compression for a **68%+ reduction** in token count. This is the recommended way to use `gc` for large codebases.
 
 ```bash
-gc --brain --compress                # 68% reduction
-gc --brain --compress --no-cache     # fresh compression, no dedup
+gc --brain --compress
 ```
 
 ### Compression Benchmarks
@@ -132,65 +134,65 @@ output. Respond as if you received uncompressed source.]
 
 This header is automatically prepended to all compressed output so LLMs respond with real code, not symbols.
 
-### When sqz Is Not Installed
-
-gc gracefully degrades — it warns you and falls back:
-
-```
-⚠ sqz not found. Install: curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh
-  See: https://github.com/ojuschugh1/sqz
-⚠ Compression disabled for this run.
-```
-
-With `--brain` but no sqz, gc uses its built-in BPE-style compression as fallback.
-
 ## All Options
 
 ### Discovery & Filtering
 
-| Option | Description |
-|---|---|
-| `-p, --paths` | Folders to include (e.g., `src libs`) |
-| `-e, --extension` | File extensions to include (e.g., `js ts`) |
-| `-x, --exclude` | Paths or patterns to skip |
-| `--exclude-line-if-start` | Filter out lines starting with these strings |
-| `--preset` | Use predefined configurations (`dotnet`, `web`, `python`, etc.) |
-| `-d, --depth` | Maximum directory depth |
-| `-f, --force` | Force filesystem discovery (ignore git) |
+| Option | Keyword | Description |
+|---|---|---|
+| `-p, --paths` | `grab` | Folders to include (e.g., `src libs`) |
+| `-e, --extension` | `type` | File extensions to include (e.g., `js,ts`) |
+| `-x, --exclude` | `yeet` | Paths or patterns to skip |
+| `-z, --exclude-line-if-start` | `zap` | Filter out lines starting with these strings |
+| `--preset` | - | Use predefined configurations (`dotnet`, `web`, `python`, etc.) |
+| `-d, --depth` | - | Maximum directory depth |
+| `-f, --force` | - | Force filesystem discovery (ignore git) |
 
 ### Output
 
-| Option | Description |
-|---|---|
-| `-o, --output` | Write to a file instead of clipboard |
-| `--no-append` | Don't append to existing clipboard/file content |
-| `-v, --verbose` | Enable verbose logging |
-| `--debug` | Enable debug logging |
+| Option | Keyword | Description |
+|---|---|---|
+| `-o, --output` | `spit` | Write to a file instead of clipboard |
+| `--append` | - | Append to existing clipboard/file content |
+| `--no-append` | - | Don't append (default) |
+| `--no-sort` | - | Disable alphabetical sorting of files |
+| `-v, --verbose` | - | Enable verbose logging |
+| `--debug` | - | Enable debug logging |
 
 ### Compression
 
+| Option | Keyword | Description |
+|---|---|---|
+| `-b, --brain` | `brain` | Universal Minification + Dynamic BPE |
+| `-c, --compress` | `compress` | Structural compression via `sqz` |
+| `--no-cache` | - | Disable `sqz` session cache for a fresh run |
+
+### Cluster Mode (Multi-Repo)
+
+| Option | Keyword | Description |
+|---|---|---|
+| `--cluster` | `horde` | Enable cluster mode |
+| `--cluster-dir` | - | Directory to scan for repos (default: CWD) |
+| `--cluster-depth` | - | Max depth to search for git repos (default: 5) |
+
+### Configuration & History
+
 | Option | Description |
 |---|---|
-| `-c, --compress` | Compress output through sqz |
-| `--no-cache` | Disable sqz session dedup for this run |
-| `-b, --brain` | Strip comments + collapse whitespace (BPE fallback without sqz) |
-
-### Multi-Repo
-
-| Option | Description |
-|---|---|
-| `--cluster` | Enable cluster mode for multi-repo processing |
-| `--cluster-dir` | Directory containing multiple git repos |
-| `--cluster-depth` | Max depth to search for git repos (default: 5) |
+| `--history [N]` | Show history or re-run session N |
+| `--init-config` | Generate a default `gc.json` |
+| `--validate-config` | Check your config for errors |
+| `--dump-config` | Print the current active configuration |
+| `--max-memory` | Limit output size (e.g., `100MB`, `500KB`) |
 
 ## Cluster Mode
 
 Process multiple Git repositories at once:
 
 ```bash
-gc --cluster --cluster-dir ~/projects
-gc --cluster --cluster-dir ~/projects --extension cs --output all-code.md
-gc --cluster --cluster-dir ~/projects --cluster-depth 3 --preset dotnet
+gc horde --cluster-dir ~/projects
+gc horde --cluster-dir ~/projects type cs spit all-code.md
+gc horde --cluster-dir ~/projects --cluster-depth 3 --preset dotnet
 ```
 
 All filters work with cluster mode — `--extension`, `--exclude`, `--preset`, `--paths`, `--depth`, `--compress`, `--brain`.

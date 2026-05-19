@@ -272,23 +272,21 @@ public sealed class GenerateContextUseCase
                 using var reader = new StreamReader(ms, Encoding.UTF8);
                 var rawOutput = await reader.ReadToEndAsync(ct);
 
-                // Phase 1: Strip comments + collapse whitespace (always beneficial)
-                var afterCrush = crusher!.Crush(rawOutput);
-
                 string finalOutput;
                 string dynInfo = "";
 
                 if (compress)
                 {
-                    // sqz is available: skip DynamicCompressor (its symbol substitution
-                    // destroys structural patterns sqz relies on). Just minify → sqz.
+                    // sqz is available: just minify -> sqz
+                    var afterCrush = crusher!.Crush(rawOutput);
                     finalOutput = LlmContextHeader + await sqzService!.CompressAsync(afterCrush, noCache);
                 }
                 else
                 {
-                    // No sqz: use BPE-style DynamicCompressor as fallback compression
-                    var dynResult = dynamicCompressor!.Compress(afterCrush);
-                    finalOutput = dynResult.Legend + dynResult.Output;
+                    // No sqz: use DynamicCompressor fallback -> minify
+                    var dynResult = dynamicCompressor!.Compress(rawOutput);
+                    var afterCrush = crusher!.Crush(dynResult.Output);
+                    finalOutput = dynResult.Legend + afterCrush;
                     dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
                 }
 
@@ -347,15 +345,22 @@ public sealed class GenerateContextUseCase
                 using var reader = new StreamReader(ms, Encoding.UTF8);
                 var rawOutput = await reader.ReadToEndAsync(ct);
 
-                var dynResult = dynamicCompressor!.Compress(rawOutput);
-
-                var afterCrush = crusher!.Crush(dynResult.Output);
-
-                var finalOutput = dynResult.Legend + crusher.GetDictionaryHeader() + afterCrush;
+                string finalOutput;
+                string dynInfo = "";
 
                 if (compress)
                 {
-                    finalOutput = await sqzService!.CompressAsync(finalOutput, noCache);
+                    // sqz is available: just minify -> sqz
+                    var afterCrush = crusher!.Crush(rawOutput);
+                    finalOutput = LlmContextHeader + await sqzService!.CompressAsync(afterCrush, noCache);
+                }
+                else
+                {
+                    // No sqz: use DynamicCompressor fallback -> minify
+                    var dynResult = dynamicCompressor!.Compress(rawOutput);
+                    var afterCrush = crusher!.Crush(dynResult.Output);
+                    finalOutput = dynResult.Legend + afterCrush;
+                    dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
                 }
 
                 var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
@@ -365,7 +370,6 @@ public sealed class GenerateContextUseCase
                 var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
                 if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
-                string dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
                 _logger.Success($"✔ Copied: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
 
                 return Result.Success();

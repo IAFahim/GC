@@ -238,8 +238,8 @@ FILTERING:
 
 OUTPUT:
     -s, spit, -o, --output <file>    Save output to file instead of clipboard
-    -b, brain, --brain               [DEPRECATED] Squeeze output for LLMs (token crush mode)
-    -c, compress, --compress         Compress output using sqz (structural + session dedup)
+    -b, brain, --brain               Universal minification + Dynamic BPE fallback
+    -c, compress, --compress         Structural compression using sqz (session dedup)
     --no-cache                       Disable sqz dedup cache (fresh output)
     --append                         Append to current clipboard/file content
     --no-append                      Do not append (default)

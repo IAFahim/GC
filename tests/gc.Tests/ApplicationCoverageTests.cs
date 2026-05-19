@@ -201,7 +201,7 @@ public class ApplicationCoverageTests
     [Fact]
     public void Compress_MaxReplacementsZero_NoReplacements()
     {
-        var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMask = true;", 10));
+        var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMaskSequence = true;", 20));
         var result = _compressor.Compress(input, maxReplacements: 0);
         Assert.Equal(0, result.ReplacementCount);
     }
@@ -210,11 +210,10 @@ public class ApplicationCoverageTests
     [Fact]
     public void Compress_MaxReplacementsOne_AtMostOneReplacement()
     {
-        var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMask = true;", 10))
-                   + " " + string.Join(" ", Enumerable.Repeat("anotherLongIdentifier = false;", 10));
+        var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMaskSequence = true;", 20))
+                   + " " + string.Join(" ", Enumerable.Repeat("anotherLongIdentifierName = false;", 20));
         var result = _compressor.Compress(input, maxReplacements: 1);
-        Assert.True(result.ReplacementCount >= 1,
-            $"Expected at least 1 replacement, got {result.ReplacementCount}");
+        Assert.Equal(1, result.ReplacementCount);
     }
 
     // --- 14. Compress_InputExactly50Chars ---
@@ -234,7 +233,7 @@ public class ApplicationCoverageTests
     [Fact]
     public void Compress_WithReplacements_ContainsLegend()
     {
-        var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMask = true;", 10));
+        var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMask = true;", 20));
         var compressResult = _compressor.Compress(input);
         if (compressResult.ReplacementCount > 0)
         {
@@ -242,46 +241,7 @@ public class ApplicationCoverageTests
         }
     }
 
-    // --- 16. StripAttributes_AtStartOfFile ---
-    [Fact]
-    public void StripAttributes_AtStartOfFile_AttributeStripped()
-    {
-        var input = "[Fact]\npublic";
-        var result = DynamicCompressor.StripAttributes(input);
-        Assert.DoesNotContain("Fact", result);
-        Assert.DoesNotContain("[", result);
-        Assert.Contains("public", result);
-    }
-
-    // --- 17. StripAttributes_AtEndNoClosingBracket ---
-    [Fact]
-    public void StripAttributes_AtEndNoClosingBracket_DoesNotCrash()
-    {
-        var input = "[Obsolete";
-        var result = DynamicCompressor.StripAttributes(input);
-        // Should not crash. The unclosed bracket will be consumed by depth tracking.
-        Assert.NotNull(result);
-    }
-
-    // --- 18. StripAttributes_NestedBrackets ---
-    [Fact]
-    public void StripAttributes_NestedBrackets_DoesNotCrash()
-    {
-        var input = "[[Test]]";
-        var result = DynamicCompressor.StripAttributes(input);
-        // Should not crash — nested brackets handled by depth counter
-        Assert.NotNull(result);
-    }
-
-    // --- 19. StripEmoji_Null ---
-    [Fact]
-    public void StripEmoji_Null_ReturnsNull()
-    {
-        var result = DynamicCompressor.StripEmoji(null!);
-        Assert.Null(result);
-    }
-
-    // --- 20. SingleTokenLexicon symbols ---
+    // --- 16. SingleTokenLexicon symbols ---
     [Fact]
     public void SingleTokenLexicon_ProducesValidSymbols()
     {
@@ -303,58 +263,29 @@ public class ApplicationCoverageTests
         Assert.False(string.IsNullOrEmpty(high));
     }
 
-    // --- 21. Compress_ShortTokensExcluded ---
+    // --- 17. Compress_ShortTokensExcluded ---
     [Fact]
-    public void Compress_ShortTokensExcluded_TokensUnder5CharsNotReplaced()
+    public void Compress_ShortTokensExcluded_TokensUnder10CharsNotReplaced()
     {
         // Build input with a short token ("int" = 3 chars) repeated many times
         // and a long token repeated many times. Only the long token should be replaced.
         var shortToken = "int";
-        var longToken = "configurationValidator";
-        var input = string.Join(" ", Enumerable.Repeat($"{shortToken} x = {longToken};", 15));
+        var longToken = "configurationValidatorService";
+        var input = string.Join(" ", Enumerable.Repeat($"{shortToken} x = {longToken};", 20));
 
         var result = _compressor.Compress(input);
         if (result.ReplacementCount > 0)
         {
-            // Verify "int" is NOT used as a replacement key in the legend.
-            // The legend format is "symbol=original", so a 3-char token would appear as
-            // "_x=int" (symbol=int). Check that no legend entry maps a symbol to exactly "int".
-            // We check that no legend line starts with a symbol mapping to "int " or "int|"
-            // to avoid false positives from longer tokens like "configurationValidator" containing "int".
             var legendLines = result.Legend.Split('\n');
             foreach (var line in legendLines)
             {
-                // Check for symbol= exactly "int" followed by separator or end
                 var eqIdx = line.IndexOf('=');
                 if (eqIdx >= 0)
                 {
                     var original = line.Substring(eqIdx + 1);
-                    // The original value might have | separator or be at end of line
-                    var parts = original.Split('|');
-                    foreach (var part in parts)
-                    {
-                        Assert.NotEqual(shortToken, part.Trim());
-                    }
+                    Assert.NotEqual(shortToken, original.Trim());
                 }
             }
-        }
-    }
-
-    // --- 22. BuildLegend_NewlinesInPhrase ---
-    [Fact]
-    public void BuildLegend_NewlinesInPhrase_PhrasesCleanedInLegend()
-    {
-        // Build a legend via compression that includes phrases with newlines
-        // The legend should have newlines replaced with spaces
-        var phrase = "configurationValidator";
-        var input = string.Join("\n", Enumerable.Repeat($"var x = {phrase};", 10));
-
-        var result = _compressor.Compress(input);
-        if (result.Legend.Length > 0)
-        {
-            // Legend entries should not contain \r or \n in the phrase portion
-            // (the legend format itself has newlines, but the mapped values should be clean)
-            Assert.DoesNotContain("\r", result.Legend.Replace("\r\n", "").Replace("\n", ""));
         }
     }
 

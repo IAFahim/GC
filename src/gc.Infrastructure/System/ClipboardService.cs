@@ -239,9 +239,9 @@ public sealed class ClipboardService : IClipboardService
             await process.WaitForExitAsync(ct);
             return process.ExitCode == 0;
         }
-        catch (Exception ex)
+        catch
         {
-            _logger.Error($"Clipboard tool '{fileName}' not available or failed", ex);
+            // Fail silently so the caller can try a fallback tool without polluting logs
             return false;
         }
     }

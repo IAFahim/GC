@@ -123,10 +123,11 @@ public class GenerateContextUseCaseTests
         var logger = new MockLogger();
         var discovery = new MockFileDiscovery();
         var filter = new FileFilter(logger);
+        var contentFilter = new ContentFilter(logger);
         var reader = new MockFileReader();
         var generator = new MockMarkdownGenerator();
         var clipboard = new MockClipboardService();
-        var useCase = new GenerateContextUseCase(discovery, filter, reader, generator, clipboard, logger);
+        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
         return (useCase, discovery, generator, clipboard, logger);
     }
 

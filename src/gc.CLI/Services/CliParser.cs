@@ -21,7 +21,11 @@ public sealed class CliParser
         ExcludeLineIfStart,
         ClusterDir,
         ClusterDepth,
-        HordeMarker
+        HordeMarker,
+        ExcludePath,
+        IncludePath,
+        ExcludeContent,
+        IncludeContent
     }
 
     public Result<CliArguments> Parse(string[] args, GcConfiguration configuration)
@@ -54,6 +58,10 @@ public sealed class CliParser
         var cluster = false;
         var clusterDir = string.Empty;
         int? clusterDepth = null;
+        var excludePathPatterns = new List<string>();
+        var includePathPatterns = new List<string>();
+        var excludeContentPatterns = new List<string>();
+        var includeContentPatterns = new List<string>();
 
         var state = ParseState.None;
         var onlyPaths = false;
@@ -101,7 +109,9 @@ public sealed class CliParser
 
             if (state != ParseState.None)
             {
-                ProcessStateArg(arg, state, paths, extensions, excludes, presets, excludeLineIfStart, ref output, ref maxMemoryBytes, ref depth, ref clusterDir, ref clusterDepth);
+                ProcessStateArg(arg, state, paths, extensions, excludes, presets, excludeLineIfStart,
+                    ref output, ref maxMemoryBytes, ref depth, ref clusterDir, ref clusterDepth,
+                    excludePathPatterns, includePathPatterns, excludeContentPatterns, includeContentPatterns);
                 if (IsSingleValueState(state))
                 {
                     state = ParseState.None;
@@ -156,7 +166,11 @@ public sealed class CliParser
             Configuration = configuration,
             Cluster = cluster,
             ClusterDir = clusterDir,
-            ClusterDepth = clusterDepth
+            ClusterDepth = clusterDepth,
+            ExcludePathPatterns = excludePathPatterns.ToArray(),
+            IncludePathPatterns = includePathPatterns.ToArray(),
+            ExcludeContentPatterns = excludeContentPatterns.ToArray(),
+            IncludeContentPatterns = includeContentPatterns.ToArray()
         });
     }
 
@@ -227,6 +241,10 @@ public sealed class CliParser
             "--cluster-dir" or "--Cluster-Dir" => ParseState.ClusterDir,
             "--cluster-depth" or "--Cluster-Depth" => ParseState.ClusterDepth,
             "horde" => ParseState.HordeMarker,
+            "--exclude-path" => ParseState.ExcludePath,
+            "--include-path" => ParseState.IncludePath,
+            "--exclude-content" => ParseState.ExcludeContent,
+            "--include-content" => ParseState.IncludeContent,
             _ => ParseState.None
         };
         return state != ParseState.None;
@@ -237,7 +255,12 @@ public sealed class CliParser
         return state is ParseState.Output or ParseState.MaxMemory or ParseState.Depth or ParseState.ClusterDir or ParseState.ClusterDepth;
     }
 
-    private static void ProcessStateArg(string arg, ParseState state, List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, List<string> excludeLineIfStart, ref string output, ref long maxMemoryBytes, ref int? depth, ref string clusterDir, ref int? clusterDepth)
+    private static void ProcessStateArg(
+        string arg, ParseState state,
+        List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, List<string> excludeLineIfStart,
+        ref string output, ref long maxMemoryBytes, ref int? depth, ref string clusterDir, ref int? clusterDepth,
+        List<string> excludePathPatterns, List<string> includePathPatterns,
+        List<string> excludeContentPatterns, List<string> includeContentPatterns)
     {
         switch (state)
         {
@@ -258,6 +281,10 @@ public sealed class CliParser
             case ParseState.ClusterDepth:
                 if (int.TryParse(arg, out var cd) && cd > 0) clusterDepth = cd;
                 break;
+            case ParseState.ExcludePath: excludePathPatterns.Add(arg.Replace('\\', '/')); break;
+            case ParseState.IncludePath: includePathPatterns.Add(arg.Replace('\\', '/')); break;
+            case ParseState.ExcludeContent: excludeContentPatterns.Add(arg); break;
+            case ParseState.IncludeContent: includeContentPatterns.Add(arg); break;
         }
     }
 
@@ -303,6 +330,10 @@ public sealed class CliParser
             ParseState.ClusterDir => "--cluster-dir",
             ParseState.ClusterDepth => "--cluster-depth",
             ParseState.HordeMarker => "horde",
+            ParseState.ExcludePath => "--exclude-path",
+            ParseState.IncludePath => "--include-path",
+            ParseState.ExcludeContent => "--exclude-content",
+            ParseState.IncludeContent => "--include-content",
             _ => "unknown"
         };
     }

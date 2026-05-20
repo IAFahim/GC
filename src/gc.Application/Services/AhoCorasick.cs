@@ -161,4 +161,42 @@ public sealed class AhoCorasick
     {
         _gotoFunc[state * _alphabetSize + c] = value;
     }
+
+    /// <summary>
+    /// Try to get the index for a character in the automaton's alphabet.
+    /// Returns false if the character was never seen in any pattern.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetCharIndex(char c, out int index)
+    {
+        return _charMap.TryGetValue(c, out index);
+    }
+
+    /// <summary>
+    /// Get the next state from current state via character index.
+    /// Returns -1 if no transition exists.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int GetGoto(int state, int charIndex)
+    {
+        return Goto(state, charIndex);
+    }
+
+    /// <summary>
+    /// Get the fail function value for a state.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int GetFail(int state)
+    {
+        return _fail[state];
+    }
+
+    /// <summary>
+    /// Get the output index for a state (-1 means no pattern matched).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int GetOutput(int state)
+    {
+        return _output[state];
+    }
 }

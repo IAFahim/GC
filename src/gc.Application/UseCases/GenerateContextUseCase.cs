@@ -17,6 +17,7 @@ public sealed class GenerateContextUseCase
 
     private readonly IFileDiscovery _discovery;
     private readonly FileFilter _filter;
+    private readonly ContentFilter _contentFilter;
     private readonly IFileReader _reader;
     private readonly IMarkdownGenerator _generator;
     private readonly IClipboardService _clipboard;
@@ -25,6 +26,7 @@ public sealed class GenerateContextUseCase
     public GenerateContextUseCase(
         IFileDiscovery discovery,
         FileFilter filter,
+        ContentFilter contentFilter,
         IFileReader reader,
         IMarkdownGenerator generator,
         IClipboardService clipboard,
@@ -32,6 +34,7 @@ public sealed class GenerateContextUseCase
     {
         _discovery = discovery;
         _filter = filter;
+        _contentFilter = contentFilter;
         _reader = reader;
         _generator = generator;
         _clipboard = clipboard;
@@ -50,12 +53,18 @@ public sealed class GenerateContextUseCase
         bool brainMode = false,
         bool compress = false,
         bool noCache = false,
+        string[]? excludePathPatterns = null,
+        string[]? includePathPatterns = null,
+        string[]? excludeContentPatterns = null,
+        string[]? includeContentPatterns = null,
         CancellationToken ct = default)
     {
         var discoveryResult = await _discovery.DiscoverFilesAsync(rootPath, config, ct);
         if (!discoveryResult.IsSuccess) return Result.Failure(discoveryResult.Error!);
 
-        var filterResult = _filter.FilterFiles(discoveryResult.Value!, config, paths, excludes, extensions);
+        var filterResult = _filter.FilterFiles(
+            discoveryResult.Value!, config, paths, excludes, extensions,
+            excludePathPatterns, includePathPatterns);
         if (!filterResult.IsSuccess) return Result.Failure(filterResult.Error!);
 
         var entries = filterResult.Value!.ToList();
@@ -72,7 +81,8 @@ public sealed class GenerateContextUseCase
 
         var contents = entries.Select(e => new FileContent(e, null, e.Size));
 
-        return await WriteOutputAsync(contents, entries.Count, rootPath, config, outputFile, appendMode, excludeLineIfStart, brainMode, compress, noCache, ct);
+        return await WriteOutputAsync(contents, entries.Count, rootPath, config, outputFile, appendMode,
+            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct);
     }
 
     public async Task<Result> ExecuteClusterAsync(
@@ -87,6 +97,10 @@ public sealed class GenerateContextUseCase
         bool brainMode = false,
         bool compress = false,
         bool noCache = false,
+        string[]? excludePathPatterns = null,
+        string[]? includePathPatterns = null,
+        string[]? excludeContentPatterns = null,
+        string[]? includeContentPatterns = null,
         CancellationToken ct = default)
     {
         var clusterConfig = config.Discovery?.Cluster ?? new ClusterConfiguration();
@@ -132,7 +146,9 @@ public sealed class GenerateContextUseCase
                     return;
                 }
 
-                var filterResult = _filter.FilterFiles(discoveryResult.Value!, config, paths, excludes, extensions);
+                var filterResult = _filter.FilterFiles(
+                    discoveryResult.Value!, config, paths, excludes, extensions,
+                    excludePathPatterns, includePathPatterns);
                 if (!filterResult.IsSuccess)
                 {
                     lock (lockObj)
@@ -194,7 +210,8 @@ public sealed class GenerateContextUseCase
 
         _logger.Success($"Processing {totalFiles} files from {sorted.Count} repos...");
 
-        return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode, excludeLineIfStart, brainMode, compress, noCache, ct);
+        return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode,
+            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct);
     }
 
     private IEnumerable<FileContent> BuildClusterContents(
@@ -237,8 +254,34 @@ public sealed class GenerateContextUseCase
         bool brainMode,
         bool compress,
         bool noCache,
+        string[]? excludeContentPatterns,
+        string[]? includeContentPatterns,
         CancellationToken ct)
     {
+        // Apply content filters — only for actual files, not metadata entries starting with '['
+        var exPatterns = excludeContentPatterns ?? Array.Empty<string>();
+        var inPatterns = includeContentPatterns ?? Array.Empty<string>();
+        var filteredList = new List<FileContent>();
+
+        foreach (var content in contents)
+        {
+            if (content.Entry.Path.StartsWith('['))
+            {
+                filteredList.Add(content);
+                continue;
+            }
+
+            // For files with embedded content, apply content filter immediately
+            if (content.Content != null && !_contentFilter.ShouldInclude(content.Content, exPatterns, inPatterns))
+            {
+                continue;
+            }
+
+            filteredList.Add(content);
+        }
+
+        int actualFileCount = filteredList.Count(c => !c.Entry.Path.StartsWith('['));
+
         var crusher = brainMode ? new BrainCrusher() : null;
         var dynamicCompressor = brainMode ? new DynamicCompressor() : null;
         SqzCompressionService? sqzService = compress ? new SqzCompressionService() : null;
@@ -265,7 +308,7 @@ public sealed class GenerateContextUseCase
             if (brainMode)
             {
                 using var ms = new MemoryStream();
-                var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, null, ct);
+                var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, excludeLineIfStart, null, ct);
                 if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
                 ms.Position = 0;
@@ -277,13 +320,11 @@ public sealed class GenerateContextUseCase
 
                 if (compress)
                 {
-                    // sqz is available: just minify -> sqz
                     var afterCrush = crusher!.Crush(rawOutput);
                     finalOutput = LlmContextHeader + await sqzService!.CompressAsync(afterCrush, noCache);
                 }
                 else
                 {
-                    // No sqz: use DynamicCompressor fallback -> minify
                     var dynResult = dynamicCompressor!.Compress(rawOutput);
                     var afterCrush = crusher!.Crush(dynResult.Output);
                     finalOutput = dynResult.Legend + afterCrush;
@@ -296,7 +337,7 @@ public sealed class GenerateContextUseCase
                 await fs.WriteAsync(finalBytes, ct);
 
                 string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-                _logger.Success($"{action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
+                _logger.Success($"{action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
 
                 return Result.Success();
             }
@@ -304,7 +345,7 @@ public sealed class GenerateContextUseCase
             if (compress)
             {
                 using var ms = new MemoryStream();
-                var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, null, ct);
+                var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, excludeLineIfStart, null, ct);
                 if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
                 ms.Position = 0;
@@ -318,25 +359,25 @@ public sealed class GenerateContextUseCase
                 await fs.WriteAsync(finalBytes, ct);
 
                 string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-                _logger.Success($"✔ {action} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | Compressed (sqz) | Tokens: ~{finalBytes.Length / 4}");
+                _logger.Success($"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | Compressed (sqz) | Tokens: ~{finalBytes.Length / 4}");
 
                 return Result.Success();
             }
 
             using var fs2 = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
-            var genResult2 = await _generator.GenerateMarkdownStreamingAsync(contents, fs2, config, excludeLineIfStart, null, ct);
+            var genResult2 = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs2, config, excludeLineIfStart, null, ct);
             if (!genResult2.IsSuccess) return Result.Failure(genResult2.Error!);
 
             string action2 = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-            _logger.Success($"✔ {action2} {outputFile}: {fileCount} files | Size: {Formatting.FormatSize(genResult2.Value)} | Tokens: ~{genResult2.Value / 4}");
+            _logger.Success($"✔ {action2} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult2.Value)} | Tokens: ~{genResult2.Value / 4}");
 
             return Result.Success();
         }
         else
         {
             using var ms = new MemoryStream();
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(contents, ms, config, excludeLineIfStart, null, ct);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, excludeLineIfStart, null, ct);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
             if (brainMode)
@@ -350,13 +391,11 @@ public sealed class GenerateContextUseCase
 
                 if (compress)
                 {
-                    // sqz is available: just minify -> sqz
                     var afterCrush = crusher!.Crush(rawOutput);
                     finalOutput = LlmContextHeader + await sqzService!.CompressAsync(afterCrush, noCache);
                 }
                 else
                 {
-                    // No sqz: use DynamicCompressor fallback -> minify
                     var dynResult = dynamicCompressor!.Compress(rawOutput);
                     var afterCrush = crusher!.Crush(dynResult.Output);
                     finalOutput = dynResult.Legend + afterCrush;
@@ -370,7 +409,7 @@ public sealed class GenerateContextUseCase
                 var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
                 if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
-                _logger.Success($"✔ Copied: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
+                _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
 
                 return Result.Success();
             }
@@ -389,7 +428,7 @@ public sealed class GenerateContextUseCase
                 var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
                 if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
-                _logger.Success($"✔ Copied: {fileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | Compressed (sqz) | Tokens: ~{finalBytes.Length / 4}");
+                _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | Compressed (sqz) | Tokens: ~{finalBytes.Length / 4}");
 
                 return Result.Success();
             }
@@ -398,7 +437,7 @@ public sealed class GenerateContextUseCase
             var clipResult2 = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
             if (!clipResult2.IsSuccess) return Result.Failure(clipResult2.Error!);
 
-            _logger.Success($"✔ Copied: {fileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
 
             return Result.Success();
         }

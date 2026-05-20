@@ -55,13 +55,14 @@ public static class Program
 
         var discovery = new FileDiscovery(logger);
         var filter = new FileFilter(logger);
+        var contentFilter = new ContentFilter(logger);
         var reader = new FileReader(logger);
         var generator = new MarkdownGenerator(logger, reader);
         var clipboard = new ClipboardService(logger);
         var validator = new ConfigurationValidator();
         var configService = new ConfigurationService(logger, validator);
 
-        var useCase = new GenerateContextUseCase(discovery, filter, reader, generator, clipboard, logger);
+        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
 
         var exitCode = await ExecuteAsync(cliArgs, config, useCase, configService, logger, cts.Token);
 
@@ -186,6 +187,10 @@ public static class Program
                 cliArgs.BrainMode,
                 cliArgs.Compress,
                 cliArgs.NoCache,
+                cliArgs.ExcludePathPatterns,
+                cliArgs.IncludePathPatterns,
+                cliArgs.ExcludeContentPatterns,
+                cliArgs.IncludeContentPatterns,
                 ct);
 
             if (!result.IsSuccess)
@@ -209,6 +214,10 @@ public static class Program
             cliArgs.BrainMode,
             cliArgs.Compress,
             cliArgs.NoCache,
+            cliArgs.ExcludePathPatterns,
+            cliArgs.IncludePathPatterns,
+            cliArgs.ExcludeContentPatterns,
+            cliArgs.IncludeContentPatterns,
             ct);
 
         if (!normalResult.IsSuccess)

@@ -303,12 +303,15 @@ namespace MyApp
         var discovery = new MockDiscovery(Array.Empty<FileEntry>());
         var clipboard = new MockClipboard();
         var filter = new FileFilter(logger);
-        var useCase = new GenerateContextUseCase(discovery, filter, reader, generator, clipboard, logger);
+        var contentFilter = new ContentFilter(logger);
+        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
 
         var result = await useCase.ExecuteAsync(
             "/tmp", new GcConfiguration(),
             Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
-            null, false, null, false, false, false, CancellationToken.None);
+            null, false, null, false, false, false,
+            null, null, null, null,
+            CancellationToken.None);
         Assert.True(result.IsSuccess);
     }
 
@@ -321,7 +324,8 @@ namespace MyApp
         var discovery = new MockDiscovery(Array.Empty<FileEntry>());
         var clipboard = new MockClipboard();
         var filter = new FileFilter(logger);
-        var useCase = new GenerateContextUseCase(discovery, filter, reader, generator, clipboard, logger);
+        var contentFilter = new ContentFilter(logger);
+        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
 
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
@@ -329,9 +333,9 @@ namespace MyApp
         var result = await useCase.ExecuteAsync(
             "/tmp", new GcConfiguration(),
             Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
-            null, false, null, false, false, false, cts.Token);
-        // When cancelled, may still return success if cleanup happened before cancellation
-        // Just verify it doesn't crash
+            null, false, null, false, false, false,
+            null, null, null, null,
+            cts.Token);
         Assert.NotNull(result);
     }
 

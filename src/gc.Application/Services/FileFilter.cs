@@ -17,7 +17,14 @@ public sealed class FileFilter
         _logger = logger;
     }
 
-    public Result<IEnumerable<FileEntry>> FilterFiles(IEnumerable<string> rawFiles, GcConfiguration config, IEnumerable<string> searchPaths, IEnumerable<string> excludePatterns, IEnumerable<string> extensionFilters)
+    public Result<IEnumerable<FileEntry>> FilterFiles(
+        IEnumerable<string> rawFiles,
+        GcConfiguration config,
+        IEnumerable<string> searchPaths,
+        IEnumerable<string> excludePatterns,
+        IEnumerable<string> extensionFilters,
+        string[]? excludePathPatterns = null,
+        string[]? includePathPatterns = null)
     {
         var activeExtensions = ResolveActiveExtensions(extensionFilters);
 
@@ -30,8 +37,12 @@ public sealed class FileFilter
 
         var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToArray();
 
+        // Merge CLI and config path patterns
+        var mergedExcludePath = MergePatterns(excludePathPatterns, config.Filters?.ExcludePathPatterns);
+        var mergedIncludePath = MergePatterns(includePathPatterns, config.Filters?.IncludePathPatterns);
+
         var filtered = rawFiles
-            .Where(path => IsValidPath(path, normalizedSearchPaths, excludeSearchValues, activeExtensions))
+            .Where(path => IsValidPath(path, normalizedSearchPaths, excludeSearchValues, activeExtensions, mergedExcludePath, mergedIncludePath))
             .Select(path => CreateFileEntry(path, config))
             .Where(entry => entry != null)
             .Cast<FileEntry>()
@@ -44,6 +55,18 @@ public sealed class FileFilter
         }
 
         return Result<IEnumerable<FileEntry>>.Success(filtered);
+    }
+
+    private static string[] MergePatterns(string[]? cliPatterns, string[]? configPatterns)
+    {
+        if ((cliPatterns == null || cliPatterns.Length == 0) &&
+            (configPatterns == null || configPatterns.Length == 0))
+            return Array.Empty<string>();
+
+        var list = new List<string>();
+        if (configPatterns != null) list.AddRange(configPatterns);
+        if (cliPatterns != null) list.AddRange(cliPatterns);
+        return list.ToArray();
     }
 
     private FileEntry? CreateFileEntry(string path, GcConfiguration config)
@@ -108,7 +131,7 @@ public sealed class FileFilter
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [System.Runtime.CompilerServices.SkipLocalsInit]
-    private static bool IsValidPath(string path, string[] normalizedSearchPaths, System.Buffers.SearchValues<string> excludeSearchValues, FrozenSet<string> extensions)
+    private static bool IsValidPath(string path, string[] normalizedSearchPaths, System.Buffers.SearchValues<string> excludeSearchValues, FrozenSet<string> extensions, string[] excludePathPatterns, string[] includePathPatterns)
     {
         var pathSpan = path.AsSpan();
 
@@ -148,6 +171,18 @@ public sealed class FileFilter
         var normalizedSpan = pathNormalized.AsSpan();
 
         if (normalizedSpan.ContainsAny(excludeSearchValues))
+        {
+            return false;
+        }
+
+        // Glob-based path exclude patterns (e.g., "*/test/*", "*.bench.*", "**/benchmark/**")
+        if (excludePathPatterns.Length > 0 && GlobMatcher.MatchesAny(pathNormalized, excludePathPatterns))
+        {
+            return false;
+        }
+
+        // Glob-based path include patterns — whitelist (e.g., "src/**", "lib/core/**")
+        if (includePathPatterns.Length > 0 && !GlobMatcher.MatchesAny(pathNormalized, includePathPatterns))
         {
             return false;
         }

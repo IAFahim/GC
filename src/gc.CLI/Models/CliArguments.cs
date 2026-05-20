@@ -34,6 +34,11 @@ public sealed record CliArguments
 
     public bool NoCache { get; init; }
 
+    public string[] ExcludePathPatterns { get; init; } = Array.Empty<string>();
+    public string[] IncludePathPatterns { get; init; } = Array.Empty<string>();
+    public string[] ExcludeContentPatterns { get; init; } = Array.Empty<string>();
+    public string[] IncludeContentPatterns { get; init; } = Array.Empty<string>();
+
     public bool Cluster { get; init; }
 
     public string ClusterDir { get; init; } = string.Empty;

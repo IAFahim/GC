@@ -83,7 +83,7 @@ public sealed class FileReader : IFileReader
             }
 
             using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
-            
+
             // Check if binary using the opened stream
             if (await IsBinaryStreamAsync(stream, ct))
             {
@@ -125,7 +125,7 @@ public sealed class FileReader : IFileReader
             }
 
             using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
-            
+
             // Check if binary using the opened stream
             if (await IsBinaryStreamAsync(stream, ct))
             {

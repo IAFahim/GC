@@ -5,7 +5,7 @@ namespace gc.Application.Services;
 /// <summary>
 /// High-performance glob pattern matcher with wildcard support.
 /// Supports: * (any chars except /), ? (single char), ** (any chars including /).
-/// Uses iterative NFA simulation with O(n*m) worst case, optimized for common cases.
+/// Uses backtracking simulation with O(n*m) worst case, optimized for common cases.
 /// </summary>
 public static class GlobMatcher
 {
@@ -40,7 +40,30 @@ public static class GlobMatcher
             return true;
         }
 
-        return MatchGlob(path, pattern);
+        // If the pattern has no '/', it can match against either the entire path or the filename
+        if (!pattern.Contains('/'))
+        {
+            if (MatchInternal(path, pattern))
+                return true;
+
+            int lastSlash = path.LastIndexOf('/');
+            if (lastSlash >= 0)
+            {
+                return MatchInternal(path.Slice(lastSlash + 1), pattern);
+            }
+
+            return false;
+        }
+
+        // If the pattern starts with "**/", it can match starting after the "**/".
+        // E.g., "**/boost/**" can match "boost/algorithm.hpp".
+        if (pattern.Length >= 3 && pattern[0] == '*' && pattern[1] == '*' && pattern[2] == '/')
+        {
+            if (IsMatch(path, pattern.Slice(3)))
+                return true;
+        }
+
+        return MatchInternal(path, pattern);
     }
 
     /// <summary>
@@ -62,110 +85,111 @@ public static class GlobMatcher
     }
 
     /// <summary>
-    /// Normalize pattern by collapsing consecutive ** and handling the semantics correctly.
-    /// Returns pattern info: for each position, the type and whether it's part of **
+    /// Core backtracking glob matching algorithm.
     /// </summary>
-    private static (bool IsDoubleStar, int NormalizedLength) GetPatternInfo(ReadOnlySpan<char> pattern, int pos)
+    private static bool MatchInternal(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern)
     {
-        char c = pattern[pos];
-        if (c != '*') return (false, 1);
+        int pathIdx = 0;
+        int patIdx = 0;
 
-        // Check if this is part of **
-        bool isStartOfDoubleStar = (pos + 1 < pattern.Length && pattern[pos + 1] == '*');
-        bool isAfterDoubleStar = (pos > 0 && pattern[pos - 1] == '*');
-
-        if (isAfterDoubleStar)
+        while (patIdx < pattern.Length)
         {
-            // This is the second * of ** - skip it in normalized pattern
-            return (true, 0);
-        }
+            char patChar = pattern[patIdx];
 
-        if (isStartOfDoubleStar)
-        {
-            return (true, 2); // ** is treated as one "match any including /" element
-        }
-
-        return (false, 1); // single *
-    }
-
-    /// <summary>
-    /// DP-based glob matching.
-    /// Handles *, ?, ** with proper segment semantics.
-    /// </summary>
-    private static bool MatchGlob(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern)
-    {
-        int pLen = path.Length;
-        int patLen = pattern.Length;
-
-        // Normalize pattern: collapse ** into single entries
-        // For DP, we need to track which pattern positions correspond to which "normalized" positions
-        var isDoubleStar = new bool[patLen];
-        var normPatLen = 0;
-
-        for (int j = 0; j < patLen; j++)
-        {
-            var (isDs, consumed) = GetPatternInfo(pattern, j);
-            if (consumed > 0)
+            if (patChar == '*')
             {
-                isDoubleStar[normPatLen] = isDs;
-                normPatLen++;
+                // Check if it is a double star '**'
+                bool isDoubleStar = (patIdx + 1 < pattern.Length && pattern[patIdx + 1] == '*');
+                int starLen = isDoubleStar ? 2 : 1;
+
+                // Merge consecutive stars
+                while (patIdx + starLen < pattern.Length && pattern[patIdx + starLen] == '*')
+                {
+                    if (patIdx + starLen + 1 < pattern.Length && pattern[patIdx + starLen + 1] == '*')
+                    {
+                        isDoubleStar = true;
+                        starLen += 2;
+                    }
+                    else
+                    {
+                        starLen += 1;
+                    }
+                }
+
+                ReadOnlySpan<char> nextPattern = pattern.Slice(patIdx + starLen);
+
+                // If this is the end of the pattern
+                if (nextPattern.IsEmpty)
+                {
+                    if (isDoubleStar)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        // Single star at end: must not contain '/' in the remaining path
+                        return !path.Slice(pathIdx).Contains('/');
+                    }
+                }
+
+                // Optimization: if next character in pattern is not a wildcard, we can scan for it
+                char nextChar = nextPattern[0];
+                bool nextIsWildcard = (nextChar == '*' || nextChar == '?');
+
+                for (int i = pathIdx; i <= path.Length; i++)
+                {
+                    // If it is a single star, it cannot cross '/'
+                    if (!isDoubleStar && i > pathIdx && path[i - 1] == '/')
+                    {
+                        break;
+                    }
+
+                    // Optimization: if next char is not wildcard, skip paths that don't match nextChar
+                    if (!nextIsWildcard && i < path.Length)
+                    {
+                        if (char.ToLowerInvariant(path[i]) != char.ToLowerInvariant(nextChar))
+                        {
+                            continue;
+                        }
+                    }
+
+                    if (MatchInternal(path.Slice(i), nextPattern))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
             }
-            if (consumed > 1) j++; // skip next *
-        }
-
-        // DP table: dp[i,j] = can normalized pattern[0..j] match path[0..i]?
-        var dp = new bool[pLen + 1, normPatLen + 1];
-
-        // Initialize: empty pattern matches empty path
-        dp[0, 0] = true;
-
-        // Initialize first row: pattern can match empty path with leading * or **
-        for (int j = 1; j <= normPatLen; j++)
-        {
-            // If current normalized pattern element is **, it can match empty
-            // If it's *, it can match empty at the start
-            // But ** at start of pattern (like **/*.cs) typically shouldn't match empty
-            // unless explicitly allowed. Let's allow both for flexibility.
-            dp[0, j] = true; // * and ** can both match empty
-        }
-
-        // Fill DP table
-        for (int i = 1; i <= pLen; i++)
-        {
-            dp[i, 0] = false; // non-empty path can't match empty pattern
-        }
-
-        for (int i = 1; i <= pLen; i++)
-        {
-            char sc = path[i - 1];
-
-            for (int j = 1; j <= normPatLen; j++)
+            else if (patChar == '?')
             {
-                // Get original pattern position for current normalized position j
-                int origJ = j - 1;
+                if (pathIdx >= path.Length || path[pathIdx] == '/')
+                {
+                    return false;
+                }
+                pathIdx++;
+                patIdx++;
+            }
+            else
+            {
+                if (pathIdx >= path.Length)
+                {
+                    return false;
+                }
 
-                if (isDoubleStar[origJ])
+                char pc = patChar;
+                char sc = path[pathIdx];
+
+                if (char.ToLowerInvariant(pc) != char.ToLowerInvariant(sc))
                 {
-                    // ** matches any sequence INCLUDING /
-                    // Option 1: skip ** entirely (dp[i, j-1])
-                    // Option 2: use current char and stay in ** (dp[i-1, j])
-                    dp[i, j] = dp[i, j - 1] || dp[i - 1, j];
+                    return false;
                 }
-                else if (pattern[origJ] == '?')
-                {
-                    // ? matches any single character (but not /)
-                    dp[i, j] = sc != '/' && dp[i - 1, j - 1];
-                }
-                else
-                {
-                    // Regular character: must match case-insensitively
-                    char pc = pattern[origJ];
-                    dp[i, j] = dp[i - 1, j - 1] &&
-                               char.ToLowerInvariant(sc) == char.ToLowerInvariant(pc);
-                }
+
+                pathIdx++;
+                patIdx++;
             }
         }
 
-        return dp[pLen, normPatLen];
+        return pathIdx == path.Length;
     }
 }

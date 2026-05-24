@@ -30,20 +30,20 @@ public class GlobMatcherTests
     [InlineData("main.cs", "*.cs", true)]
     [InlineData("test.ts", "*.cs", false)]
     [InlineData("test.js", "*.cs", false)]
-    
+
     [InlineData("test.cs", "test.*", true)]
     [InlineData("test.js", "test.*", true)]
     [InlineData("test", "test.*", false)]
     [InlineData("test.more.cs", "test.*", true)]  // * matches "more.cs"
-    
+
     [InlineData("main.cs", "m*.cs", true)]
     [InlineData("my.cs", "m*.cs", true)]
     [InlineData("module.cs", "m*.cs", true)]
     [InlineData("a.cs", "m*.cs", false)]
-    
+
     [InlineData("test.cs", "t*st.cs", true)]   // * matches "es"
     [InlineData("teeeest.cs", "t*st.cs", true)] // * matches "eeee"
-    [InlineData("tsst.cs", "t*st.cs", false)]   // no middle match
+    [InlineData("tsst.cs", "t*st.cs", true)]   // matches with s in the middle
     public void IsMatch_SingleStar_ChecksCorrectly(string path, string pattern, bool expected)
     {
         Assert.Equal(expected, GlobMatcher.IsMatch(path, pattern));
@@ -66,12 +66,12 @@ public class GlobMatcherTests
     [InlineData("test.cs", "????.cs", true)]     // 4 chars
     [InlineData("abcd.cs", "????.cs", true)]     // 4 chars
     [InlineData("abc.cs", "????.cs", false)]      // 3 chars
-    
+
     [InlineData("test1.cs", "test?.cs", true)]
     [InlineData("testA.cs", "test?.cs", true)]
     [InlineData("test.cs", "test?.cs", false)]    // no extra char
     [InlineData("test12.cs", "test?.cs", false)] // too many chars
-    
+
     [InlineData("a.cs", "?.cs", true)]
     [InlineData("ab.cs", "?.cs", false)]
     public void IsMatch_QuestionMark_ChecksCorrectly(string path, string pattern, bool expected)
@@ -88,15 +88,15 @@ public class GlobMatcherTests
     [InlineData("lib/util.cs", "**/*.cs", true)]
     [InlineData("test.cs", "**/*.cs", true)]
     [InlineData("test.js", "**/*.cs", false)]
-    
+
     [InlineData("src/main.cs", "src/**", true)]
     [InlineData("src/lib/util.cs", "src/**", true)]
     [InlineData("src/main.cs", "lib/**", false)]
-    
+
     [InlineData("a/b/c/test.cs", "a/**/test.cs", true)]
     [InlineData("a/x/y/test.cs", "a/**/test.cs", true)]
     [InlineData("b/x/y/test.cs", "a/**/test.cs", false)]
-    
+
     [InlineData("test.cs", "**", true)]
     [InlineData("a/b/c/test.cs", "**", true)]
     public void IsMatch_DoubleStar_ChecksCorrectly(string path, string pattern, bool expected)
@@ -112,7 +112,7 @@ public class GlobMatcherTests
     [InlineData("test.cs", "t*st.*", true)]
     [InlineData("test.cpp", "t*st.*", true)]
     [InlineData("toast.cpp", "t*st.*", true)]
-    
+
     [InlineData("src/main.cs", "*/*.cs", true)]
     [InlineData("lib/util.cs", "*/*.cs", true)]
     [InlineData("main.cs", "*/*.cs", false)]      // no leading segment
@@ -126,18 +126,18 @@ public class GlobMatcherTests
     // ═══════════════════════════════════════════════════════════════════════════
 
     [Theory]
-    [InlineData("test/test_file.cs", "*/test/*", true)]
+    [InlineData("test/test_file.cs", "*/test/*", false)]
     [InlineData("src/test/util.cs", "*/test/*", true)]
     [InlineData("src/main/util.cs", "*/test/*", false)]
-    
+
     [InlineData("test/file.bench.cs", "*.bench.*", true)]
     [InlineData("benchmark_test.cs", "*.bench.*", false)]  // bench not in middle with dots
     [InlineData("bench_test.cs", "*.bench.*", false)]
-    
+
     [InlineData("libs/boost/algorithm.hpp", "**/boost/**", true)]
     [InlineData("boost/algorithm.hpp", "**/boost/**", true)]
     [InlineData("libs/std/algorithm.hpp", "**/boost/**", false)]
-    
+
     [InlineData("build/Release/app.dll", "build/**", true)]
     [InlineData("build_output.dll", "build/**", false)]
     public void IsMatch_RealWorldPatterns_ChecksCorrectly(string path, string pattern, bool expected)

@@ -18,7 +18,7 @@ public sealed class DynamicCompressor
 
     private const int MaxDynamicReplacements = 100;
     private const int MinPhraseFrequency = 3;
-    private const int MinPhraseLength = 10;
+    private const int MinPhraseLength = 11;
 
     public CompressResult Compress(string text, int maxReplacements = MaxDynamicReplacements)
     {
@@ -58,8 +58,11 @@ public sealed class DynamicCompressor
             if (phrase.Contains("```") || phrase.Contains("# ") || phrase.Length > 150)
                 continue;
 
+            if (!ContainsLongWord(phrase, 6))
+                continue;
+
             var tokens = TokenEstimator.EstimateTokens(phrase);
-            if (tokens <= 2) continue;
+            if (tokens <= 1) continue;
 
             var nts = (tokens * freq) - (3 + tokens + freq);
             if (nts <= 0) continue;
@@ -85,13 +88,18 @@ public sealed class DynamicCompressor
             return (tokens * c.Frequency) - (3 + tokens + c.Frequency);
         });
 
-        return new CompressResult(output, legend, totalSaved, finalCandidates.Sum(c => c.Frequency));
+        return new CompressResult(output, legend, totalSaved, finalCandidates.Count);
     }
 
     private static bool IsIdentifier(string s) => s.All(c => char.IsLetterOrDigit(c) || c == '_');
 
     private static string ExtractCodeOnly(string text)
     {
+        if (!text.Contains("```"))
+        {
+            return text;
+        }
+
         var sb = new StringBuilder(text.Length / 2);
         var lines = text.Split('\n');
         var inCodeBlock = false;
@@ -140,13 +148,27 @@ public sealed class DynamicCompressor
 
     private static string ReplaceInCodeBlocks(string text, List<(string Phrase, int Frequency, bool IsIdent)> candidates, Dictionary<string, string> symbolMap)
     {
+        if (!text.Contains("```"))
+        {
+            var processedText = text;
+            var sorted = candidates.OrderByDescending(c => c.Phrase.Length).ToList();
+            foreach (var c in sorted)
+            {
+                if (c.IsIdent)
+                    processedText = ReplaceWordBoundary(processedText, c.Phrase, symbolMap[c.Phrase]);
+                else
+                    processedText = processedText.Replace(c.Phrase, symbolMap[c.Phrase]);
+            }
+            return processedText;
+        }
+
         var sb = new StringBuilder(text.Length);
         var lines = text.Split('\n');
         var inCodeBlock = false;
         var inProjectStructure = false;
 
         // Sort by length descending to ensure greedy matching
-        var sorted = candidates.OrderByDescending(c => c.Phrase.Length).ToList();
+        var sortedList = candidates.OrderByDescending(c => c.Phrase.Length).ToList();
 
         for (int l = 0; l < lines.Length; l++)
         {
@@ -163,7 +185,7 @@ public sealed class DynamicCompressor
             else if (inCodeBlock && !inProjectStructure)
             {
                 var processedLine = line;
-                foreach (var c in sorted)
+                foreach (var c in sortedList)
                 {
                     if (c.IsIdent)
                         processedLine = ReplaceWordBoundary(processedLine, c.Phrase, symbolMap[c.Phrase]);
@@ -224,5 +246,23 @@ public sealed class DynamicCompressor
         }
         sb.AppendLine();
         return sb.ToString();
+    }
+    private static bool ContainsLongWord(string s, int minWordLength)
+    {
+        int currentLength = 0;
+        foreach (char c in s)
+        {
+            if (char.IsLetterOrDigit(c) || c == '_')
+            {
+                currentLength++;
+                if (currentLength >= minWordLength)
+                    return true;
+            }
+            else
+            {
+                currentLength = 0;
+            }
+        }
+        return false;
     }
 }

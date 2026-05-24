@@ -98,7 +98,7 @@ public static class SuffixArray
             var isSubstr = false;
             foreach (var f in filtered)
             {
-                if (f.Phrase.Contains(c.Phrase, StringComparison.Ordinal))
+                if (f.Phrase.Contains(c.Phrase, StringComparison.Ordinal) && c.Frequency == f.Frequency)
                 {
                     isSubstr = true;
                     break;
@@ -251,7 +251,7 @@ public static class SuffixArray
             var isSubstr = false;
             foreach (var f in filtered)
             {
-                if (f.Phrase.Contains(c.Phrase, StringComparison.Ordinal))
+                if (f.Phrase.Contains(c.Phrase, StringComparison.Ordinal) && c.Frequency == f.Frequency)
                 {
                     isSubstr = true;
                     break;

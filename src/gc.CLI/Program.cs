@@ -23,7 +23,8 @@ public static class Program
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) => { e.Cancel = true; cts.Cancel(); };
 
-        var logger = new ConsoleLogger();
+        var console = new SystemConsole();
+        var logger = new ConsoleLogger(null, console);
         var configLoader = new ConfigurationLoader(logger);
 
         var configResult = await configLoader.LoadConfigAsync();
@@ -50,7 +51,7 @@ public static class Program
 
         if (cliArgs.ShowHistory)
         {
-            return await HistoryMenu.ShowAsync(historyService, parser, config, cliArgs.HistoryIndex, cts.Token);
+            return await HistoryMenu.ShowAsync(historyService, parser, config, cliArgs.HistoryIndex, console, cts.Token);
         }
 
         var discovery = new FileDiscovery(logger);
@@ -64,7 +65,7 @@ public static class Program
 
         var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
 
-        var exitCode = await ExecuteAsync(cliArgs, config, useCase, configService, logger, cts.Token);
+        var exitCode = await ExecuteAsync(Directory.GetCurrentDirectory(), cliArgs, config, useCase, configService, logger, cts.Token);
 
         if (exitCode == 0)
         {
@@ -77,7 +78,7 @@ public static class Program
         return exitCode;
     }
 
-    internal static async Task<int> ExecuteAsync(CliArguments cliArgs, GcConfiguration config, GenerateContextUseCase useCase, ConfigurationService configService, ILogger logger, CancellationToken ct)
+    internal static async Task<int> ExecuteAsync(string currentDirectory, CliArguments cliArgs, GcConfiguration config, GenerateContextUseCase useCase, ConfigurationService configService, ILogger logger, CancellationToken ct)
     {
         if (cliArgs.InitConfig) return (await configService.InitializeConfigAsync()).IsSuccess ? 0 : 1;
         if (cliArgs.ValidateConfig) return configService.ValidateConfig(config).IsSuccess ? 0 : 1;
@@ -130,7 +131,7 @@ public static class Program
         if (cliArgs.Cluster)
         {
             var clusterDir = string.IsNullOrEmpty(cliArgs.ClusterDir)
-                ? Directory.GetCurrentDirectory()
+                ? currentDirectory
                 : Path.GetFullPath(cliArgs.ClusterDir);
 
             if (!Directory.Exists(clusterDir))
@@ -203,7 +204,7 @@ public static class Program
         }
 
         var normalResult = await useCase.ExecuteAsync(
-            Directory.GetCurrentDirectory(),
+            currentDirectory,
             config,
             cliArgs.Paths,
             cliArgs.Excludes,

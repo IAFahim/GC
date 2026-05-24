@@ -11,13 +11,14 @@ public static class HistoryMenu
         CliParser parser,
         GcConfiguration config,
         int? preselectedIndex,
+        IConsole console,
         CancellationToken ct)
     {
         var historyResult = await historyService.GetHistoryAsync(ct);
 
         if (!historyResult.IsSuccess)
         {
-            Console.WriteLine($"Error loading history: {historyResult.Error}");
+            console.WriteLine($"Error loading history: {historyResult.Error}");
             return 1;
         }
 
@@ -25,27 +26,27 @@ public static class HistoryMenu
 
         if (history.Count == 0)
         {
-            Console.WriteLine("No history found.");
+            console.WriteLine("No history found.");
             return 0;
         }
 
-        PrintHistory(history);
+        PrintHistory(history, console);
 
         if (preselectedIndex.HasValue)
         {
             if (preselectedIndex.Value < 1 || preselectedIndex.Value > history.Count)
             {
-                Console.WriteLine($"Invalid history index: {preselectedIndex.Value} (valid: 1-{history.Count})");
+                console.WriteLine($"Invalid history index: {preselectedIndex.Value} (valid: 1-{history.Count})");
                 return 1;
             }
 
             return await ExecuteFromHistoryAsync(
                 historyService, parser, config,
-                history[preselectedIndex.Value - 1], ct);
+                history[preselectedIndex.Value - 1], console, ct);
         }
 
-        Console.Write("Select a number to run (Enter to cancel): ");
-        var input = Console.ReadLine()?.Trim();
+        console.Write("Select a number to run (Enter to cancel): ");
+        var input = console.ReadLine()?.Trim();
 
         if (string.IsNullOrEmpty(input) || !int.TryParse(input, out var selectedIndex) ||
             selectedIndex < 1 || selectedIndex > history.Count)
@@ -55,14 +56,14 @@ public static class HistoryMenu
 
         return await ExecuteFromHistoryAsync(
             historyService, parser, config,
-            history[selectedIndex - 1], ct);
+            history[selectedIndex - 1], console, ct);
     }
 
-    private static void PrintHistory(IReadOnlyList<HistoryEntry> history)
+    private static void PrintHistory(IReadOnlyList<HistoryEntry> history, IConsole console)
     {
-        Console.WriteLine();
-        Console.WriteLine("Recent GC Runs:");
-        Console.WriteLine();
+        console.WriteLine();
+        console.WriteLine("Recent GC Runs:");
+        console.WriteLine();
 
         for (var i = 0; i < history.Count; i++)
         {
@@ -72,11 +73,11 @@ public static class HistoryMenu
                 ? string.Join(" ", entry.Arguments)
                 : "(no args)";
 
-            Console.WriteLine($"  [{i + 1}] {entry.Directory} ({relativeTime})");
-            Console.WriteLine($"      args: {args}");
+            console.WriteLine($"  [{i + 1}] {entry.Directory} ({relativeTime})");
+            console.WriteLine($"      args: {args}");
         }
 
-        Console.WriteLine();
+        console.WriteLine();
     }
 
     private static async Task<int> ExecuteFromHistoryAsync(
@@ -84,18 +85,17 @@ public static class HistoryMenu
         CliParser parser,
         GcConfiguration config,
         HistoryEntry entry,
+        IConsole console,
         CancellationToken ct)
     {
         if (!Directory.Exists(entry.Directory))
         {
-            Console.WriteLine($"Directory no longer exists: {entry.Directory}");
+            console.WriteLine($"Directory no longer exists: {entry.Directory}");
             return 1;
         }
 
-        Console.WriteLine($"\nRe-running: gc {string.Join(" ", entry.Arguments)}");
-        Console.WriteLine($"Directory:  {entry.Directory}\n");
-
-        Environment.CurrentDirectory = entry.Directory;
+        console.WriteLine($"\nRe-running: gc {string.Join(" ", entry.Arguments)}");
+        console.WriteLine($"Directory:  {entry.Directory}\n");
 
         var cleanArgs = entry.Arguments
             .Where(a => !a.Equals("--history", StringComparison.OrdinalIgnoreCase))
@@ -104,13 +104,13 @@ public static class HistoryMenu
         var parseResult = parser.Parse(cleanArgs, config);
         if (!parseResult.IsSuccess)
         {
-            Console.WriteLine($"Failed to parse saved arguments: {parseResult.Error}");
+            console.WriteLine($"Failed to parse saved arguments: {parseResult.Error}");
             return 1;
         }
 
         var cliArgs = parseResult.Value!;
 
-        var logger = new gc.Infrastructure.Logging.ConsoleLogger();
+        var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, console);
         var discovery = new gc.Infrastructure.Discovery.FileDiscovery(logger);
         var filter = new gc.Application.Services.FileFilter(logger);
         var contentFilter = new gc.Application.Services.ContentFilter(logger);
@@ -121,7 +121,7 @@ public static class HistoryMenu
         var validator = new gc.Application.Validators.ConfigurationValidator();
         var configService = new gc.Application.Services.ConfigurationService(logger, validator);
 
-        var exitCode = await Program.ExecuteAsync(cliArgs, config, useCase, configService, logger, ct);
+        var exitCode = await Program.ExecuteAsync(entry.Directory, cliArgs, config, useCase, configService, logger, ct);
 
         if (exitCode == 0)
         {

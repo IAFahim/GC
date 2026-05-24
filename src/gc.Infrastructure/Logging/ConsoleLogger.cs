@@ -6,10 +6,12 @@ namespace gc.Infrastructure.Logging;
 public sealed class ConsoleLogger : ILogger
 {
     private bool _includeTimestamps;
+    private readonly IConsole _console;
     public LogLevel Level { get; set; }
 
-    public ConsoleLogger(LoggingConfiguration? config = null)
+    public ConsoleLogger(LoggingConfiguration? config = null, IConsole? console = null)
     {
+        _console = console ?? new gc.Infrastructure.System.SystemConsole();
         Level = config?.Level switch
         {
             "debug" => LogLevel.Debug,
@@ -47,11 +49,11 @@ public sealed class ConsoleLogger : ILogger
 
         if (level == LogLevel.Error)
         {
-            Console.Error.WriteLine(output);
+            _console.WriteErrorLine(output);
         }
         else
         {
-            Console.WriteLine(output);
+            _console.WriteLine(output);
         }
     }
 }

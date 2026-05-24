@@ -1,17 +1,33 @@
 using gc.Infrastructure.Logging;
 using gc.Domain.Interfaces;
 using gc.Domain.Models.Configuration;
+using System.Text;
 
 namespace gc.Tests;
 
 public class ConsoleLoggerTests
 {
+    private class MockConsole : IConsole
+    {
+        public StringBuilder StdOut { get; } = new StringBuilder();
+        public StringBuilder StdErr { get; } = new StringBuilder();
+
+        public void WriteLine(string? value = null)
+        {
+            if (value == null) StdOut.AppendLine();
+            else StdOut.AppendLine(value);
+        }
+        public void Write(string? value) => StdOut.Append(value);
+        public void WriteErrorLine(string? value) => StdErr.AppendLine(value);
+        public string? ReadLine() => null;
+    }
+
     // ─── Constructor ─────────────────────────────────────────────────────
 
     [Fact]
     public void Constructor_NullConfig_UsesDefaults()
     {
-        var logger = new ConsoleLogger(null);
+        var logger = new ConsoleLogger(null, new MockConsole());
         Assert.Equal(LogLevel.Success, logger.Level);
     }
 
@@ -19,7 +35,7 @@ public class ConsoleLoggerTests
     public void Constructor_DebugLevel_SetsDebug()
     {
         var config = new LoggingConfiguration { Level = "debug" };
-        var logger = new ConsoleLogger(config);
+        var logger = new ConsoleLogger(config, new MockConsole());
         Assert.Equal(LogLevel.Debug, logger.Level);
     }
 
@@ -27,7 +43,7 @@ public class ConsoleLoggerTests
     public void Constructor_VerboseLevel_SetsInfo()
     {
         var config = new LoggingConfiguration { Level = "verbose" };
-        var logger = new ConsoleLogger(config);
+        var logger = new ConsoleLogger(config, new MockConsole());
         Assert.Equal(LogLevel.Info, logger.Level);
     }
 
@@ -35,7 +51,7 @@ public class ConsoleLoggerTests
     public void Constructor_NormalLevel_SetsSuccess()
     {
         var config = new LoggingConfiguration { Level = "normal" };
-        var logger = new ConsoleLogger(config);
+        var logger = new ConsoleLogger(config, new MockConsole());
         Assert.Equal(LogLevel.Success, logger.Level);
     }
 
@@ -43,7 +59,7 @@ public class ConsoleLoggerTests
     public void Constructor_InfoLevel_SetsInfo()
     {
         var config = new LoggingConfiguration { Level = "info" };
-        var logger = new ConsoleLogger(config);
+        var logger = new ConsoleLogger(config, new MockConsole());
         Assert.Equal(LogLevel.Info, logger.Level);
     }
 
@@ -51,7 +67,7 @@ public class ConsoleLoggerTests
     public void Constructor_IncludeTimestamps_True()
     {
         var config = new LoggingConfiguration { Level = "debug", IncludeTimestamps = true };
-        var logger = new ConsoleLogger(config);
+        var logger = new ConsoleLogger(config, new MockConsole());
         Assert.Equal(LogLevel.Debug, logger.Level);
     }
 
@@ -60,120 +76,43 @@ public class ConsoleLoggerTests
     [Fact]
     public void Log_DebugLevel_FiltersInfoMessages()
     {
-        // When Level is Success (default), Info messages (lower priority) should be filtered out
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var logger = new ConsoleLogger(null, console); // default level = Success
+        logger.Log(LogLevel.Info, "should be filtered");
 
-            var logger = new ConsoleLogger(); // default level = Success
-            logger.Log(LogLevel.Info, "should be filtered");
-
-            outMs.Position = 0;
-            var output = new StreamReader(outMs).ReadToEnd();
-            Assert.Empty(output.Trim());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        Assert.Empty(console.StdOut.ToString().Trim());
     }
 
     [Fact]
     public void Log_SuccessLevel_ShowsErrors()
     {
-        // Errors should always pass through even at Success level
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var logger = new ConsoleLogger(null, console); // default level = Success
+        logger.Log(LogLevel.Error, "something broke");
 
-            var logger = new ConsoleLogger(); // default level = Success
-            logger.Log(LogLevel.Error, "something broke");
-
-            errMs.Position = 0;
-            var errorOutput = new StreamReader(errMs).ReadToEnd();
-            Assert.Contains("something broke", errorOutput);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        Assert.Contains("something broke", console.StdErr.ToString());
     }
 
     [Fact]
     public void Log_InfoLevel_ShowsInfoMessages()
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var config = new LoggingConfiguration { Level = "info" };
+        var logger = new ConsoleLogger(config, console);
+        logger.Log(LogLevel.Info, "info message");
 
-            var config = new LoggingConfiguration { Level = "info" };
-            var logger = new ConsoleLogger(config);
-            logger.Log(LogLevel.Info, "info message");
-
-            outMs.Position = 0;
-            var output = new StreamReader(outMs).ReadToEnd();
-            Assert.Contains("info message", output);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        Assert.Contains("info message", console.StdOut.ToString());
     }
 
     [Fact]
     public void Log_ErrorLevel_WritesToStderr()
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var logger = new ConsoleLogger(null, console);
+        logger.Log(LogLevel.Error, "error message");
 
-            var logger = new ConsoleLogger();
-            logger.Log(LogLevel.Error, "error message");
-
-            outMs.Position = 0;
-            errMs.Position = 0;
-            var stdout = new StreamReader(outMs).ReadToEnd();
-            var stderr = new StreamReader(errMs).ReadToEnd();
-
-            Assert.Empty(stdout.Trim());
-            Assert.Contains("error message", stderr);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        Assert.Empty(console.StdOut.ToString().Trim());
+        Assert.Contains("error message", console.StdErr.ToString());
     }
 
     // ─── Log formatting ──────────────────────────────────────────────────
@@ -181,158 +120,73 @@ public class ConsoleLoggerTests
     [Fact]
     public void Log_WithException_IncludesMessage()
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var logger = new ConsoleLogger(null, console);
+        var exception = new InvalidOperationException("inner failure");
+        logger.Log(LogLevel.Error, "outer message", exception);
 
-            var logger = new ConsoleLogger();
-            var exception = new InvalidOperationException("inner failure");
-            logger.Log(LogLevel.Error, "outer message", exception);
-
-            errMs.Position = 0;
-            var output = new StreamReader(errMs).ReadToEnd();
-            Assert.Contains("outer message", output);
-            Assert.Contains("inner failure", output);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var output = console.StdErr.ToString();
+        Assert.Contains("outer message", output);
+        Assert.Contains("inner failure", output);
     }
 
     [Fact]
     public void Log_WithException_IncludesStackTrace_WhenDebug()
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var config = new LoggingConfiguration { Level = "debug" };
+        var logger = new ConsoleLogger(config, console);
 
-            var config = new LoggingConfiguration { Level = "debug" };
-            var logger = new ConsoleLogger(config);
+        // Create an exception with a real stack trace
+        Exception capturedEx;
+        try { throw new InvalidOperationException("stack test"); }
+        catch (Exception ex) { capturedEx = ex; }
 
-            // Create an exception with a real stack trace
-            Exception capturedEx;
-            try { throw new InvalidOperationException("stack test"); }
-            catch (Exception ex) { capturedEx = ex; }
+        logger.Log(LogLevel.Error, "debug error", capturedEx);
 
-            logger.Log(LogLevel.Error, "debug error", capturedEx);
-
-            errMs.Position = 0;
-            var output = new StreamReader(errMs).ReadToEnd();
-            Assert.Contains("stack test", output);
-            // Stack trace should be present when in debug mode
-            Assert.Contains("at gc.Tests", output);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var output = console.StdErr.ToString();
+        Assert.Contains("stack test", output);
+        // Stack trace should be present when in debug mode
+        Assert.Contains("at gc.Tests", output);
     }
 
     [Fact]
     public void Log_WithTimestamp_IncludesTimestamp()
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var config = new LoggingConfiguration { Level = "debug", IncludeTimestamps = true };
+        var logger = new ConsoleLogger(config, console);
+        logger.Log(LogLevel.Success, "timed message");
 
-            var config = new LoggingConfiguration { Level = "debug", IncludeTimestamps = true };
-            var logger = new ConsoleLogger(config);
-            logger.Log(LogLevel.Success, "timed message");
-
-            outMs.Position = 0;
-            var output = new StreamReader(outMs).ReadToEnd();
-            // Timestamp format: [HH:mm:ss.fff]
-            Assert.Matches(@"\[\d{2}:\d{2}:\d{2}\.\d{3}\]", output);
-            Assert.Contains("timed message", output);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var output = console.StdOut.ToString();
+        // Timestamp format: [HH:mm:ss.fff]
+        Assert.Matches(@"\[\d{2}:\d{2}:\d{2}\.\d{3}\]", output);
+        Assert.Contains("timed message", output);
     }
 
     [Fact]
     public void Log_WarningPrefix_ContainsWARNING()
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var logger = new ConsoleLogger(null, console);
+        logger.Log(LogLevel.Warning, "careful now");
 
-            var logger = new ConsoleLogger();
-            logger.Log(LogLevel.Warning, "careful now");
-
-            outMs.Position = 0;
-            var output = new StreamReader(outMs).ReadToEnd();
-            Assert.Contains("[WARNING]", output);
-            Assert.Contains("careful now", output);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var output = console.StdOut.ToString();
+        Assert.Contains("[WARNING]", output);
+        Assert.Contains("careful now", output);
     }
 
     [Fact]
     public void Log_DebugPrefix_ContainsDEBUG()
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var config = new LoggingConfiguration { Level = "debug" };
+        var logger = new ConsoleLogger(config, console);
+        logger.Log(LogLevel.Debug, "trace info");
 
-            var config = new LoggingConfiguration { Level = "debug" };
-            var logger = new ConsoleLogger(config);
-            logger.Log(LogLevel.Debug, "trace info");
-
-            outMs.Position = 0;
-            var output = new StreamReader(outMs).ReadToEnd();
-            Assert.Contains("[DEBUG]", output);
-            Assert.Contains("trace info", output);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var output = console.StdOut.ToString();
+        Assert.Contains("[DEBUG]", output);
+        Assert.Contains("trace info", output);
     }
 
     // ─── Additional edge cases ───────────────────────────────────────────
@@ -340,7 +194,7 @@ public class ConsoleLoggerTests
     [Fact]
     public void Log_LevelProperty_IsSettable()
     {
-        var logger = new ConsoleLogger();
+        var logger = new ConsoleLogger(null, new MockConsole());
         Assert.Equal(LogLevel.Success, logger.Level);
 
         logger.Level = LogLevel.Debug;
@@ -351,65 +205,31 @@ public class ConsoleLoggerTests
     public void Log_UnknownConfigLevel_DefaultsToSuccess()
     {
         var config = new LoggingConfiguration { Level = "unknown_level" };
-        var logger = new ConsoleLogger(config);
+        var logger = new ConsoleLogger(config, new MockConsole());
         Assert.Equal(LogLevel.Success, logger.Level);
     }
 
     [Fact]
     public void Log_SuccessMessage_NoPrefix()
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var logger = new ConsoleLogger(null, console);
+        logger.Log(LogLevel.Success, "all good");
 
-            var logger = new ConsoleLogger();
-            logger.Log(LogLevel.Success, "all good");
-
-            outMs.Position = 0;
-            var output = new StreamReader(outMs).ReadToEnd();
-            Assert.Equal("all good" + Environment.NewLine, output);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var output = console.StdOut.ToString();
+        Assert.Equal("all good" + Environment.NewLine, output);
     }
 
     [Fact]
     public void Log_WithoutTimestamp_NoBracketPrefix()
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outMs = new MemoryStream();
-            using var outWriter = new StreamWriter(outMs) { AutoFlush = true };
-            using var errMs = new MemoryStream();
-            using var errWriter = new StreamWriter(errMs) { AutoFlush = true };
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
+        var console = new MockConsole();
+        var config = new LoggingConfiguration { Level = "debug", IncludeTimestamps = false };
+        var logger = new ConsoleLogger(config, console);
+        logger.Log(LogLevel.Debug, "no timestamp");
 
-            var config = new LoggingConfiguration { Level = "debug", IncludeTimestamps = false };
-            var logger = new ConsoleLogger(config);
-            logger.Log(LogLevel.Debug, "no timestamp");
-
-            outMs.Position = 0;
-            var output = new StreamReader(outMs).ReadToEnd();
-            // Should have [DEBUG] prefix but NOT a timestamp like [HH:mm:ss.fff]
-            Assert.DoesNotMatch(@"^\[\d{2}:\d{2}:\d{2}", output);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var output = console.StdOut.ToString();
+        // Should have [DEBUG] prefix but NOT a timestamp like [HH:mm:ss.fff]
+        Assert.DoesNotMatch(@"^\[\d{2}:\d{2}:\d{2}", output);
     }
 }

@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+
+# IntelliJ IDEA / JetBrains
+.idea/
+*.iml
+*.iws
+out/
+.intellijPlatform/
+
+# Kotlin
+.kotlin/
+
+# Logs and local files
+*.log
+run_ide*.txt
+local.properties
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Other
+gc-jetbrains-plugin.zip

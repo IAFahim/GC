@@ -19,6 +19,9 @@
 
 set -euo pipefail
 
+# Harden PATH to ensure ~/.local/bin and other common locations are found by Nautilus
+export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH"
+
 readonly SCRIPT_NAME="gc-nautilus"
 readonly SCRIPT_DISPLAY_NAME="Git Copy (gc)"
 
@@ -64,10 +67,8 @@ copy_file_to_clipboard() {
 GC_BIN=""
 if command -v gc &>/dev/null; then
     GC_BIN="$(command -v gc)"
-elif [[ -x "$HOME/.local/bin/gc" ]]; then
-    GC_BIN="$HOME/.local/bin/gc"
 else
-    die "'gc' CLI not found in PATH. Install it first."
+    die "'gc' CLI not found in PATH. Make sure it is installed in ~/.local/bin or /usr/local/bin"
 fi
 log_debug "Using gc at: $GC_BIN"
 
@@ -76,6 +77,13 @@ log_debug "Using gc at: $GC_BIN"
 # NAUTILUS_SCRIPT_SELECTED_FILE_PATHS is newline-separated with a trailing newline.
 # mapfile -t drops the trailing newline naturally.
 mapfile -t RAW_SELECTED < <(printf '%s' "${NAUTILUS_SCRIPT_SELECTED_FILE_PATHS:-}")
+
+# If nothing is selected, fall back to current directory
+if [[ ${#RAW_SELECTED[@]} -eq 0 || ( ${#RAW_SELECTED[@]} -eq 1 && -z "${RAW_SELECTED[0]}" ) ]]; then
+    # Use PWD as fallback (works when right-clicking empty space in Nautilus)
+    # Note: NAUTILUS_SCRIPT_CURRENT_URI is also available but PWD is easier to handle
+    RAW_SELECTED=("$PWD")
+fi
 
 # Also accept args for manual testing (e.g. ./gc-nautilus.sh /some/dir)
 if [[ ${#RAW_SELECTED[@]} -eq 0 && $# -gt 0 ]]; then

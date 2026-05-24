@@ -60,28 +60,36 @@ create_scripts_directory() {
     echo "$scripts_dir"
 }
 
-# Install the gc integration script
-install_script() {
+# Install the gc integration scripts
+install_scripts() {
     local scripts_dir="$1"
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local source_script="$script_dir/gc-nautilus.sh"
-    local target_script="$scripts_dir/gc-nautilus.sh"
+    
+    # 1. General purpose script
+    local source_gen="$script_dir/gc-nautilus.sh"
+    local target_gen="$scripts_dir/Copy to Clipboard (gc)"
+    
+    log_step "Installing general gc integration script..."
+    cp "$source_gen" "$target_gen"
+    chmod +x "$target_gen"
+    log_info "Installed: $target_gen"
 
-    if [ ! -f "$source_script" ]; then
-        log_error "Source script not found: $source_script"
-        return 1
+    # 2. C# specific script
+    local source_cs="$script_dir/gc-nautilus-cs.sh"
+    local target_cs="$scripts_dir/Copy C# Code (gc)"
+    
+    if [ -f "$source_cs" ]; then
+        log_step "Installing C# specific gc integration script..."
+        cp "$source_cs" "$target_cs"
+        chmod +x "$target_cs"
+        log_info "Installed: $target_cs"
     fi
-
-    log_step "Installing gc integration script..."
-    cp "$source_script" "$target_script"
-    chmod +x "$target_script"
-    log_info "Installed: $target_script"
 }
 
 # Test the installation
 test_installation() {
     local scripts_dir="$1"
-    local target_script="$scripts_dir/gc-nautilus.sh"
+    local target_script="$scripts_dir/Copy to Clipboard (gc)"
 
     if [ ! -f "$target_script" ]; then
         log_error "Installation failed: script not found"
@@ -125,23 +133,24 @@ The gc integration has been installed successfully!
 
 USAGE:
   1. Open Nautilus file manager
-  2. Right-click on any directory
-  3. Navigate to: Scripts → gc-nautilus
-  4. Click to run gc on the selected directory
+  2. Right-click on any directory OR empty space inside a directory
+  3. Navigate to: Scripts → Copy to Clipboard (gc)
+  4. Click to run gc on the selection (or current directory)
 
 The script will:
-  • Generate AI-ready markdown from the directory
+  • Generate AI-ready markdown from the selection
   • Copy it to your clipboard
   • Show notifications for progress and completion
 
 TROUBLESHOOTING:
   • If the script doesn't appear: Restart Nautilus (nautilus -q)
-  • If it doesn't work: Check that gc is installed and in PATH
-  • For errors: Run the script manually to see error messages
+  • If it doesn't work: Check that gc is installed in ~/.local/bin or /usr/local/bin
+  • PATH is automatically hardened in the script to find common install locations
 
 UNINSTALL:
-  Remove the script:
-    rm ~/.local/share/nautilus/scripts/gc-nautilus.sh
+  Remove the scripts:
+    rm "$HOME/.local/share/nautilus/scripts/Copy to Clipboard (gc)"
+    rm "$HOME/.local/share/nautilus/scripts/Copy C# Code (gc)"
 
 For more information, visit: https://github.com/IAFahim/gc
 
@@ -168,8 +177,8 @@ EOF
     local scripts_dir
     scripts_dir=$(create_scripts_directory)
 
-    # Install script
-    if ! install_script "$scripts_dir"; then
+    # Install scripts
+    if ! install_scripts "$scripts_dir"; then
         log_error "Installation failed. Aborting."
         exit 1
     fi

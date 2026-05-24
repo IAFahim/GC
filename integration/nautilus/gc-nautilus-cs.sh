@@ -38,10 +38,7 @@ main() {
 
     cd "$directory" || { announce "cannot enter $directory"; exit 1; }
 
-    # Run gc with C# specific flags
-    # -e cs: Only C# files
-    # -z \\: Exclude lines starting with backslash (common in some templates)
-    if gc -e cs -z \\; then
+    if gc -e cs -z // \n\n --force; then
         announce "Copied $(basename "$directory") (C# only) to clipboard"
     else
         announce "gc failed in $directory"

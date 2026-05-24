@@ -16,10 +16,11 @@ echo -e "${YELLOW}🔧 Installing locally built gc (Git Copy)...${NC}"
 INSTALL_DIR="$HOME/.local/bin"
 mkdir -p "$INSTALL_DIR"
 
-# Publish as a single-file executable
-echo -e "${GREEN}Publishing gc as single-file executable...${NC}"
+# Publish as a single-file AOT executable
+echo -e "${GREEN}Publishing gc as native AOT executable...${NC}"
 dotnet publish ./src/gc.CLI/gc.CLI.csproj -c Release -o "$INSTALL_DIR" \
-    -p:PublishSingleFile=true \
+    -p:PublishAot=true \
+    -p:StripSymbols=true \
     --runtime linux-x64 \
     --self-contained true
 

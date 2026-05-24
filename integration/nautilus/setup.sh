@@ -143,7 +143,7 @@ UNINSTALL:
   Remove the script:
     rm ~/.local/share/nautilus/scripts/gc-nautilus.sh
 
-For more information, visit: https://github.com/yourusername/gc
+For more information, visit: https://github.com/IAFahim/gc
 
 EOF
 }

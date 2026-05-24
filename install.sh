@@ -15,15 +15,23 @@ NC='\033[0m' # No Color
 cat << 'EOF'
 
 ╔════════════════════════════════════════════════════════════╗
-║         gc (Git Copy) - Installer                         ║
-║         Generate AI-ready markdown from codebases          ║
+║             gc (Git Copy) - Installer                      ║
+║      Generate AI-ready markdown from codebases             ║
 ╚════════════════════════════════════════════════════════════╝
 
 🚀 Starting installation process...
 
 EOF
 
+# Check for required commands
 echo -e "${GREEN}[1/7]${NC} Detecting system configuration..."
+
+for cmd in curl tar git; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo -e "${RED}Error: '$cmd' is not installed. Please install it and try again.${NC}"
+        exit 1
+    fi
+done
 
 # Detect OS
 OS="$(uname -s)"

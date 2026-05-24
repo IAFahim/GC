@@ -28,8 +28,14 @@ try {
         Write-ColorOutput Yellow "Warning: Could not fetch latest version, using latest release"
     }
 
+    # Detect architecture
+    $arch = "x64"
+    if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_IDENTIFIER -like "*ARM*") {
+        $arch = "arm64"
+    }
+
     # Construct download URL
-    $archiveName = "gc-windows-x64.zip"
+    $archiveName = "gc-windows-$arch.zip"
     $downloadUrl = "https://github.com/$repoName/releases/download/$version/$archiveName"
 
     # Create temp directory

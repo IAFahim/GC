@@ -339,9 +339,19 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             {
                                 if (ready.Length > 0)
                                 {
-                                    var destMemory = writer.GetMemory(ready.Length);
-                                    ready.Buffer.AsSpan(0, ready.Length).CopyTo(destMemory.Span);
-                                    writer.Advance(ready.Length);
+                                    // Write in chunks to avoid large allocations in PipeWriter
+                                    const int chunkSize = 65536;
+                                    var remaining = ready.Length;
+                                    var offset = 0;
+                                    while (remaining > 0)
+                                    {
+                                        var toWrite = Math.Min(remaining, chunkSize);
+                                        var destMemory = writer.GetMemory(toWrite);
+                                        ready.Buffer.AsSpan(offset, toWrite).CopyTo(destMemory.Span);
+                                        writer.Advance(toWrite);
+                                        offset += toWrite;
+                                        remaining -= toWrite;
+                                    }
                                     contentBytesWritten += ready.Length;
                                 }
                             }
@@ -406,10 +416,28 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     {
         if (str.Length > 0)
         {
-            int maxBytes = Utf8NoBom.GetMaxByteCount(str.Length);
-            var span = writer.GetSpan(maxBytes);
-            int written = Utf8NoBom.GetBytes(str, span);
-            writer.Advance(written);
+            if (str.Length < 4096)
+            {
+                int maxBytes = Utf8NoBom.GetMaxByteCount(str.Length);
+                var span = writer.GetSpan(maxBytes);
+                int written = Utf8NoBom.GetBytes(str, span);
+                writer.Advance(written);
+            }
+            else
+            {
+                // For larger strings, write in chunks to avoid large allocations
+                const int chunkCharCount = 4096;
+                int offset = 0;
+                while (offset < str.Length)
+                {
+                    int length = Math.Min(chunkCharCount, str.Length - offset);
+                    int maxBytes = Utf8NoBom.GetMaxByteCount(length);
+                    var span = writer.GetSpan(maxBytes);
+                    int written = Utf8NoBom.GetBytes(str.AsSpan(offset, length), span);
+                    writer.Advance(written);
+                    offset += length;
+                }
+            }
         }
 
         var newlineSpan = writer.GetSpan(NewlineBytes.Length);

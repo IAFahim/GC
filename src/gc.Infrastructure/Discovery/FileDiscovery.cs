@@ -332,7 +332,14 @@ public sealed class FileDiscovery : IFileDiscovery
                                 bool shouldAdd = true;
                                 if (config.MaxDepth.HasValue)
                                 {
-                                    var depth = span.Count((byte)'/') + span.Count((byte)'\\');
+                                    int depth = 0;
+                                    foreach (var b in span)
+                                    {
+                                        if (b == (byte)'/' || b == (byte)'\\')
+                                        {
+                                            depth++;
+                                        }
+                                    }
                                     if (depth > config.MaxDepth.Value)
                                     {
                                         shouldAdd = false;

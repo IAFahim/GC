@@ -1,4 +1,5 @@
 using System.Text;
+using System.Buffers;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
@@ -81,13 +82,15 @@ public sealed class FileReader : IFileReader
                 return Result<FileContent>.Failure($"File not found: {entry.Path}");
             }
 
-            var isBinary = await IsBinaryFileAsync(entry.Path, ct);
-            if (isBinary)
+            using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
+            
+            // Check if binary using the opened stream
+            if (await IsBinaryStreamAsync(stream, ct))
             {
                 return Result<FileContent>.Failure($"Skipping binary file: {entry.Path}");
             }
 
-            using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
+            stream.Position = 0;
             using var reader = new StreamReader(stream, Utf8NoBom);
             var content = await reader.ReadToEndAsync(ct);
 
@@ -121,13 +124,15 @@ public sealed class FileReader : IFileReader
                 return Result<FileContent>.Failure($"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes): {entry.Path}");
             }
 
-            var isBinary = await IsBinaryFileAsync(entry.Path, ct);
-            if (isBinary)
+            using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
+            
+            // Check if binary using the opened stream
+            if (await IsBinaryStreamAsync(stream, ct))
             {
                 return Result<FileContent>.Failure($"Skipping binary file: {entry.Path}");
             }
 
-            using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
+            stream.Position = 0;
             using var reader = new StreamReader(stream, Utf8NoBom);
             var content = await reader.ReadToEndAsync(ct);
 
@@ -142,6 +147,53 @@ public sealed class FileReader : IFileReader
         {
             _logger.Error($"Access denied to {entry.Path}", ex);
             return Result<FileContent>.Failure(ex.Message);
+        }
+    }
+
+    private async Task<bool> IsBinaryStreamAsync(Stream stream, CancellationToken ct)
+    {
+        try
+        {
+            var length = (int)Math.Min(4096, stream.Length);
+            if (length == 0) return false;
+
+            var buffer = ArrayPool<byte>.Shared.Rent(length);
+            try
+            {
+                var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, length), ct);
+
+                var consecutiveNulls = 0;
+                var nonPrintableCount = 0;
+
+                for (var i = 0; i < bytesRead; i++)
+                {
+                    var b = buffer[i];
+
+                    if (b == 0x00)
+                    {
+                        consecutiveNulls++;
+                        if (consecutiveNulls >= 3) return true;
+                    }
+                    else
+                    {
+                        consecutiveNulls = 0;
+                    }
+
+                    if (b < 32 && b != 9 && b != 10 && b != 13 && b != 0x00) nonPrintableCount++;
+                }
+
+                if (bytesRead > 0 && (double)nonPrintableCount / bytesRead > 0.1) return true;
+
+                return false;
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+        catch
+        {
+            return false;
         }
     }
 

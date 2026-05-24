@@ -1,0 +1,9 @@
+[submodule "integration/nautilus"]
+	path = integration/nautilus
+	url = https://github.com/IAFahim/gc-nautilus
+[submodule "integration/unity"]
+	path = integration/unity
+	url = https://github.com/IAFahim/gc-unity
+[submodule "integration/gc-jetbrains-plugin"]
+	path = integration/gc-jetbrains-plugin
+	url = https://github.com/IAFahim/gc-jetbrains-plugin

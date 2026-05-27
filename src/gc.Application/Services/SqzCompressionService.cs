@@ -40,11 +40,17 @@ public sealed class SqzCompressionService
         process.Start();
 
         await process.StandardInput.WriteAsync(markdownContent);
+        await process.StandardInput.FlushAsync();
         process.StandardInput.Close();
 
-        var compressed = await process.StandardOutput.ReadToEndAsync();
-        var stderr = await process.StandardError.ReadToEndAsync();
+        // Read both streams concurrently to avoid deadlock when stderr fills its buffer
+        var compressedTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+
         await process.WaitForExitAsync();
+
+        var compressed = await compressedTask;
+        var stderr = await stderrTask;
 
         if (process.ExitCode != 0)
         {

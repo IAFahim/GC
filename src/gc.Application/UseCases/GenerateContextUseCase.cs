@@ -75,7 +75,7 @@ public sealed class GenerateContextUseCase
         }
 
         var fullPaths = entries.Select(e => Path.Combine(rootPath, e.Path));
-        gc.Application.Native.LinuxFastPath.Prewarm(fullPaths, entries.Count);
+        _ = gc.Application.Native.LinuxFastPath.PrewarmAsync(fullPaths, entries.Count);
 
         _logger.Success("Processing...");
 
@@ -206,7 +206,7 @@ public sealed class GenerateContextUseCase
         var allContents = BuildClusterContents(sorted, clusterConfig, clusterRoot);
         var allEntries = sorted.SelectMany(s => s.Entries).ToList();
 
-        Native.LinuxFastPath.Prewarm(allEntries.Select(e => e.Path), allEntries.Count);
+        Native.LinuxFastPath.PrewarmAsync(allEntries.Select(e => e.Path), allEntries.Count);
 
         _logger.Success($"Processing {totalFiles} files from {sorted.Count} repos...");
 

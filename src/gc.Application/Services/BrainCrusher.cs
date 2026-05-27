@@ -11,17 +11,40 @@ namespace gc.Application.Services;
 /// </summary>
 public sealed class BrainCrusher : IBrainCrusher
 {
+    // File extensions that may legitimately contain SQL-style comments.
+    // Restricting to these prevents false positives in YAML, Markdown, shell scripts.
+    private static readonly HashSet<string> SqlLikeExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sql", "pgsql", "psql", "mysql", "mariadb", "sqlite", "mssql", "oracle", "plsql",
+        "pl/pgsql", "duckdb", "bigquery", "snowflake", "transactsql", "tsql"
+    };
+
+    // File extensions where # should NOT be treated as a line comment.
+    // These files commonly have # at line starts that are not comments.
+    private static readonly HashSet<string> NonHashCommentExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "md", "markdown", "yaml", "yml", "toml", "ini", "cfg", "conf", "properties",
+        "dockerfile", "makefile", "gemfile", "rakefile", "lock", "json"
+    };
+
+    private string? _fileExtension;
+
+    public BrainCrusher(string? fileExtension = null)
+    {
+        _fileExtension = fileExtension;
+    }
+
     public string CrushBlock(string code)
     {
         if (string.IsNullOrEmpty(code)) return code;
-        var stripped = StripComments(code);
+        var stripped = StripComments(code, _fileExtension);
         return CollapseWhitespace(stripped);
     }
 
     public string Crush(string content)
     {
         if (string.IsNullOrEmpty(content)) return content;
-        var stripped = StripComments(content);
+        var stripped = StripComments(content, _fileExtension);
         return CollapseWhitespace(stripped);
     }
 
@@ -34,25 +57,30 @@ public sealed class BrainCrusher : IBrainCrusher
     // Agnostic state machine handles: //, /* */, #, <!-- -->, triple-quotes, --, strings
     // =========================================================================
 
-    internal static string StripComments(string content)
+    internal static string StripComments(string content, string? fileExtension = null)
     {
         var sb = new StringBuilder(content.Length);
         var span = content.AsSpan();
-        var i = 0;
-        var len = span.Length;
+        int i = 0;
+        int len = span.Length;
 
-        var inString = false;
-        var inChar = false;
-        var inSingleLineComment = false;
-        var inMultiLineComment = false;
-        var inHashComment = false;
-        var inHtmlComment = false;
-        var inTripleQuote = false;
-        var inSqlComment = false;
+        bool shouldStripSql = fileExtension != null && fileExtension.StartsWith('.') &&
+            SqlLikeExtensions.Contains(fileExtension.Substring(1));
+        bool shouldTreatHashAsComment = fileExtension == null ||
+            !NonHashCommentExtensions.Contains(fileExtension.StartsWith('.') ? fileExtension.Substring(1) : fileExtension);
+
+        bool inString = false;
+        bool inChar = false;
+        bool inSingleLineComment = false;
+        bool inMultiLineComment = false;
+        bool inHashComment = false;
+        bool inHtmlComment = false;
+        bool inTripleQuote = false;
+        bool inSqlComment = false;
 
         while (i < len)
         {
-            var ch = span[i];
+            char ch = span[i];
 
             if (inTripleQuote)
             {
@@ -189,7 +217,9 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
-            if (ch == '-' && i + 1 < len && span[i + 1] == '-')
+            // SQL comment (--): only strip for SQL files to avoid false positives
+            // in CLI flags (--verbose), YAML separators (---), and Markdown headers
+            if (shouldStripSql && ch == '-' && i + 1 < len && span[i + 1] == '-')
             {
                 inSqlComment = true;
                 i += 2;
@@ -217,7 +247,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
-            if (ch == '#')
+            if (ch == '#' && shouldTreatHashAsComment)
             {
                 inHashComment = true;
                 i++;
@@ -254,14 +284,14 @@ public sealed class BrainCrusher : IBrainCrusher
     internal static string CollapseWhitespace(string stripped)
     {
         var result = new StringBuilder(stripped.Length);
-        var i = 0;
-        var len = stripped.Length;
-        var lastWasSpace = false;
-        var lineIsEmpty = true;
+        int i = 0;
+        int len = stripped.Length;
+        bool lastWasSpace = false;
+        bool lineIsEmpty = true;
 
         while (i < len)
         {
-            var ch = stripped[i];
+            char ch = stripped[i];
 
             if (ch == '\n' || ch == '\r')
             {

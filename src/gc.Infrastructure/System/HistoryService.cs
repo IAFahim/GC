@@ -1,4 +1,6 @@
+using System.IO;
 using System.Text.Json;
+using System.Threading;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models.Configuration;
@@ -10,7 +12,7 @@ public sealed class HistoryService : IHistoryService
     private readonly string _historyFilePath;
     private const int MaxHistoryEntries = 50;
     private readonly ILogger _logger;
-    private readonly object _fileLock = new();
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
 
     public HistoryService(string configDirectory, ILogger logger)
     {
@@ -82,13 +84,20 @@ public sealed class HistoryService : IHistoryService
         if (!File.Exists(_historyFilePath))
             return [];
 
-        lock (_fileLock)
+        await _semaphore.WaitAsync(ct);
+        try
         {
-            var json = File.ReadAllText(_historyFilePath);
+            await using var fs = new FileStream(_historyFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.Asynchronous);
+            using var reader = new StreamReader(fs);
+            var json = await reader.ReadToEndAsync(ct);
             if (string.IsNullOrWhiteSpace(json))
                 return [];
             var typeInfo = GcJsonSerializerContext.Default.ListHistoryEntry;
             return JsonSerializer.Deserialize(json, typeInfo)?.ToList() ?? [];
+        }
+        finally
+        {
+            _semaphore.Release();
         }
     }
 
@@ -98,13 +107,18 @@ public sealed class HistoryService : IHistoryService
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             Directory.CreateDirectory(directory);
 
-        lock (_fileLock)
+        await _semaphore.WaitAsync(ct);
+        try
         {
+            await using var fs = new FileStream(_historyFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
+            await using var writer = new StreamWriter(fs);
             var typeInfo = GcJsonSerializerContext.Default.ListHistoryEntry;
             var json = JsonSerializer.Serialize(entries, typeInfo);
-            File.WriteAllText(_historyFilePath, json);
+            await writer.WriteAsync(json);
         }
-
-        await Task.CompletedTask;
+        finally
+        {
+            _semaphore.Release();
+        }
     }
 }

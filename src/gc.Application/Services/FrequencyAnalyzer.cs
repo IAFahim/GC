@@ -39,7 +39,11 @@ public static class FrequencyAnalyzer
                             localMap[id] = 1;
                     });
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    // Log at debug level - don't silently swallow
+                    Console.Error.WriteLine($"[gc] Failed to analyze {file}: {ex.Message}");
+                }
             });
 
             var result = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -83,24 +87,4 @@ public static class FrequencyAnalyzer
     }
 }
 
-public class IdentifierRankedEntry
-{
-    public string Identifier { get; }
-    public int Frequency { get; }
-    public long Score { get; }
-
-    public IdentifierRankedEntry(string identifier, int frequency, long score)
-    {
-        Identifier = identifier;
-        Frequency = frequency;
-        Score = score;
-    }
-}
-
-public static class IdentifierRanker
-{
-    public static IEnumerable<T> RankByScore<T>(IEnumerable<T> items, Func<T, long> scoreSelector)
-    {
-        return items.OrderByDescending(item => scoreSelector(item));
-    }
-}
+public readonly record struct IdentifierRankedEntry(string Identifier, int Frequency, long Score);

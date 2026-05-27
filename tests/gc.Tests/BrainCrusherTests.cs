@@ -91,9 +91,31 @@ public class BrainCrusherTests
     public void Crush_SqlComment_Stripped()
     {
         var input = "SELECT * FROM users -- get all users\nWHERE active = 1";
-        var result = _crusher.Crush(input);
+        var crusher = new BrainCrusher(".sql");
+        var result = crusher.Crush(input);
         Assert.DoesNotContain("-- get all users", result);
         Assert.Contains("active = 1", result);
+    }
+
+    [Fact]
+    public void Crush_SqlComment_NotStrippedForNonSqlFiles()
+    {
+        // -- should NOT be stripped for non-SQL files (e.g., shell scripts with --verbose)
+        var input = "echo --verbose\nexit 0";
+        var crusher = new BrainCrusher(".sh");
+        var result = crusher.Crush(input);
+        Assert.Contains("--verbose", result);
+    }
+
+    [Fact]
+    public void Crush_SqlComment_NotStrippedWhenNoExtension()
+    {
+        // Default crusher (no extension) should NOT strip SQL-style comments
+        // since -- appears in many non-SQL contexts (CLI flags, YAML, etc.)
+        var input = "echo --verbose\nexit 0";
+        var crusher = new BrainCrusher();
+        var result = crusher.Crush(input);
+        Assert.Contains("--verbose", result);
     }
 
     // =========================================================================

@@ -561,7 +561,7 @@ namespace gc.Tests
                 new IdentifierRankedEntry("Med", 1, 50)
             };
 
-            var ranked = IdentifierRanker.RankByScore(items, x => x.Score).ToList();
+            var ranked = items.OrderByDescending(x => x.Score).ToList();
             Assert.Equal("High", ranked[0].Identifier);
             Assert.Equal("Med", ranked[1].Identifier);
             Assert.Equal("Low", ranked[2].Identifier);
@@ -570,7 +570,7 @@ namespace gc.Tests
         [Fact]
         public void RankByScore_EmptyInput_ReturnsEmpty()
         {
-            var ranked = IdentifierRanker.RankByScore(Array.Empty<IdentifierRankedEntry>(), x => x.Score);
+            var ranked = Array.Empty<IdentifierRankedEntry>().OrderByDescending(x => x.Score);
             Assert.Empty(ranked);
         }
     }

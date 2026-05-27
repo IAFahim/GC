@@ -6,9 +6,15 @@ namespace gc.Application.Services;
 /// High-performance glob pattern matcher with wildcard support.
 /// Supports: * (any chars except /), ? (single char), ** (any chars including /).
 /// Uses backtracking simulation with O(n*m) worst case, optimized for common cases.
+/// Includes a backtracking budget to prevent exponential blowup on adversarial patterns.
 /// </summary>
 public static class GlobMatcher
 {
+    // Maximum backtracking iterations to prevent O(2^n) exponential blowup.
+    // Pattern *a*a*a*a*b against a string of a's would normally be O(2^n).
+    // After this budget is exhausted, the match fails rather than hang.
+    private const int DefaultMaxBacktrackIterations = 1_000_000;
+
     /// <summary>
     /// Check if a path matches a glob pattern.
     /// * matches any sequence of characters EXCEPT path separators (/)
@@ -17,7 +23,7 @@ public static class GlobMatcher
     /// Comparison is case-insensitive.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsMatch(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern)
+    public static bool IsMatch(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern, int maxBacktrackIterations = DefaultMaxBacktrackIterations)
     {
         if (pattern.IsEmpty) return path.IsEmpty;
 
@@ -43,13 +49,16 @@ public static class GlobMatcher
         // If the pattern has no '/', it can match against either the entire path or the filename
         if (!pattern.Contains('/'))
         {
-            if (MatchInternal(path, pattern))
+            if (MatchInternal(path, pattern, ref maxBacktrackIterations))
                 return true;
 
             int lastSlash = path.LastIndexOf('/');
             if (lastSlash >= 0)
             {
-                return MatchInternal(path.Slice(lastSlash + 1), pattern);
+                var remaining = path.Slice(lastSlash + 1);
+                var budget = maxBacktrackIterations;
+                if (MatchInternal(remaining, pattern, ref budget))
+                    return true;
             }
 
             return false;
@@ -59,11 +68,14 @@ public static class GlobMatcher
         // E.g., "**/boost/**" can match "boost/algorithm.hpp".
         if (pattern.Length >= 3 && pattern[0] == '*' && pattern[1] == '*' && pattern[2] == '/')
         {
-            if (IsMatch(path, pattern.Slice(3)))
+            var remaining = pattern.Slice(3);
+            var budget = maxBacktrackIterations;
+            if (IsMatch(path, remaining, budget))
                 return true;
         }
 
-        return MatchInternal(path, pattern);
+        var finalBudget = maxBacktrackIterations;
+        return MatchInternal(path, pattern, ref finalBudget);
     }
 
     /// <summary>
@@ -85,15 +97,22 @@ public static class GlobMatcher
     }
 
     /// <summary>
-    /// Core backtracking glob matching algorithm.
+    /// Core backtracking glob matching algorithm with backtrack budget.
+    /// Returns false if the backtracking budget is exhausted to prevent DoS.
     /// </summary>
-    private static bool MatchInternal(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern)
+    private static bool MatchInternal(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern, ref int remainingIterations)
     {
         int pathIdx = 0;
         int patIdx = 0;
 
         while (patIdx < pattern.Length)
         {
+            // Check budget before each major operation
+            if (--remainingIterations <= 0)
+            {
+                return false; // Budget exhausted - prevent exponential blowup
+            }
+
             char patChar = pattern[patIdx];
 
             if (patChar == '*')
@@ -138,6 +157,12 @@ public static class GlobMatcher
 
                 for (int i = pathIdx; i <= path.Length; i++)
                 {
+                    // Check budget for each iteration
+                    if (--remainingIterations <= 0)
+                    {
+                        return false;
+                    }
+
                     // If it is a single star, it cannot cross '/'
                     if (!isDoubleStar && i > pathIdx && path[i - 1] == '/')
                     {
@@ -153,10 +178,14 @@ public static class GlobMatcher
                         }
                     }
 
-                    if (MatchInternal(path.Slice(i), nextPattern))
+                    var remainingPath = path.Slice(i);
+                    var budget = remainingIterations;
+                    if (MatchInternal(remainingPath, nextPattern, ref budget))
                     {
+                        remainingIterations = budget;
                         return true;
                     }
+                    remainingIterations = budget;
                 }
 
                 return false;

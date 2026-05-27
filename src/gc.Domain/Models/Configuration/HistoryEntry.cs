@@ -2,11 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace gc.Domain.Models.Configuration;
 
-public sealed record HistoryEntry
+public sealed class HistoryEntry
 {
-    public string Directory { get; set; } = string.Empty;
-    public string[] Arguments { get; set; } = [];
-    public DateTime LastRun { get; set; }
+    public string Directory { get; init; } = string.Empty;
+    public string[] Arguments { get; init; } = [];
+    public DateTime LastRun { get; init; }
 
     [JsonConstructor]
     public HistoryEntry() { }

@@ -29,10 +29,14 @@ public ref struct CodeLexer
     private bool _inTripleQuote;
     private bool _inSqlComment;
 
-    public CodeLexer(ReadOnlySpan<char> span)
+    private const int DefaultMinIdentifierLength = 6;
+    private readonly int _minIdentifierLength;
+
+    public CodeLexer(ReadOnlySpan<char> span, int minIdentifierLength = DefaultMinIdentifierLength)
     {
         _span = span;
         _len = span.Length;
+        _minIdentifierLength = minIdentifierLength;
     }
 
     /// <summary>
@@ -239,7 +243,7 @@ public ref struct CodeLexer
                     pos++;
 
                 int identLen = pos - start;
-                if (identLen >= 6)
+                if (identLen >= _minIdentifierLength)
                 {
                     onIdentifier(span.Slice(start, identLen));
                     count++;

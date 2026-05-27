@@ -12,28 +12,28 @@ public sealed class ClipboardService : IClipboardService
     private readonly ILogger _logger;
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
+    private enum OsKind { Windows, Mac, Linux }
+    private readonly OsKind _platform;
+
     public ClipboardService(ILogger logger)
     {
         _logger = logger;
+        _platform = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? OsKind.Windows
+            : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? OsKind.Mac
+            : OsKind.Linux;
     }
 
     public async Task<Result> CopyToClipboardAsync(Stream stream, CancellationToken ct = default)
     {
         try
         {
-            bool success;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            bool success = _platform switch
             {
-                success = await CopyToWindowsAsync(stream, ct);
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                success = await CopyToMacAsync(stream, ct);
-            }
-            else
-            {
-                success = await CopyToLinuxAsync(stream, ct);
-            }
+                OsKind.Windows => await CopyToWindowsAsync(stream, ct),
+                OsKind.Mac      => await CopyToMacAsync(stream, ct),
+                OsKind.Linux    => await CopyToLinuxAsync(stream, ct),
+                _               => false
+            };
 
             return success
                 ? Result.Success()
@@ -85,19 +85,13 @@ public sealed class ClipboardService : IClipboardService
             }
             using var combinedStream = new MemoryStream(Utf8NoBom.GetBytes(newContent));
 
-            bool success;
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            bool success = _platform switch
             {
-                success = await CopyToWindowsAsync(combinedStream, ct);
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                success = await CopyToMacAsync(combinedStream, ct);
-            }
-            else
-            {
-                success = await CopyToLinuxAsync(combinedStream, ct);
-            }
+                OsKind.Windows => await CopyToWindowsAsync(combinedStream, ct),
+                OsKind.Mac      => await CopyToMacAsync(combinedStream, ct),
+                OsKind.Linux    => await CopyToLinuxAsync(combinedStream, ct),
+                _               => false
+            };
 
             return success
                 ? Result.Success()
@@ -134,29 +128,26 @@ public sealed class ClipboardService : IClipboardService
     {
         try
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return _platform switch
             {
-                return await RunClipboardGetProcessAsync("powershell.exe", "-Command \"Get-Clipboard\"", ct);
-            }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                return await RunClipboardGetProcessAsync("pbpaste", "", ct);
-            }
-            else
-            {
-                var wayland = await RunClipboardGetProcessAsync("wl-paste", "", ct);
-                if (string.IsNullOrEmpty(wayland))
-                {
-                    return await RunClipboardGetProcessAsync("xclip", "-selection clipboard -o", ct);
-                }
-                return wayland;
-            }
+                OsKind.Windows => await RunClipboardGetProcessAsync("powershell.exe", "-Command \"Get-Clipboard\"", ct),
+                OsKind.Mac      => await RunClipboardGetProcessAsync("pbpaste", "", ct),
+                OsKind.Linux    => await GetLinuxClipboardTextAsync(ct),
+                _               => string.Empty
+            };
         }
         catch (Exception ex)
         {
             _logger.Error("Failed to get clipboard contents", ex);
             return string.Empty;
         }
+    }
+
+    private async Task<string> GetLinuxClipboardTextAsync(CancellationToken ct)
+    {
+        var wayland = await RunClipboardGetProcessAsync("wl-paste", "", ct);
+        if (!string.IsNullOrEmpty(wayland)) return wayland;
+        return await RunClipboardGetProcessAsync("xclip", "-selection clipboard -o", ct);
     }
 
     private async Task<string> RunClipboardGetProcessAsync(string fileName, string arguments, CancellationToken ct)

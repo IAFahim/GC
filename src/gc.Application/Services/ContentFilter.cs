@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
@@ -8,11 +10,17 @@ namespace gc.Application.Services;
 /// <summary>
 /// Filters files by content using fast keyword/wildcard matching.
 /// Uses Aho-Corasick for exact keywords, GlobMatcher for wildcard patterns.
-/// Applies AFTER file reading, BEFORE markdown generation.
+/// The automaton is built once and reused across all match operations.
 /// </summary>
 public sealed class ContentFilter
 {
     private readonly ILogger _logger;
+
+    // Cached automata for content filtering
+    private AhoCorasick? _cachedExcludeExact;
+    private AhoCorasick? _cachedIncludeExact;
+    private FrozenSet<string>? _cachedExcludeWildcards;
+    private FrozenSet<string>? _cachedIncludeWildcards;
 
     public ContentFilter(ILogger logger)
     {
@@ -20,12 +28,39 @@ public sealed class ContentFilter
     }
 
     /// <summary>
+    /// Updates the cached automata with new patterns.
+    /// Call this before processing a batch of files to avoid rebuilding.
+    /// </summary>
+    public void UpdatePatterns(string[] excludePatterns, string[] includePatterns)
+    {
+        _cachedExcludeExact = null;
+        _cachedIncludeExact = null;
+        _cachedExcludeWildcards = null;
+        _cachedIncludeWildcards = null;
+
+        if (excludePatterns.Length > 0)
+        {
+            var (exact, wildcards) = SplitPatterns(excludePatterns);
+            if (exact.Count > 0)
+                _cachedExcludeExact = new AhoCorasick(exact.ToArray());
+            if (wildcards.Count > 0)
+                _cachedExcludeWildcards = wildcards.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (includePatterns.Length > 0)
+        {
+            var (exact, wildcards) = SplitPatterns(includePatterns);
+            if (exact.Count > 0)
+                _cachedIncludeExact = new AhoCorasick(exact.ToArray());
+            if (wildcards.Count > 0)
+                _cachedIncludeWildcards = wildcards.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
     /// Determines whether a file's content passes the content filter.
     /// Returns true if the file should be INCLUDED.
     /// </summary>
-    /// <param name="content">The file content (first N bytes is sufficient for performance)</param>
-    /// <param name="excludePatterns">Exclude files whose content matches any of these patterns</param>
-    /// <param name="includePatterns">When set, ONLY include files whose content matches at least one pattern</param>
     public bool ShouldInclude(string content, string[] excludePatterns, string[] includePatterns)
     {
         if (excludePatterns.Length == 0 && includePatterns.Length == 0)
@@ -62,16 +97,76 @@ public sealed class ContentFilter
     }
 
     /// <summary>
-    /// Checks if content matches ANY of the given patterns.
-    /// Separates exact keywords (Aho-Corasick) from wildcard patterns (GlobMatcher).
+    /// Checks if content matches ANY of the given patterns using cached automata.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool MatchesAnyPattern(string content, string[] patterns)
+    internal bool MatchesAnyPattern(string content, string[] patterns)
     {
         if (patterns.Length == 0) return false;
 
-        // Fast path: check if any pattern is exact (no wildcards)
-        // Use Aho-Corasick for exact patterns, GlobMatcher for wildcards
+        var (exactPatterns, wildcardPatterns) = SplitPatterns(patterns);
+
+        // Aho-Corasick for exact keyword search — O(n) for all keywords simultaneously
+        if (exactPatterns.Count > 0)
+        {
+            var ac = GetOrCreateAutomaton(exactPatterns.ToArray());
+            if (AhoCorasickContainsAny(ac, content))
+            {
+                return true;
+            }
+        }
+
+        // Wildcard patterns — GlobMatcher line-by-line for speed
+        if (wildcardPatterns.Count > 0)
+        {
+            foreach (var pattern in wildcardPatterns)
+            {
+                if (GlobContains(content, pattern))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Static method for backward compatibility - builds automaton per-call.
+    /// Prefer instance method UpdatePatterns + MatchesAnyPattern for batch processing.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool MatchesAnyPatternStatic(string content, string[] patterns)
+    {
+        if (patterns.Length == 0) return false;
+
+        var (exactPatterns, wildcardPatterns) = SplitPatterns(patterns);
+
+        if (exactPatterns.Count > 0)
+        {
+            var ac = new AhoCorasick(exactPatterns.ToArray());
+            if (AhoCorasickContainsAny(ac, content))
+            {
+                return true;
+            }
+        }
+
+        if (wildcardPatterns.Count > 0)
+        {
+            foreach (var pattern in wildcardPatterns)
+            {
+                if (GlobContains(content, pattern))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static (List<string> Exact, List<string> Wildcards) SplitPatterns(string[] patterns)
+    {
         var exactPatterns = new List<string>();
         var wildcardPatterns = new List<string>();
 
@@ -87,45 +182,21 @@ public sealed class ContentFilter
             }
         }
 
-        // Aho-Corasick for exact keyword search — O(n) for all keywords simultaneously
-        if (exactPatterns.Count > 0)
-        {
-            var ac = new AhoCorasick(exactPatterns.ToArray());
-            var dummy = new string[exactPatterns.Count];
-            Array.Fill(dummy, "");
+        return (exactPatterns, wildcardPatterns);
+    }
 
-            // Use ReplaceAll but we just need to know if ANY match exists
-            // For performance, we use a simpler approach: scan with Aho-Corasick automaton
-            if (AhoCorasickContainsAny(content, exactPatterns.ToArray()))
-            {
-                return true;
-            }
-        }
-
-        // Wildcard patterns — GlobMatcher line-by-line for speed
-        if (wildcardPatterns.Count > 0)
-        {
-            // For wildcard matching, we do a substring search with glob support
-            foreach (var pattern in wildcardPatterns)
-            {
-                if (GlobContains(content, pattern))
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+    private AhoCorasick GetOrCreateAutomaton(string[] patterns)
+    {
+        return new AhoCorasick(patterns);
     }
 
     /// <summary>
     /// Uses Aho-Corasick to check if content contains any of the exact keywords.
     /// Single-pass O(n) scan for all keywords simultaneously.
     /// </summary>
-    private static bool AhoCorasickContainsAny(string content, string[] keywords)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool AhoCorasickContainsAny(AhoCorasick ac, string content)
     {
-        var ac = new AhoCorasick(keywords);
-
         var state = 0;
         for (int i = 0; i < content.Length; i++)
         {

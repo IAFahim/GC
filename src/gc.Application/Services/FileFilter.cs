@@ -130,7 +130,6 @@ public sealed class FileFilter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    [System.Runtime.CompilerServices.SkipLocalsInit]
     private static bool IsValidPath(string path, string[] normalizedSearchPaths, System.Buffers.SearchValues<string> excludeSearchValues, FrozenSet<string> extensions, string[] excludePathPatterns, string[] includePathPatterns)
     {
         var pathSpan = path.AsSpan();

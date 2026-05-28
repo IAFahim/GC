@@ -176,14 +176,14 @@ public sealed class ConfigurationLoader
         return target with
         {
             Version = source.Version ?? target.Version,
-            Limits = MergeLimits(target.Limits, source.Limits),
-            Discovery = MergeDiscovery(target.Discovery, source.Discovery),
+            Limits = ConfigurationMerger.MergeLimits(target.Limits, source.Limits),
+            Discovery = ConfigurationMerger.MergeDiscovery(target.Discovery, source.Discovery),
             Filters = MergeFilters(target.Filters, source.Filters),
-            Presets = MergePresets(target.Presets, source.Presets),
-            LanguageMappings = MergeLanguageMappings(target.LanguageMappings, source.LanguageMappings),
-            Markdown = MergeMarkdown(target.Markdown, source.Markdown),
-            Output = MergeOutput(target.Output, source.Output),
-            Logging = MergeLogging(target.Logging, source.Logging)
+            Presets = ConfigurationMerger.MergePresets(target.Presets, source.Presets),
+            LanguageMappings = ConfigurationMerger.MergeLanguageMappings(target.LanguageMappings, source.LanguageMappings),
+            Markdown = ConfigurationMerger.MergeMarkdown(target.Markdown, source.Markdown),
+            Output = ConfigurationMerger.MergeOutput(target.Output, source.Output),
+            Logging = ConfigurationMerger.MergeLogging(target.Logging, source.Logging)
         };
     }
 
@@ -211,20 +211,7 @@ public sealed class ConfigurationLoader
 
     private ClusterConfiguration? MergeCluster(ClusterConfiguration? target, ClusterConfiguration? source)
     {
-        if (source == null) return target;
-        if (target == null) return source;
-
-        return target with
-        {
-            Enabled = source.Enabled,
-            MaxDepth = source.MaxDepth > 0 ? source.MaxDepth : target.MaxDepth,
-            RepoSeparator = source.RepoSeparator ?? target.RepoSeparator,
-            IncludeRepoHeader = source.IncludeRepoHeader,
-            MaxParallelRepos = source.MaxParallelRepos > 0 ? source.MaxParallelRepos : target.MaxParallelRepos,
-            SkipDirectories = source.SkipDirectories?.Length > 0 ? source.SkipDirectories : target.SkipDirectories,
-            IncludeRootFiles = source.IncludeRootFiles,
-            FailFast = source.FailFast
-        };
+        return ConfigurationMerger.MergeCluster(target, source);
     }
 
     private FiltersConfiguration MergeFilters(FiltersConfiguration target, FiltersConfiguration source)
@@ -236,13 +223,14 @@ public sealed class ConfigurationLoader
         };
     }
 
-    private Dictionary<string, PresetConfiguration> MergePresets(
-        Dictionary<string, PresetConfiguration> target,
-        Dictionary<string, PresetConfiguration> source)
+    private IReadOnlyDictionary<string, PresetConfiguration> MergePresets(
+        IReadOnlyDictionary<string, PresetConfiguration> target,
+        IReadOnlyDictionary<string, PresetConfiguration> source)
     {
         if (source == null || source.Count == 0) return target;
 
-        var result = new Dictionary<string, PresetConfiguration>(target, StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, PresetConfiguration>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in target) result[kvp.Key] = kvp.Value;
         foreach (var kvp in source)
         {
             if (result.TryGetValue(kvp.Key, out var existing))
@@ -269,12 +257,13 @@ public sealed class ConfigurationLoader
         return result;
     }
 
-    private Dictionary<string, string> MergeLanguageMappings(
-        Dictionary<string, string> target,
-        Dictionary<string, string> source)
+    private IReadOnlyDictionary<string, string> MergeLanguageMappings(
+        IReadOnlyDictionary<string, string> target,
+        IReadOnlyDictionary<string, string> source)
     {
         if (source == null || source.Count == 0) return target;
-        var result = new Dictionary<string, string>(target, StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in target) result[kvp.Key] = kvp.Value;
         foreach (var kvp in source) result[kvp.Key] = kvp.Value;
         return result;
     }

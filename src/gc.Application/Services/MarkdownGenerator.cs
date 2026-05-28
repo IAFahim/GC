@@ -15,6 +15,7 @@ using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
+using CompiledContentPatterns = gc.Domain.Interfaces.CompiledContentPatterns;
 
 namespace gc.Application.Services;
 
@@ -41,12 +42,17 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
     public async Task<Result<long>> GenerateMarkdownStreamingAsync(IEnumerable<FileContent> contents, Stream outputStream, GcConfiguration config, IEnumerable<string>? excludeLineIfStart = null, IBrainCrusher? brainCrusher = null, CancellationToken ct = default)
     {
+        return await GenerateMarkdownStreamingAsync(contents, outputStream, config, default(CompiledContentPatterns), excludeLineIfStart, brainCrusher, ct);
+    }
+
+    public async Task<Result<long>> GenerateMarkdownStreamingAsync(IEnumerable<FileContent> contents, Stream outputStream, GcConfiguration config, CompiledContentPatterns contentFilter, IEnumerable<string>? excludeLineIfStart = null, IBrainCrusher? brainCrusher = null, CancellationToken ct = default)
+    {
         try
         {
             var pipeOptions = new StreamPipeWriterOptions(leaveOpen: true, minimumBufferSize: 65536);
             var writer = PipeWriter.Create(outputStream, pipeOptions);
 
-            var sortedContents = config.Output.SortByPath
+            var sortedContents = config.Output.SortByPath == true
                 ? contents.OrderBy(c => c.Entry.DisplayPath ?? c.Entry.Path, StringComparer.OrdinalIgnoreCase)
                 : contents;
 
@@ -216,7 +222,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                             if (brainCrusher != null)
                             {
-                                actualContent = brainCrusher.CrushBlock(actualContent);
+                                actualContent = brainCrusher.CrushBlock(actualContent, content.Entry.Language);
                             }
 
                             var contentBytes = Utf8NoBom.GetByteCount(actualContent);
@@ -268,6 +274,15 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 continue;
                             }
 
+                            // Apply compiled content filter to preview bytes — fast reject for streaming files.
+                            if (!contentFilter.IsEmpty && !contentFilter.ShouldInclude(ready.Buffer!, ready.Length))
+                            {
+                                var errorMsg = $"[Skipped by content filter: {content.Entry.DisplayPath ?? content.Entry.Path}]";
+                                WriteStringLine(writer, errorMsg);
+                                totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
+                                continue;
+                            }
+
                             var sample = Utf8NoBom.GetString(ready.Buffer!, 0, Math.Min(ready.Length, 4096));
                             var fence = "```";
                             if (sample.Contains("`````")) fence = "``````````";
@@ -280,92 +295,84 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + NewlineByteCount;
                             var newlineBytes = NewlineByteCount;
 
-                            WriteStringLine(writer, header);
-                            WriteStringLine(writer, fenceLine);
-
+                            // Pre-calculate entry size BEFORE writing to enforce maxMemoryBytes limit
+                            // (BUG-002 fix: streaming branch was writing partial output before checking limit)
                             long contentBytesWritten = 0;
+                            byte[]? contentBuffer = null;
+                            string? crushedContent = null;
 
                             if (brainCrusher != null)
                             {
                                 var rawText = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length);
-                                var crushed = brainCrusher.CrushBlock(rawText);
-                                if (crushed.Length > 0)
-                                {
-                                    WriteStringLine(writer, crushed);
-                                    contentBytesWritten += Utf8NoBom.GetByteCount(crushed) + NewlineByteCount;
-                                }
+                                crushedContent = brainCrusher.CrushBlock(rawText, content.Entry.Language);
+                                contentBytesWritten = crushedContent.Length > 0
+                                    ? Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount
+                                    : 0;
                             }
                             else if (excludeLineIfStart != null && excludeLineIfStart.Any())
                             {
                                 var excludeArray = excludeLineIfStart.ToArray();
                                 var excludeNewline = excludeArray.Contains("\n");
-
-                                var ms = new MemoryStream(ready.Buffer!, 0, ready.Length, writable: false);
-                                var pipeReader = PipeReader.Create(ms, new StreamPipeReaderOptions(leaveOpen: true));
-
-                                while (true)
+                                var sb = new StringBuilder();
+                                var span = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length).AsSpan();
+                                bool first = true;
+                                foreach (var line in span.EnumerateLines())
                                 {
-                                    var pr = await pipeReader.ReadAsync(ct);
-                                    var pipeBuffer = pr.Buffer;
-
-                                    SequencePosition? position = null;
-
-                                    do
+                                    var trimmedLine = line.TrimStart().TrimStart('\uFEFF');
+                                    if (excludeNewline && (trimmedLine.IsEmpty || trimmedLine.IsWhiteSpace())) continue;
+                                    bool shouldExclude = false;
+                                    foreach (var startStr in excludeArray)
                                     {
-                                        position = pipeBuffer.PositionOf((byte)'\n');
-                                        if (position != null)
-                                        {
-                                            var lineSequence = pipeBuffer.Slice(0, position.Value);
-                                            ProcessLineSequence(lineSequence, excludeArray, excludeNewline, writer, ref contentBytesWritten, newlineBytes);
-                                            pipeBuffer = pipeBuffer.Slice(pipeBuffer.GetPosition(1, position.Value));
-                                        }
+                                        if (startStr != "\n" && trimmedLine.StartsWith(startStr, StringComparison.Ordinal))
+                                        { shouldExclude = true; break; }
                                     }
-                                    while (position != null);
-
-                                    pipeReader.AdvanceTo(pipeBuffer.Start, pipeBuffer.End);
-
-                                    if (pr.IsCompleted)
-                                    {
-                                        if (!pipeBuffer.IsEmpty)
-                                        {
-                                            ProcessLineSequence(pipeBuffer, excludeArray, excludeNewline, writer, ref contentBytesWritten, newlineBytes);
-                                        }
-                                        break;
-                                    }
+                                    if (shouldExclude) continue;
+                                    if (!first) sb.Append('\n');
+                                    sb.Append(line);
+                                    first = false;
                                 }
-                                await pipeReader.CompleteAsync();
+                                crushedContent = sb.ToString();
+                                contentBytesWritten = Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount;
                             }
                             else
                             {
-                                if (ready.Length > 0)
+                                contentBuffer = ready.Buffer;
+                                contentBytesWritten = ready.Length;
+                            }
+
+                            long entryTotalBytes = headerBytes + fenceLineBytes + contentBytesWritten + closingFenceBytes + (newlineBytes * 2);
+                            if (totalBytes + entryTotalBytes > maxMemoryBytes)
+                            {
+                                return Result<long>.Failure($"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes).");
+                            }
+
+                            // Write now that we've confirmed we have budget
+                            WriteStringLine(writer, header);
+                            WriteStringLine(writer, fenceLine);
+
+                            if (crushedContent != null && crushedContent.Length > 0)
+                            {
+                                WriteStringLine(writer, crushedContent);
+                            }
+                            else if (contentBuffer != null && contentBuffer.Length > 0)
+                            {
+                                const int chunkSize = 65536;
+                                var remaining = contentBuffer.Length;
+                                var offset = 0;
+                                while (remaining > 0)
                                 {
-                                    // Write in chunks to avoid large allocations in PipeWriter
-                                    const int chunkSize = 65536;
-                                    var remaining = ready.Length;
-                                    var offset = 0;
-                                    while (remaining > 0)
-                                    {
-                                        var toWrite = Math.Min(remaining, chunkSize);
-                                        var destMemory = writer.GetMemory(toWrite);
-                                        ready.Buffer.AsSpan(offset, toWrite).CopyTo(destMemory.Span);
-                                        writer.Advance(toWrite);
-                                        offset += toWrite;
-                                        remaining -= toWrite;
-                                    }
-                                    contentBytesWritten += ready.Length;
+                                    var toWrite = Math.Min(remaining, chunkSize);
+                                    var destMemory = writer.GetMemory(toWrite);
+                                    contentBuffer.AsSpan(offset, toWrite).CopyTo(destMemory.Span);
+                                    writer.Advance(toWrite);
+                                    offset += toWrite;
+                                    remaining -= toWrite;
                                 }
                             }
 
                             WriteStringLine(writer, "");
                             WriteStringLine(writer, fence);
                             WriteStringLine(writer, "");
-
-                            long entryTotalBytes = headerBytes + fenceLineBytes + contentBytesWritten + closingFenceBytes + (newlineBytes * 2);
-
-                            if (totalBytes + entryTotalBytes > maxMemoryBytes)
-                            {
-                                return Result<long>.Failure($"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes).");
-                            }
 
                             fileList.Add(content.Entry.DisplayPath ?? content.Entry.Path);
                             totalBytes += entryTotalBytes;

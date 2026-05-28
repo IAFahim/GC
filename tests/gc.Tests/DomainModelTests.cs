@@ -300,21 +300,21 @@ public class DomainModelTests
     public void ClusterConfiguration_Defaults()
     {
         var cfg = new ClusterConfiguration();
-        Assert.False(cfg.Enabled);
+        Assert.Null(cfg.Enabled);
         Assert.Equal(2, cfg.MaxDepth);
         Assert.Equal("---", cfg.RepoSeparator);
-        Assert.True(cfg.IncludeRepoHeader);
+        Assert.Null(cfg.IncludeRepoHeader);
         Assert.Equal(0, cfg.MaxParallelRepos);
         Assert.Empty(cfg.SkipDirectories);
-        Assert.False(cfg.IncludeRootFiles);
-        Assert.False(cfg.FailFast);
+        Assert.Null(cfg.IncludeRootFiles);
+        Assert.Null(cfg.FailFast);
     }
 
     [Fact]
     public void DiscoveryConfiguration_Defaults()
     {
         var cfg = new DiscoveryConfiguration();
-        Assert.Equal("auto", cfg.Mode);
+        Assert.Null(cfg.Mode);
         Assert.True(cfg.UseGit);
         Assert.False(cfg.FollowSymlinks);
         Assert.Null(cfg.MaxDepth);

@@ -72,15 +72,15 @@ public class LoaderTests
             Assert.True(result.IsSuccess);
             var cluster = result.Value!.Discovery.Cluster;
             Assert.NotNull(cluster);
-            // Empty cluster {} gets CLR defaults (STJ source gen doesn't use record init defaults)
-            Assert.False(cluster.Enabled);
+            // Empty cluster {} gets CLR defaults from init (STJ uses record init defaults)
+            Assert.Null(cluster.Enabled);
             Assert.Equal(0, cluster.MaxDepth);
             Assert.Null(cluster.RepoSeparator);
-            Assert.False(cluster.IncludeRepoHeader);
+            Assert.Null(cluster.IncludeRepoHeader);
             Assert.Equal(0, cluster.MaxParallelRepos);
             Assert.Null(cluster.SkipDirectories);
-            Assert.False(cluster.IncludeRootFiles);
-            Assert.False(cluster.FailFast);
+            Assert.Null(cluster.IncludeRootFiles);
+            Assert.Null(cluster.FailFast);
         }
         finally
         {

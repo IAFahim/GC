@@ -71,6 +71,16 @@ public class GenerateContextUseCaseTests
             IBrainCrusher? brainCrusher = null,
             CancellationToken ct = default)
         {
+            return GenerateMarkdownStreamingAsync(contents, outputStream, config, default, excludeLineIfStart, brainCrusher, ct);
+        }
+
+        public Task<Result<long>> GenerateMarkdownStreamingAsync(
+            IEnumerable<FileContent> contents, Stream outputStream,
+            GcConfiguration config, CompiledContentPatterns contentFilter,
+            IEnumerable<string>? excludeLineIfStart,
+            IBrainCrusher? brainCrusher = null,
+            CancellationToken ct = default)
+        {
             ProcessedContents.AddRange(contents);
             CapturedExcludeLineIfStart = excludeLineIfStart;
             CapturedBrainCrusher = brainCrusher;
@@ -311,7 +321,8 @@ public class GenerateContextUseCaseTests
         var result = await useCase.ExecuteClusterAsync("/cluster", config, [], [], [], null);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(4, generator.ProcessedContents.Count); // 2 headers + 2 files
+        // 2 files (no headers because IncludeRepoHeader defaults to null in patched config)
+        Assert.Equal(2, generator.ProcessedContents.Count);
         Assert.Equal(1, clipboard.CopyCallCount);
     }
 

@@ -78,7 +78,12 @@ public sealed class FileFilter
             var languageKey = string.IsNullOrEmpty(extension) ? fileName.ToString().ToLowerInvariant() : extension;
             var language = ResolveLanguage(languageKey, config);
 
-            return new FileEntry(path, extension, language, -1);
+            // Populate file size during filtering to avoid redundant stat calls downstream.
+            // Falls back to -1 only if the file is inaccessible.
+            long size = -1;
+            try { size = new System.IO.FileInfo(path).Length; } catch { }
+
+            return new FileEntry(path, extension, language, size);
         }
         catch (Exception ex)
         {

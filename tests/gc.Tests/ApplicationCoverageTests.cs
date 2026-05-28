@@ -560,6 +560,16 @@ public class ApplicationCoverageTests
             IBrainCrusher? brainCrusher = null,
             CancellationToken ct = default)
         {
+            return GenerateMarkdownStreamingAsync(contents, outputStream, config, default, excludeLineIfStart, brainCrusher, ct);
+        }
+
+        public Task<Result<long>> GenerateMarkdownStreamingAsync(
+            IEnumerable<FileContent> contents, Stream outputStream,
+            GcConfiguration config, CompiledContentPatterns contentFilter,
+            IEnumerable<string>? excludeLineIfStart,
+            IBrainCrusher? brainCrusher = null,
+            CancellationToken ct = default)
+        {
             ProcessedContents.AddRange(contents);
             CapturedExcludeLineIfStart = excludeLineIfStart;
             CapturedBrainCrusher = brainCrusher;

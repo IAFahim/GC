@@ -128,6 +128,83 @@ public static class Program
             };
         }
 
+        // Dry-run: just print the files that would be processed
+        if (cliArgs.DryRun)
+        {
+            var discovery = new FileDiscovery(logger);
+            var filter2 = new FileFilter(logger);
+            var discoveryResult = await discovery.DiscoverFilesAsync(currentDirectory, config, ct);
+            if (!discoveryResult.IsSuccess)
+            {
+                logger.Error(discoveryResult.Error!);
+                return 1;
+            }
+
+            var filterResult = filter2.FilterFiles(
+                discoveryResult.Value!, config,
+                cliArgs.Paths, cliArgs.Excludes, cliArgs.Extensions,
+                cliArgs.ExcludePathPatterns, cliArgs.IncludePathPatterns);
+
+            if (!filterResult.IsSuccess)
+            {
+                logger.Error(filterResult.Error!);
+                return 1;
+            }
+
+            var entries = filterResult.Value!.ToList();
+            logger.Info($"Files that would be processed ({entries.Count}):");
+            foreach (var entry in entries)
+            {
+                Console.WriteLine(entry.DisplayPath ?? entry.Path);
+            }
+            return 0;
+        }
+
+        // Count tokens: quick scan only
+        if (cliArgs.CountTokens)
+        {
+            var discovery = new FileDiscovery(logger);
+            var filter2 = new FileFilter(logger);
+            var reader = new FileReader(logger);
+            var discoveryResult = await discovery.DiscoverFilesAsync(currentDirectory, config, ct);
+            if (!discoveryResult.IsSuccess)
+            {
+                logger.Error(discoveryResult.Error!);
+                return 1;
+            }
+
+            var filterResult = filter2.FilterFiles(
+                discoveryResult.Value!, config,
+                cliArgs.Paths, cliArgs.Excludes, cliArgs.Extensions,
+                cliArgs.ExcludePathPatterns, cliArgs.IncludePathPatterns);
+
+            if (!filterResult.IsSuccess)
+            {
+                logger.Error(filterResult.Error!);
+                return 1;
+            }
+
+            var entries = filterResult.Value!.ToList();
+            long totalTokens = 0;
+            foreach (var entry in entries)
+            {
+                if (entry.Path.StartsWith('[')) continue; // Skip synthetic entries
+                try
+                {
+                    var contentResult = await reader.ReadAsync(entry, ct);
+                    if (contentResult.IsSuccess)
+                    {
+                        var fileContent = contentResult.Value;
+                        var text = fileContent.Content ?? fileContent.Entry.Path;
+                        totalTokens += TokenEstimator.EstimateTokens(text);
+                    }
+                }
+                catch { }
+            }
+            logger.Info($"Estimated token count: {totalTokens:N0}");
+            return 0;
+        }
+
         if (cliArgs.Cluster)
         {
             var clusterDir = string.IsNullOrEmpty(cliArgs.ClusterDir)
@@ -160,7 +237,7 @@ public static class Program
                     }
                 };
             }
-            else if (config.Discovery?.Cluster == null || !config.Discovery.Cluster.Enabled)
+            else if (config.Discovery?.Cluster == null || config.Discovery.Cluster.Enabled != true)
             {
                 config = config with
                 {
@@ -227,6 +304,11 @@ public static class Program
             return 1;
         }
 
+        if (cliArgs.Profile)
+        {
+            logger.Info("\nProfile: --profile requires --output or clipboard mode. Use --profile for basic timing.");
+        }
+
         return 0;
     }
 
@@ -244,6 +326,10 @@ FILTERING:
     -t, type, -e, --extension <ext>  Filter by extension
     -y, yeet, -x, --exclude <path>   Exclude folder, path or pattern
     -z, zap, --exclude-line-if-start Exclude lines starting with this string
+    --exclude-path <pattern>         Exclude paths matching glob pattern
+    --include-path <pattern>         Include only paths matching glob pattern
+    --exclude-content <keyword>      Exclude files containing this keyword
+    --include-content <keyword>      Include only files containing this keyword
     --preset <name>                  Use a built-in preset (web,backend,dotnet,etc)
 
 OUTPUT:
@@ -254,6 +340,10 @@ OUTPUT:
     --append                         Append to current clipboard/file content
     --no-append                      Do not append (default)
     --no-sort                        Do not sort output by file path
+    --dry-run, --list                Preview files to be included without generating output
+    --count, --tokens-only           Show token count estimate without generating output
+    --profile                        Print stage timing profile after execution
+    --profile-json <file>            Write machine-readable profile JSON to file
 
 CLUSTER MODE:
     horde, --cluster                 Enable cluster mode (batch process repos)

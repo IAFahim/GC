@@ -1,0 +1,55 @@
+# gc Fish Completion
+# Install: gc --install-completion (or copy to ~/.config/fish/completions/gc.fish)
+
+complete -c gc -f
+
+# Flags without arguments
+complete -c gc -l help -s h -d "Show help message"
+complete -c gc -l version -d "Show version information"
+complete -c gc -s v -l verbose -d "Enable verbose logging"
+complete -c gc -l debug -d "Enable debug logging"
+complete -c gc -s f -l force -d "Force filesystem discovery"
+complete -c gc -l no-sort -d "Disable alphabetical sorting"
+complete -c gc -s b -l brain -d "Universal minification + Dynamic BPE"
+complete -c gc -s c -l compress -d "Structural compression via sqz"
+complete -c gc -l no-cache -d "Disable sqz dedup cache"
+complete -c gc -l cluster -d "Cluster mode (multi-repo)"
+complete -c gc -l dry-run -d "Preview files without generating output"
+complete -c gc -l list -d "Preview files without generating output"
+complete -c gc -l count -d "Show token count estimate"
+complete -c gc -l tokens-only -d "Show token count estimate"
+complete -c gc -l init-config -d "Initialize configuration"
+complete -c gc -l validate-config -d "Validate configuration"
+complete -c gc -l dump-config -d "Show configuration"
+complete -c gc -l history -d "Show run history"
+complete -c gc -l no-append -d "Do not append to clipboard"
+complete -c gc -l append -d "Append to clipboard"
+complete -c gc -l test -d "Run tests"
+complete -c gc -l benchmark -d "Run benchmark"
+
+# Flags with arguments
+complete -c gc -r -s g -l paths -d "Paths to include" -a "(__fish_complete_directories)"
+complete -c gc -r -s p -d "Paths to include" -a "(__fish_complete_directories)"
+complete -c gc -r -s t -s e -l extension -d "File extensions" -a "cs js ts py go rs java rb php sh"
+complete -c gc -r -s y -s x -l exclude -d "Exclude paths" -a "(__fish_complete_directories)"
+complete -c gc -r -s z -l exclude-line-if-start -d "Exclude lines starting with"
+complete -c gc -r -s s -s o -l output -d "Output file" -a "(__fish_complete_files)"
+complete -c gc -r -l max-memory -d "Memory limit" -a "100MB 500MB 1GB 5GB"
+complete -c gc -r -s d -l depth -d "Maximum directory depth"
+complete -c gc -r -l preset -d "Use preset" -a "dotnet web python rust go java minimal"
+complete -c gc -r -l cluster-dir -d "Cluster directory" -a "(__fish_complete_directories)"
+complete -c gc -r -l cluster-depth -d "Cluster max depth"
+complete -c gc -r -l exclude-path -d "Exclude path pattern"
+complete -c gc -r -l include-path -d "Include path pattern"
+complete -c gc -r -l exclude-content -d "Exclude content keyword"
+complete -c gc -r -l include-content -d "Include content keyword"
+
+# Keywords (positional arguments)
+complete -c gc -n "__fish_seen_subcommand_from grab" -r -d "Path to include"
+complete -c gc -n "__fish_seen_subcommand_from type" -a "cs js ts py go rs java rb php sh" -d "File extension"
+complete -c gc -n "__fish_seen_subcommand_from yeet" -r -d "Path to exclude"
+complete -c gc -n "__fish_seen_subcommand_from zap" -d "Line prefix to exclude"
+complete -c gc -n "__fish_seen_subcommand_from spit" -r -d "Output file"
+complete -c gc -n "__fish_seen_subcommand_from brain" -d "Enable brain mode"
+complete -c gc -n "__fish_seen_subcommand_from compress" -d "Enable sqz compression"
+complete -c gc -n "__fish_seen_subcommand_from horde" -d "Enable cluster mode"

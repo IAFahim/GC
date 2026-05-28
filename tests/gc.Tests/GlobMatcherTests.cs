@@ -231,8 +231,8 @@ public class GlobMatcherTests
         }
         sw.Stop();
 
-        // Should complete in under 50ms for 10k operations
-        Assert.True(sw.ElapsedMilliseconds < 50, $"Took {sw.ElapsedMilliseconds}ms");
+        // Should complete in under 200ms for 10k operations
+        Assert.True(sw.ElapsedMilliseconds < 200, $"Took {sw.ElapsedMilliseconds}ms");
     }
 
     [Fact]

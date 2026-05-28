@@ -52,39 +52,40 @@ public sealed class ClipboardService : IClipboardService
         {
             var maxClipboardSize = limits.GetMaxClipboardSizeBytes();
 
-            if (stream.CanSeek)
-            {
-                if (stream.Length > maxClipboardSize)
-                {
-                    return Result.Failure($"Content size ({stream.Length} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
-                }
-            }
-
+            // Read new content first
+            if (stream.CanSeek) stream.Position = 0;
             string newContent;
-            if (stream.CanSeek)
-            {
-                stream.Position = 0;
-            }
             using (var reader = new StreamReader(stream, Utf8NoBom, true, -1, true))
             {
                 newContent = await reader.ReadToEndAsync(ct);
             }
 
+            string finalContent;
             if (append)
             {
                 var existingContent = await GetClipboardTextAsync(ct);
                 if (!string.IsNullOrEmpty(existingContent))
                 {
-                    newContent = existingContent + Environment.NewLine + newContent;
+                    finalContent = existingContent + Environment.NewLine + newContent;
+                }
+                else
+                {
+                    finalContent = newContent;
                 }
             }
-
-            if (stream.CanSeek)
+            else
             {
-                stream.Position = 0;
+                finalContent = newContent;
             }
-            using var combinedStream = new MemoryStream(Utf8NoBom.GetBytes(newContent));
 
+            // Enforce size limit on COMBINED content before allocating
+            var finalBytes = Utf8NoBom.GetByteCount(finalContent);
+            if (finalBytes > maxClipboardSize)
+            {
+                return Result.Failure($"Combined content size ({finalBytes} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
+            }
+
+            using var combinedStream = new MemoryStream(Utf8NoBom.GetBytes(finalContent));
             bool success = _platform switch
             {
                 OsKind.Windows => await CopyToWindowsAsync(combinedStream, ct),

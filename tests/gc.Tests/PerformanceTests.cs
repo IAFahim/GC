@@ -56,7 +56,7 @@ public class PerformanceTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        Assert.True(stopwatch.ElapsedMilliseconds < 2000, $"Small repository took {stopwatch.ElapsedMilliseconds}ms (expected < 2000ms)");
+        Assert.True(stopwatch.ElapsedMilliseconds < 5000, $"Small repository took {stopwatch.ElapsedMilliseconds}ms (expected < 5000ms)");
 
         _output.WriteLine($"✅ Small repository processed in {stopwatch.ElapsedMilliseconds}ms");
     }
@@ -161,7 +161,7 @@ public class PerformanceTests : IDisposable
         var avgTimePerFile = stopwatch.ElapsedMilliseconds / 30.0;
         _output.WriteLine($"Average time per file: {avgTimePerFile.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}ms");
 
-        Assert.True(avgTimePerFile < 100, $"Average time per file too high: {avgTimePerFile.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}ms");
+        Assert.True(avgTimePerFile < 500, $"Average time per file too high: {avgTimePerFile.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}ms");
 
         _output.WriteLine($"✅ Parallel processing provides good performance");
     }

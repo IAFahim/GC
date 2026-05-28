@@ -62,6 +62,10 @@ public sealed class CliParser
         var includePathPatterns = new List<string>();
         var excludeContentPatterns = new List<string>();
         var includeContentPatterns = new List<string>();
+        var dryRun = false;
+        var countTokens = false;
+        var profile = false;
+        string? profileOutput = null;
 
         var state = ParseState.None;
         var onlyPaths = false;
@@ -95,7 +99,7 @@ public sealed class CliParser
 
             if (IsFlag(arg, out var flagType))
             {
-                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort, ref showHistory, ref brainMode, ref compress, ref noCache, ref cluster);
+                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort, ref showHistory, ref brainMode, ref compress, ref noCache, ref cluster, ref dryRun, ref countTokens, ref profile);
                 state = ParseState.None;
                 continue;
             }
@@ -170,7 +174,11 @@ public sealed class CliParser
             ExcludePathPatterns = excludePathPatterns.ToArray(),
             IncludePathPatterns = includePathPatterns.ToArray(),
             ExcludeContentPatterns = excludeContentPatterns.ToArray(),
-            IncludeContentPatterns = includeContentPatterns.ToArray()
+            IncludeContentPatterns = includeContentPatterns.ToArray(),
+            DryRun = dryRun,
+            CountTokens = countTokens,
+            Profile = profile,
+            ProfileOutput = profileOutput
         });
     }
 
@@ -196,12 +204,18 @@ public sealed class CliParser
             "-c" or "--compress" or "compress" => "compress",
             "--no-cache" or "--No-Cache" => "no-cache",
             "--cluster" or "--Cluster" => "cluster",
+            "--dry-run" or "--Dry-Run" => "dry-run",
+            "--list" or "--List" => "dry-run",
+            "--count" or "--Count" => "count",
+            "--tokens-only" => "count",
+            "--profile" => "profile",
+            "--profile-json" => "profile-json",
             _ => string.Empty
         };
         return !string.IsNullOrEmpty(flagType);
     }
 
-    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort, ref bool showHistory, ref bool brainMode, ref bool compress, ref bool noCache, ref bool cluster)
+    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort, ref bool showHistory, ref bool brainMode, ref bool compress, ref bool noCache, ref bool cluster, ref bool dryRun, ref bool countTokens, ref bool profile)
     {
         switch (flagType)
         {
@@ -223,6 +237,10 @@ public sealed class CliParser
             case "compress": compress = true; break;
             case "no-cache": noCache = true; break;
             case "cluster": cluster = true; break;
+            case "dry-run": dryRun = true; break;
+            case "count": countTokens = true; break;
+            case "profile": profile = true; break;
+            case "profile-json": profile = true; break;
         }
     }
 

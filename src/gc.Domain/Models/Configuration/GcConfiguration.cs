@@ -6,8 +6,8 @@ public sealed record GcConfiguration
     public LimitsConfiguration Limits { get; init; } = new();
     public DiscoveryConfiguration Discovery { get; init; } = new();
     public FiltersConfiguration Filters { get; init; } = new();
-    public Dictionary<string, PresetConfiguration> Presets { get; init; } = new();
-    public Dictionary<string, string> LanguageMappings { get; init; } = new();
+    public IReadOnlyDictionary<string, PresetConfiguration> Presets { get; init; } = new Dictionary<string, PresetConfiguration>();
+    public IReadOnlyDictionary<string, string> LanguageMappings { get; init; } = new Dictionary<string, string>();
     public MarkdownConfiguration Markdown { get; init; } = new();
     public OutputConfiguration Output { get; init; } = new();
     public LoggingConfiguration Logging { get; init; } = new();

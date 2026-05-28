@@ -1,10 +1,10 @@
-name: Build
+name: Build & Test
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build:
@@ -12,55 +12,90 @@ jobs:
     timeout-minutes: 10
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '10.0.x'
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
 
-    - name: Cache NuGet packages
-      uses: actions/cache@v4
-      with:
-        path: ~/.nuget/packages
-        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-nuget-
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
 
-    - name: Restore dependencies
-      run: dotnet restore gc.sln
+      - name: Restore dependencies
+        run: dotnet restore gc.sln
 
-    - name: Lint
-      run: dotnet format gc.sln --verify-no-changes --no-restore --verbosity diagnostic
+      - name: Lint
+        run: dotnet format gc.sln --verify-no-changes --no-restore --verbosity diagnostic
 
-    - name: Build
-      run: dotnet build gc.sln --configuration Release --no-restore
+      - name: Build
+        run: dotnet build gc.sln --configuration Release --no-restore
 
-    - name: Prepare test results directory
-      run: mkdir -p ./test-results
+      - name: Prepare test results directory
+        run: mkdir -p ./test-results
 
-    - name: Test
-      run: >
-        dotnet test tests/gc.Tests/gc.Tests.csproj
-        --no-restore
-        --verbosity normal
-        --logger "trx;LogFileName=test-results.trx"
-        --results-directory ./test-results
-        --filter "FullyQualifiedName!~ReleaseBinary"
+      - name: Test
+        run: >
+          dotnet test tests/gc.Tests/gc.Tests.csproj
+          --no-restore
+          --verbosity normal
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory ./test-results
+          --filter "FullyQualifiedName!~ReleaseBinary"
 
-    - name: Cluster Tests
-      run: >
-        dotnet test tests/gc.Tests/gc.Tests.csproj
-        --no-restore
-        --verbosity normal
-        --filter 'FullyQualifiedName~Cluster'
-        --logger "trx;LogFileName=cluster-test-results.trx"
-        --results-directory ./test-results
+      - name: Cluster Tests
+        run: >
+          dotnet test tests/gc.Tests/gc.Tests.csproj
+          --no-restore
+          --verbosity normal
+          --filter 'FullyQualifiedName~Cluster'
+          --logger "trx;LogFileName=cluster-test-results.trx"
+          --results-directory ./test-results
 
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-results
-        path: ./test-results/*.trx
-        retention-days: 7
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: ./test-results/*.trx
+          retention-days: 7
+
+  smoke-test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build gc
+        run: dotnet build src/gc.CLI/gc.CLI.csproj --configuration Release --no-restore
+
+      - name: Run gc against its own repo
+        run: |
+          dotnet run --project src/gc.CLI/gc.CLI.csproj --no-build -- --dry-run 2>&1 | tee smoke_output.txt
+          echo "---SMOKE TEST OUTPUT---"
+          cat smoke_output.txt
+
+      - name: Verify output
+        run: |
+          FILE_COUNT=$(grep -c "src/" smoke_output.txt || echo "0")
+          echo "Files found: $FILE_COUNT"
+          if [ "$FILE_COUNT" -lt 10 ]; then
+            echo "ERROR: Smoke test failed - expected at least 10 files, got $FILE_COUNT"
+            exit 1
+          fi
+          echo "Smoke test passed: $FILE_COUNT files discovered"
+
+      - name: Run with --count
+        run: |
+          dotnet run --project src/gc.CLI/gc.CLI.csproj --no-build -- --count 2>&1 | tee count_output.txt
+          grep -q "Estimated token count" count_output.txt && echo "Token count functionality verified"

@@ -39,6 +39,14 @@ public sealed record CliArguments
     public string[] ExcludeContentPatterns { get; init; } = Array.Empty<string>();
     public string[] IncludeContentPatterns { get; init; } = Array.Empty<string>();
 
+    public bool DryRun { get; init; }
+
+    public bool CountTokens { get; init; }
+
+    public bool Profile { get; init; }
+
+    public string? ProfileOutput { get; init; }
+
     public bool Cluster { get; init; }
 
     public string ClusterDir { get; init; } = string.Empty;

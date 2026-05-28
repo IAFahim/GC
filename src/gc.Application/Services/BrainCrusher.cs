@@ -34,10 +34,10 @@ public sealed class BrainCrusher : IBrainCrusher
         _fileExtension = fileExtension;
     }
 
-    public string CrushBlock(string code)
+    public string CrushBlock(string code, string? language = null)
     {
         if (string.IsNullOrEmpty(code)) return code;
-        var stripped = StripComments(code, _fileExtension);
+        var stripped = StripComments(code, language ?? _fileExtension);
         return CollapseWhitespace(stripped);
     }
 

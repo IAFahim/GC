@@ -165,7 +165,6 @@ public sealed class DynamicCompressor
         var sb = new StringBuilder(text.Length);
         var lines = text.Split('\n');
         var inCodeBlock = false;
-        var inProjectStructure = false;
 
         // Sort by length descending to ensure greedy matching
         var sortedList = candidates.OrderByDescending(c => c.Phrase.Length).ToList();
@@ -174,16 +173,15 @@ public sealed class DynamicCompressor
         {
             var line = lines[l];
 
-            if (line.Contains("Project Structure", StringComparison.OrdinalIgnoreCase))
-                inProjectStructure = true;
-
             if (line.StartsWith("```"))
             {
+                // Toggle code block state
                 inCodeBlock = !inCodeBlock;
                 sb.Append(line);
             }
-            else if (inCodeBlock && !inProjectStructure)
+            else if (inCodeBlock)
             {
+                // Only apply replacements in code blocks
                 var processedLine = line;
                 foreach (var c in sortedList)
                 {

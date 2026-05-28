@@ -136,7 +136,7 @@ public sealed class GenerateContextUseCase
                 var discoveryResult = await _discovery.DiscoverFilesAsync(repo.RootPath, config, token);
                 if (!discoveryResult.IsSuccess)
                 {
-                    if (clusterConfig.FailFast)
+                    if (clusterConfig.FailFast == true)
                         throw new InvalidOperationException($"Discovery failed for {repo.RelativePath}: {discoveryResult.Error}");
 
                     lock (lockObj)
@@ -177,7 +177,7 @@ public sealed class GenerateContextUseCase
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                if (clusterConfig.FailFast) throw;
+                if (clusterConfig.FailFast == true) throw;
 
                 lock (lockObj)
                 {
@@ -223,13 +223,13 @@ public sealed class GenerateContextUseCase
         {
             var (repo, entries) = sorted[i];
 
-            if (clusterConfig.IncludeRepoHeader && i > 0)
+            if (clusterConfig.IncludeRepoHeader == true && i > 0)
             {
                 var separatorContent = $"{clusterConfig.RepoSeparator}\n# {repo.Name}\n{clusterConfig.RepoSeparator}";
                 var separatorEntry = new FileEntry($"[{clusterConfig.RepoSeparator}] {repo.RelativePath}", "", "markdown", separatorContent.Length);
                 yield return new FileContent(separatorEntry, separatorContent, separatorContent.Length);
             }
-            else if (clusterConfig.IncludeRepoHeader && i == 0)
+            else if (clusterConfig.IncludeRepoHeader == true && i == 0)
             {
                 var headerContent = $"# {repo.Name}";
                 var headerEntry = new FileEntry($"[header] {repo.RelativePath}", "", "markdown", headerContent.Length);
@@ -258,24 +258,26 @@ public sealed class GenerateContextUseCase
         string[]? includeContentPatterns,
         CancellationToken ct)
     {
-        // Apply content filters — only for actual files, not metadata entries starting with '['
-        var exPatterns = excludeContentPatterns ?? Array.Empty<string>();
-        var inPatterns = includeContentPatterns ?? Array.Empty<string>();
-        var filteredList = new List<FileContent>();
+        // Compile content filter once, pass to generator for streaming files.
+        // Metadata entries (starting with '[') are always passed through.
+        var compiled = _contentFilter.CompilePatterns(
+            excludeContentPatterns ?? Array.Empty<string>(),
+            includeContentPatterns ?? Array.Empty<string>());
 
+        var filteredList = new List<FileContent>();
         foreach (var content in contents)
         {
+            // Always include metadata entries (e.g., [---], [header])
             if (content.Entry.Path.StartsWith('['))
             {
                 filteredList.Add(content);
                 continue;
             }
 
-            // For files with embedded content, apply content filter immediately
-            if (content.Content != null && !_contentFilter.ShouldInclude(content.Content, exPatterns, inPatterns))
-            {
+            // For files with embedded content, apply filter immediately.
+            // For streaming files, the generator applies the filter to a preview.
+            if (content.Content != null && !compiled.ShouldInclude(content.Content))
                 continue;
-            }
 
             filteredList.Add(content);
         }
@@ -308,7 +310,7 @@ public sealed class GenerateContextUseCase
             if (brainMode)
             {
                 using var ms = new MemoryStream();
-                var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, excludeLineIfStart, null, ct);
+                var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
                 if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
                 ms.Position = 0;
@@ -345,7 +347,7 @@ public sealed class GenerateContextUseCase
             if (compress)
             {
                 using var ms = new MemoryStream();
-                var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, excludeLineIfStart, null, ct);
+                var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
                 if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
                 ms.Position = 0;
@@ -366,7 +368,7 @@ public sealed class GenerateContextUseCase
 
             using var fs2 = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
-            var genResult2 = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs2, config, excludeLineIfStart, null, ct);
+            var genResult2 = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs2, config, compiled, excludeLineIfStart, null, ct);
             if (!genResult2.IsSuccess) return Result.Failure(genResult2.Error!);
 
             string action2 = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
@@ -377,7 +379,7 @@ public sealed class GenerateContextUseCase
         else
         {
             using var ms = new MemoryStream();
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, excludeLineIfStart, null, ct);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
             if (brainMode)

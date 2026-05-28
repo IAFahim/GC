@@ -112,7 +112,7 @@ public sealed class ConfigurationValidator
                     warnings.Add("Empty pattern in SystemIgnoredPatterns");
     }
 
-    private static void ValidatePresets(Dictionary<string, PresetConfiguration>? presets, List<string> errors, List<string> warnings)
+    private static void ValidatePresets(IReadOnlyDictionary<string, PresetConfiguration>? presets, List<string> errors, List<string> warnings)
     {
         if (presets == null || presets.Count == 0)
         {
@@ -159,7 +159,7 @@ public sealed class ConfigurationValidator
             warnings.Add($"Preset '{presetName}' contains duplicate extension: '{duplicate}'");
     }
 
-    private static void ValidateLanguageMappings(Dictionary<string, string>? mappings, List<string> errors, List<string> warnings)
+    private static void ValidateLanguageMappings(IReadOnlyDictionary<string, string>? mappings, List<string> errors, List<string> warnings)
     {
         if (mappings == null)
         {

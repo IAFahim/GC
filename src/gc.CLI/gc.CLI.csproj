@@ -1,16 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <ItemGroup>
-    <ProjectReference Include="..\gc.Application\gc.Application.csproj" />
-    <ProjectReference Include="..\gc.Infrastructure\gc.Infrastructure.csproj" />
-  </ItemGroup>
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AssemblyName>gc</AssemblyName>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>1.2.0</Version>
+    <Authors>gc Team</Authors>
+    <Product>gc - Git Copy</Product>
+    <Description>Git context extraction for AI/LLM workflows</Description>
+    <RepositoryUrl>https://github.com/your-repo/gc</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>gc</ToolCommandName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\gc.Application\gc.Application.csproj" />
+    <ProjectReference Include="..\gc.Infrastructure\gc.Infrastructure.csproj" />
+  </ItemGroup>
 
 </Project>

@@ -96,8 +96,9 @@ namespace gc.Tests
         [Fact]
         public void Enumerate_SkipsHashComments()
         {
+            // Hash comments are enabled for shell-like languages
             var source = "# this is a comment\nConfigurationValidator = None";
-            var lexer = new CodeLexer(source.AsSpan());
+            var lexer = new CodeLexer(source.AsSpan(), CodeLexerOptions.ForShell);
             var ids = new List<string>();
             lexer.Enumerate(span => ids.Add(span.ToString()));
 
@@ -119,8 +120,9 @@ namespace gc.Tests
         [Fact]
         public void Enumerate_SkipsSqlComments()
         {
+            // SQL comments are enabled for SQL-like languages
             var source = "-- sql comment\nConfigurationValidator varchar(100);";
-            var lexer = new CodeLexer(source.AsSpan());
+            var lexer = new CodeLexer(source.AsSpan(), CodeLexerOptions.ForSql);
             var ids = new List<string>();
             lexer.Enumerate(span => ids.Add(span.ToString()));
 
@@ -382,8 +384,9 @@ namespace gc.Tests
         [Fact]
         public void Enumerate_SqlCommentNoNewlineToEnd()
         {
+            // With SQL options, -- comment goes to end of content (no newline)
             var source = "-- no newline here";
-            var lexer = new CodeLexer(source.AsSpan());
+            var lexer = new CodeLexer(source.AsSpan(), CodeLexerOptions.ForSql);
             var ids = new List<string>();
             lexer.Enumerate(span => ids.Add(span.ToString()));
             Assert.Empty(ids);

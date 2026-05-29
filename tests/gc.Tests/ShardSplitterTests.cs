@@ -1,18 +1,24 @@
 using gc.Application.Services;
 using gc.Domain.Models;
-using Xunit;
 
 namespace gc.Tests.FeatureTests;
 
 public class ShardSplitterTests
 {
-    private ShardSplitter CreateSplitter() => new ShardSplitter();
+    private ShardSplitter CreateSplitter()
+    {
+        return new ShardSplitter();
+    }
 
     private FileEntry MakeEntry(string relativePath, long size = 100)
-        => new FileEntry(Root: "", Relative: relativePath, Extension: "cs", Language: "csharp", Size: size);
+    {
+        return new FileEntry("", relativePath, "cs", "csharp", size);
+    }
 
     private List<FileEntry> MakeEntries(params (string path, long size)[] items)
-        => items.Select(i => MakeEntry(i.path, i.size)).ToList();
+    {
+        return items.Select(i => MakeEntry(i.path, i.size)).ToList();
+    }
 
     [Fact]
     public void SplitIntoShards_GroupByModule_BalancesSize()
@@ -114,7 +120,7 @@ public class ShardSplitterTests
     {
         var entries = new List<FileEntry>
         {
-            MakeEntry("rootfile.cs", 100),
+            MakeEntry("rootfile.cs"),
             MakeEntry("src/file.cs", 200),
             MakeEntry("README.md", 50),
             MakeEntry("src/utils/file.cs", 150)

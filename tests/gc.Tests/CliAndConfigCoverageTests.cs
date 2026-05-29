@@ -2,7 +2,6 @@ using gc.Application.Services;
 using gc.Application.Validators;
 using gc.CLI.Models;
 using gc.CLI.Services;
-using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models.Configuration;
 
@@ -14,7 +13,9 @@ internal sealed class RecordingLogger : ILogger
     public List<(LogLevel Level, string Message)> Messages { get; } = new();
 
     public void Log(LogLevel level, string message, Exception? ex = null)
-        => Messages.Add((level, message));
+    {
+        Messages.Add((level, message));
+    }
 }
 
 // ─── CliParser tests ─────────────────────────────────────────────────────────
@@ -24,7 +25,9 @@ public sealed class CliParserFlagTests
     private readonly CliParser _parser = new();
 
     private CliArguments Parse(params string[] args)
-        => _parser.Parse(args, DefaultConfig).Value!;
+    {
+        return _parser.Parse(args, DefaultConfig).Value!;
+    }
 
     // 1
     [Fact]
@@ -178,7 +181,7 @@ public sealed class ConfigurationServiceTests
     private static void CleanupDir(string path)
     {
         if (Directory.Exists(path))
-            Directory.Delete(path, recursive: true);
+            Directory.Delete(path, true);
     }
 
     // 16

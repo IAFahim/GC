@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using gc.Application.Services;
 using gc.Application.UseCases;
@@ -10,11 +9,16 @@ using gc.Domain.Models.Configuration;
 namespace gc.Tests;
 
 /// <summary>
-/// Exhaustive coverage tests for BrainCrusher, DynamicCompressor, AhoCorasick,
-/// SuffixArray, and GenerateContextUseCase brain-mode paths.
+///     Exhaustive coverage tests for BrainCrusher, DynamicCompressor, AhoCorasick,
+///     SuffixArray, and GenerateContextUseCase brain-mode paths.
 /// </summary>
 public class ApplicationCoverageTests
 {
+    // ========================================================================
+    //  DynamicCompressor Tests
+    // ========================================================================
+
+    private readonly DynamicCompressor _compressor = new();
     // ========================================================================
     //  BrainCrusher Tests
     // ========================================================================
@@ -172,11 +176,9 @@ public class ApplicationCoverageTests
 
         // Verify round-trip: uncrushed should contain all the keywords
         foreach (var kw in keywords)
-        {
             Assert.True(
                 uncrushed.Contains(kw, StringComparison.Ordinal),
                 $"Round-trip failed: '{kw}' not found in uncrushed output.\nCrushed: {crushed}\nUncrushed: {uncrushed}");
-        }
 
         // v2: no static token map — keywords preserved as-is after minification
     }
@@ -191,18 +193,12 @@ public class ApplicationCoverageTests
         Assert.Contains("xpublic", result);
     }
 
-    // ========================================================================
-    //  DynamicCompressor Tests
-    // ========================================================================
-
-    private readonly DynamicCompressor _compressor = new();
-
     // --- 12. Compress_MaxReplacementsZero ---
     [Fact]
     public void Compress_MaxReplacementsZero_NoReplacements()
     {
         var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMaskSequence = true;", 20));
-        var result = _compressor.Compress(input, maxReplacements: 0);
+        var result = _compressor.Compress(input, 0);
         Assert.Equal(0, result.ReplacementCount);
     }
 
@@ -211,8 +207,8 @@ public class ApplicationCoverageTests
     public void Compress_MaxReplacementsOne_AtMostOneReplacement()
     {
         var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMaskSequence = true;", 20))
-                   + " " + string.Join(" ", Enumerable.Repeat("anotherLongIdentifierName = false;", 20));
-        var result = _compressor.Compress(input, maxReplacements: 1);
+                    + " " + string.Join(" ", Enumerable.Repeat("anotherLongIdentifierName = false;", 20));
+        var result = _compressor.Compress(input, 1);
         Assert.Equal(1, result.ReplacementCount);
     }
 
@@ -235,10 +231,7 @@ public class ApplicationCoverageTests
     {
         var input = string.Join(" ", Enumerable.Repeat("bucketCapacityMask = true;", 20));
         var compressResult = _compressor.Compress(input);
-        if (compressResult.ReplacementCount > 0)
-        {
-            Assert.Contains("GC_DICT", compressResult.Legend);
-        }
+        if (compressResult.ReplacementCount > 0) Assert.Contains("GC_DICT", compressResult.Legend);
     }
 
     // --- 16. SingleTokenLexicon symbols ---
@@ -252,7 +245,7 @@ public class ApplicationCoverageTests
 
         // Symbols should be unique
         var symbols = new HashSet<string>();
-        for (int i = 0; i < SingleTokenLexicon.Count; i++)
+        for (var i = 0; i < SingleTokenLexicon.Count; i++)
         {
             var s = SingleTokenLexicon.GetSymbol(i);
             Assert.True(symbols.Add(s), $"Duplicate symbol at index {i}: {s}");
@@ -296,9 +289,9 @@ public class ApplicationCoverageTests
     private static object CreateAhoCorasick(string[] patterns)
     {
         var type = typeof(DynamicCompressor).Assembly.GetType("gc.Application.Services.AhoCorasick")
-            ?? throw new InvalidOperationException("Could not find AhoCorasick type");
+                   ?? throw new InvalidOperationException("Could not find AhoCorasick type");
         var ctor = type.GetConstructor([typeof(string[])])
-            ?? throw new InvalidOperationException("Could not find AhoCorasick constructor");
+                   ?? throw new InvalidOperationException("Could not find AhoCorasick constructor");
         return ctor.Invoke([patterns])!;
     }
 
@@ -306,10 +299,9 @@ public class ApplicationCoverageTests
     {
         var type = instance.GetType();
         var method = type.GetMethod("ReplaceAll")
-            ?? throw new InvalidOperationException("Could not find ReplaceAll method");
+                     ?? throw new InvalidOperationException("Could not find ReplaceAll method");
         return (string)method.Invoke(instance, [input, replacements])!;
     }
-
 
 
     // ========================================================================
@@ -341,218 +333,9 @@ public class ApplicationCoverageTests
         var sa = SuffixArray.Build(text);
         Assert.Equal(5, sa.Length);
         // Each suffix starts at a valid index
-        foreach (var idx in sa)
-        {
-            Assert.True(idx >= 0 && idx < text.Length);
-        }
+        foreach (var idx in sa) Assert.True(idx >= 0 && idx < text.Length);
         // All indices should be unique (suffix array property)
         Assert.Equal(sa.Distinct().Count(), sa.Length);
-    }
-
-    // --- 31. FindRepeatedPhrases_NewlinePhrasesFiltered ---
-    [Fact]
-    public void FindRepeatedPhrases_NewlinePhrasesFiltered_NoMultiLinePhrases()
-    {
-        // Build text with multi-line repeated blocks
-        var block = "line1\nline2\nline3";
-        var text = string.Join(" separator ", Enumerable.Repeat(block, 5));
-        var phrases = SuffixArray.FindRepeatedPhrases(text, 6, 80, 2, 50);
-        // No returned phrase should contain a newline
-        foreach (var p in phrases)
-        {
-            Assert.DoesNotContain('\n', p.Phrase);
-            Assert.DoesNotContain('\r', p.Phrase);
-        }
-    }
-
-    // --- 32. FindRepeatedPhrases_SubstringDeduplication ---
-    [Fact]
-    public void FindRepeatedPhrases_SubstringDeduplication_ShorterPhrasesEliminated()
-    {
-        // "abcabc" repeated creates overlapping substrings
-        var text = "abcabcabc abcabcabc abcabcabc";
-        var phrases = SuffixArray.FindRepeatedPhrases(text, 6, 80, 2, 50);
-        // If we get multiple phrases, none should be a substring of another
-        for (int i = 0; i < phrases.Count; i++)
-        {
-            for (int j = 0; j < phrases.Count; j++)
-            {
-                if (i != j)
-                {
-                    // phrases[j].Phrase should not contain phrases[i].Phrase as substring
-                    // (deduplication removes shorter substrings)
-                    // Actually, only higher-savings phrases absorb lower ones, so
-                    // if phrase A contains phrase B, B should not appear
-                }
-            }
-        }
-        // At minimum, verify we get some results for this repetitive text
-        // or that the results are reasonable
-        foreach (var p in phrases)
-        {
-            Assert.True(p.Phrase.Length >= 6);
-            Assert.True(p.Frequency >= 2);
-        }
-    }
-
-    // --- 33. FindRepeatedPhrases_MaxCandidates ---
-    public void IsUsefulPhrase_LowAlphaRatio_Filtered()
-    {
-        // Build text where repeated phrases are mostly punctuation
-        // "----::----" is mostly punctuation, should be filtered
-        var text = string.Join(" x ", Enumerable.Repeat("----::----", 10));
-        var phrases = SuffixArray.FindRepeatedPhrases(text, 6, 80, 2, 50);
-        // No phrase should be the punctuation-only pattern
-        foreach (var p in phrases)
-        {
-            Assert.NotEqual("----::----", p.Phrase);
-        }
-    }
-
-    // --- 35. CountOccurrences_Overlapping ---
-    [Fact]
-    public void CountOccurrences_Overlapping_NonOverlappingCount()
-    {
-        // "aaa" in "aaaaa" — non-overlapping count should be 1
-        // because after finding at index 0, next search starts at index 3,
-        // and there's only "aa" left (length 2 < length 3)
-        // Use reflection to call private CountOccurrences
-        var method = typeof(SuffixArray).GetMethod("CountOccurrences",
-            BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(method);
-        var count = (int)method.Invoke(null, ["aaaaa", "aaa"])!;
-        Assert.Equal(1, count);
-    }
-
-    // ========================================================================
-    //  GenerateContextUseCase Brain Mode Tests
-    // ========================================================================
-
-    // Reuse the same mock pattern from GenerateContextUseCaseTests
-
-    private class MockFileDiscovery : IFileDiscovery
-    {
-        public Dictionary<string, List<string>> FilesPerDirectory { get; set; } = new();
-        public List<RepoInfo> ReposToReturn { get; set; } = new();
-        public HashSet<string> FailDirectories { get; set; } = new();
-        public bool DiscoverShouldFail { get; set; }
-        public bool DiscoverReposShouldFail { get; set; }
-        public bool RespectCancellation { get; set; }
-
-        public Task<Result<IEnumerable<string>>> DiscoverFilesAsync(
-            string rootPath, GcConfiguration config, CancellationToken ct)
-        {
-            if (RespectCancellation && ct.IsCancellationRequested)
-                return Task.FromResult(Result<IEnumerable<string>>.Failure("Operation cancelled"));
-            if (DiscoverShouldFail)
-                return Task.FromResult(Result<IEnumerable<string>>.Failure("Discovery failed"));
-            if (FailDirectories.Contains(rootPath))
-                return Task.FromResult(Result<IEnumerable<string>>.Failure($"Discovery failed for {rootPath}"));
-            if (FilesPerDirectory.TryGetValue(rootPath, out var files))
-                return Task.FromResult(Result<IEnumerable<string>>.Success(files));
-            return Task.FromResult(Result<IEnumerable<string>>.Success(Array.Empty<string>()));
-        }
-
-        public Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(
-            string rootPath, string reference, GcConfiguration config, CancellationToken ct)
-        {
-            return DiscoverFilesAsync(rootPath, config, ct);
-        }
-
-        public Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(
-            string clusterRoot, ClusterConfiguration clusterConfig, CancellationToken ct)
-        {
-            if (RespectCancellation && ct.IsCancellationRequested)
-                return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Failure("Operation cancelled"));
-            if (DiscoverReposShouldFail)
-                return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Failure("Repo discovery failed"));
-            return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Success(ReposToReturn.AsReadOnly()));
-        }
-    }
-
-    private class MockFileReader : IFileReader
-    {
-        public Task<Result<Stream>> ReadStreamingAsync(string path, CancellationToken ct)
-            => Task.FromResult(Result<Stream>.Success(new MemoryStream()));
-
-        public Task<Result<FileContent>> ReadAsync(FileEntry entry, CancellationToken ct)
-            => Task.FromResult(Result<FileContent>.Success(new FileContent(entry, "", entry.Size)));
-
-        public Task<bool> IsBinaryFileAsync(string path, CancellationToken ct)
-            => Task.FromResult(false);
-    }
-
-    private class MockMarkdownGenerator : IMarkdownGenerator
-    {
-        public List<FileContent> ProcessedContents { get; } = new();
-        public long ReturnSize { get; set; } = 100;
-        public bool ShouldFail { get; set; }
-        public IEnumerable<string>? CapturedExcludeLineIfStart { get; private set; }
-        public IBrainCrusher? CapturedBrainCrusher { get; private set; }
-
-        public Task<Result<long>> GenerateMarkdownStreamingAsync(
-            IEnumerable<FileContent> contents, Stream outputStream,
-            GcConfiguration config, IEnumerable<string>? excludeLineIfStart,
-            IBrainCrusher? brainCrusher = null,
-            CancellationToken ct = default)
-        {
-            return GenerateMarkdownStreamingAsync(contents, outputStream, config, default, excludeLineIfStart, brainCrusher, ct);
-        }
-
-        public Task<Result<long>> GenerateMarkdownStreamingAsync(
-            IEnumerable<FileContent> contents, Stream outputStream,
-            GcConfiguration config, CompiledContentPatterns contentFilter,
-            IEnumerable<string>? excludeLineIfStart,
-            IBrainCrusher? brainCrusher = null,
-            CancellationToken ct = default)
-        {
-            ProcessedContents.AddRange(contents);
-            CapturedExcludeLineIfStart = excludeLineIfStart;
-            CapturedBrainCrusher = brainCrusher;
-            if (ShouldFail)
-                return Task.FromResult(Result<long>.Failure("Generator failed"));
-
-            // Write some realistic-ish content for brain mode to process
-            var markdown = "# File: test.cs\n```csharp\npublic class Foo { private int x; }\n```\n";
-            var bytes = Encoding.UTF8.GetBytes(markdown);
-            outputStream.Write(bytes, 0, bytes.Length);
-            return Task.FromResult(Result<long>.Success(bytes.Length));
-        }
-    }
-
-    private class MockClipboardService : IClipboardService
-    {
-        public bool ShouldFail { get; set; }
-        public int CopyCallCount { get; private set; }
-        public Stream? LastStream { get; private set; }
-
-        public Task<Result> CopyToClipboardAsync(Stream stream, CancellationToken ct)
-            => CopyToClipboardAsync(stream, new LimitsConfiguration(), false, ct);
-
-        public Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append, CancellationToken ct)
-        {
-            CopyCallCount++;
-            LastStream = stream;
-            return ShouldFail
-                ? Task.FromResult(Result.Failure("Clipboard failed"))
-                : Task.FromResult(Result.Success());
-        }
-
-        public Task<Result> CopyToClipboardAsync(string content, CancellationToken ct)
-            => Task.FromResult(Result.Success());
-
-        public Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append, CancellationToken ct)
-            => Task.FromResult(Result.Success());
-    }
-
-    private class MockLogger : ILogger
-    {
-        public List<(LogLevel Level, string Message)> Messages { get; } = new();
-
-        public void Log(LogLevel level, string message, Exception? ex = null)
-        {
-            Messages.Add((level, message));
-        }
     }
 
     private static (GenerateContextUseCase UseCase, MockFileDiscovery Discovery,
@@ -570,12 +353,15 @@ public class ApplicationCoverageTests
         return (useCase, discovery, generator, clipboard, logger);
     }
 
-    private static GcConfiguration DefaultConfig() => new()
+    private static GcConfiguration DefaultConfig()
     {
-        Limits = new LimitsConfiguration(),
-        Discovery = new DiscoveryConfiguration { Cluster = new ClusterConfiguration() },
-        Filters = new FiltersConfiguration(),
-    };
+        return new GcConfiguration
+        {
+            Limits = new LimitsConfiguration(),
+            Discovery = new DiscoveryConfiguration { Cluster = new ClusterConfiguration() },
+            Filters = new FiltersConfiguration()
+        };
+    }
 
     // --- 36. ExecuteAsync_BrainMode_Clipsboard ---
     [Fact]
@@ -637,7 +423,7 @@ public class ApplicationCoverageTests
             await File.WriteAllTextAsync(tempFile, "INITIAL CONTENT\n");
 
             var result = await useCase.ExecuteAsync("/repo", config, [], [], [], tempFile,
-                appendMode: true);
+                true);
 
             Assert.True(result.IsSuccess);
 
@@ -648,6 +434,152 @@ public class ApplicationCoverageTests
         finally
         {
             if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
+
+    //  GenerateContextUseCase Brain Mode Tests
+    // ========================================================================
+
+    // Reuse the same mock pattern from GenerateContextUseCaseTests
+
+    private class MockFileDiscovery : IFileDiscovery
+    {
+        public Dictionary<string, List<string>> FilesPerDirectory { get; } = new();
+        public List<RepoInfo> ReposToReturn { get; } = new();
+        public HashSet<string> FailDirectories { get; } = new();
+        public bool DiscoverShouldFail { get; set; }
+        public bool DiscoverReposShouldFail { get; set; }
+        public bool RespectCancellation { get; set; }
+
+        public Task<Result<IEnumerable<string>>> DiscoverFilesAsync(
+            string rootPath, GcConfiguration config, CancellationToken ct)
+        {
+            if (RespectCancellation && ct.IsCancellationRequested)
+                return Task.FromResult(Result<IEnumerable<string>>.Failure("Operation cancelled"));
+            if (DiscoverShouldFail)
+                return Task.FromResult(Result<IEnumerable<string>>.Failure("Discovery failed"));
+            if (FailDirectories.Contains(rootPath))
+                return Task.FromResult(Result<IEnumerable<string>>.Failure($"Discovery failed for {rootPath}"));
+            if (FilesPerDirectory.TryGetValue(rootPath, out var files))
+                return Task.FromResult(Result<IEnumerable<string>>.Success(files));
+            return Task.FromResult(Result<IEnumerable<string>>.Success(Array.Empty<string>()));
+        }
+
+        public Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(
+            string rootPath, string reference, GcConfiguration config, CancellationToken ct)
+        {
+            return DiscoverFilesAsync(rootPath, config, ct);
+        }
+
+        public Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(
+            string clusterRoot, ClusterConfiguration clusterConfig, CancellationToken ct)
+        {
+            if (RespectCancellation && ct.IsCancellationRequested)
+                return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Failure("Operation cancelled"));
+            if (DiscoverReposShouldFail)
+                return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Failure("Repo discovery failed"));
+            return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Success(ReposToReturn.AsReadOnly()));
+        }
+    }
+
+    private class MockFileReader : IFileReader
+    {
+        public Task<Result<Stream>> ReadStreamingAsync(string path, CancellationToken ct)
+        {
+            return Task.FromResult(Result<Stream>.Success(new MemoryStream()));
+        }
+
+        public Task<Result<FileContent>> ReadAsync(FileEntry entry, CancellationToken ct)
+        {
+            return Task.FromResult(Result<FileContent>.Success(new FileContent(entry, "", entry.Size)));
+        }
+
+        public Task<bool> IsBinaryFileAsync(string path, CancellationToken ct)
+        {
+            return Task.FromResult(false);
+        }
+    }
+
+    private class MockMarkdownGenerator : IMarkdownGenerator
+    {
+        public List<FileContent> ProcessedContents { get; } = new();
+        public long ReturnSize { get; set; } = 100;
+        public bool ShouldFail { get; set; }
+        public IEnumerable<string>? CapturedExcludeLineIfStart { get; private set; }
+        public IBrainCrusher? CapturedBrainCrusher { get; private set; }
+
+        public Task<Result<long>> GenerateMarkdownStreamingAsync(
+            IEnumerable<FileContent> contents, Stream outputStream,
+            GcConfiguration config, IEnumerable<string>? excludeLineIfStart,
+            IBrainCrusher? brainCrusher = null,
+            CancellationToken ct = default)
+        {
+            return GenerateMarkdownStreamingAsync(contents, outputStream, config, default, excludeLineIfStart,
+                brainCrusher, ct);
+        }
+
+        public Task<Result<long>> GenerateMarkdownStreamingAsync(
+            IEnumerable<FileContent> contents, Stream outputStream,
+            GcConfiguration config, CompiledContentPatterns contentFilter,
+            IEnumerable<string>? excludeLineIfStart,
+            IBrainCrusher? brainCrusher = null,
+            CancellationToken ct = default)
+        {
+            ProcessedContents.AddRange(contents);
+            CapturedExcludeLineIfStart = excludeLineIfStart;
+            CapturedBrainCrusher = brainCrusher;
+            if (ShouldFail)
+                return Task.FromResult(Result<long>.Failure("Generator failed"));
+
+            // Write some realistic-ish content for brain mode to process
+            var markdown = "# File: test.cs\n```csharp\npublic class Foo { private int x; }\n```\n";
+            var bytes = Encoding.UTF8.GetBytes(markdown);
+            outputStream.Write(bytes, 0, bytes.Length);
+            return Task.FromResult(Result<long>.Success(bytes.Length));
+        }
+    }
+
+    private class MockClipboardService : IClipboardService
+    {
+        public bool ShouldFail { get; set; }
+        public int CopyCallCount { get; private set; }
+        public Stream? LastStream { get; private set; }
+
+        public Task<Result> CopyToClipboardAsync(Stream stream, CancellationToken ct)
+        {
+            return CopyToClipboardAsync(stream, new LimitsConfiguration(), false, ct);
+        }
+
+        public Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append,
+            CancellationToken ct)
+        {
+            CopyCallCount++;
+            LastStream = stream;
+            return ShouldFail
+                ? Task.FromResult(Result.Failure("Clipboard failed"))
+                : Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> CopyToClipboardAsync(string content, CancellationToken ct)
+        {
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append,
+            CancellationToken ct)
+        {
+            return Task.FromResult(Result.Success());
+        }
+    }
+
+    private class MockLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Messages { get; } = new();
+
+        public void Log(LogLevel level, string message, Exception? ex = null)
+        {
+            Messages.Add((level, message));
         }
     }
 }

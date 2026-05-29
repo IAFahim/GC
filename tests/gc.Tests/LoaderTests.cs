@@ -1,12 +1,16 @@
+using System.Text.Json;
+using gc.Domain.Models.Configuration;
 using gc.Infrastructure.Configuration;
 using gc.Infrastructure.Logging;
-using gc.Domain.Models.Configuration;
 
 namespace gc.Tests;
 
 public class LoaderTests
 {
-    private static ConfigurationLoader CreateLoader() => new(new ConsoleLogger());
+    private static ConfigurationLoader CreateLoader()
+    {
+        return new ConfigurationLoader(new ConsoleLogger());
+    }
 
     // ---------------------------------------------------------------
     // 1. Cluster config merge
@@ -16,21 +20,21 @@ public class LoaderTests
     public async Task LoadConfig_ClusterConfig_MergesCorrectly()
     {
         var json = """
-        {
-            "discovery": {
-                "cluster": {
-                    "enabled": true,
-                    "maxDepth": 5,
-                    "repoSeparator": "===",
-                    "includeRepoHeader": false,
-                    "maxParallelRepos": 8,
-                    "skipDirectories": ["archive", "old"],
-                    "includeRootFiles": true,
-                    "failFast": true
-                }
-            }
-        }
-        """;
+                   {
+                       "discovery": {
+                           "cluster": {
+                               "enabled": true,
+                               "maxDepth": 5,
+                               "repoSeparator": "===",
+                               "includeRepoHeader": false,
+                               "maxParallelRepos": 8,
+                               "skipDirectories": ["archive", "old"],
+                               "includeRootFiles": true,
+                               "failFast": true
+                           }
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -156,19 +160,19 @@ public class LoaderTests
     public async Task LoadConfig_MultiplePresets_MergesCorrectly()
     {
         var json = """
-        {
-            "presets": {
-                "web": {
-                    "extensions": ["vue", "svelte"],
-                    "description": "Updated web preset"
-                },
-                "custom": {
-                    "extensions": ["xyz", "abc"],
-                    "description": "My custom preset"
-                }
-            }
-        }
-        """;
+                   {
+                       "presets": {
+                           "web": {
+                               "extensions": ["vue", "svelte"],
+                               "description": "Updated web preset"
+                           },
+                           "custom": {
+                               "extensions": ["xyz", "abc"],
+                               "description": "My custom preset"
+                           }
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -199,15 +203,15 @@ public class LoaderTests
     public async Task LoadConfig_LanguageMappings_MergesCorrectly()
     {
         var json = """
-        {
-            "languageMappings": {
-                "rs": "rust",
-                "go": "go",
-                "kt": "kotlin",
-                "py": "python3"
-            }
-        }
-        """;
+                   {
+                       "languageMappings": {
+                           "rs": "rust",
+                           "go": "go",
+                           "kt": "kotlin",
+                           "py": "python3"
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -241,8 +245,8 @@ public class LoaderTests
     {
         var loader = CreateLoader();
         // LoadConfigAsync with useCache=true on subsequent calls returns cached
-        var result1 = await loader.LoadConfigAsync(useCache: false);
-        var result2 = await loader.LoadConfigAsync(useCache: true);
+        var result1 = await loader.LoadConfigAsync(false);
+        var result2 = await loader.LoadConfigAsync(true);
 
         Assert.True(result1.IsSuccess);
         Assert.True(result2.IsSuccess);
@@ -257,14 +261,14 @@ public class LoaderTests
         var loader = CreateLoader();
 
         // First load populates cache
-        var result1 = await loader.LoadConfigAsync(useCache: true);
+        var result1 = await loader.LoadConfigAsync(true);
         Assert.True(result1.IsSuccess);
 
         // Clear the cache
         loader.ClearCache();
 
         // Second load should still succeed (reloads from defaults/filesystem)
-        var result2 = await loader.LoadConfigAsync(useCache: true);
+        var result2 = await loader.LoadConfigAsync(true);
         Assert.True(result2.IsSuccess);
         Assert.NotNull(result2.Value);
     }
@@ -329,15 +333,15 @@ public class LoaderTests
     {
         // The serializer is configured with ReadCommentHandling = JsonCommentHandling.Skip
         var json = """
-        {
-            // This is a line comment
-            "version": "3.0.0",
-            /* This is a block comment */
-            "limits": {
-                "maxFileSize": "5MB" // trailing comment
-            }
-        }
-        """;
+                   {
+                       // This is a line comment
+                       "version": "3.0.0",
+                       /* This is a block comment */
+                       "limits": {
+                           "maxFileSize": "5MB" // trailing comment
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -364,13 +368,13 @@ public class LoaderTests
     public async Task LoadConfig_MarkdownMerge_OverridesOnlyNonNull()
     {
         var json = """
-        {
-            "markdown": {
-                "fence": "~~~",
-                "projectStructureHeader": "**Files:**"
-            }
-        }
-        """;
+                   {
+                       "markdown": {
+                           "fence": "~~~",
+                           "projectStructureHeader": "**Files:**"
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -398,14 +402,14 @@ public class LoaderTests
     public async Task LoadConfig_OutputMerge_OverridesFields()
     {
         var json = """
-        {
-            "output": {
-                "defaultFormat": "plain",
-                "includeStats": false,
-                "sortByPath": false
-            }
-        }
-        """;
+                   {
+                       "output": {
+                           "defaultFormat": "plain",
+                           "includeStats": false,
+                           "sortByPath": false
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -430,13 +434,13 @@ public class LoaderTests
     public async Task LoadConfig_LoggingMerge_OverridesFields()
     {
         var json = """
-        {
-            "logging": {
-                "level": "debug",
-                "includeTimestamps": true
-            }
-        }
-        """;
+                   {
+                       "logging": {
+                           "level": "debug",
+                           "includeTimestamps": true
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -460,13 +464,13 @@ public class LoaderTests
     public async Task LoadConfig_LimitsMerge_OverridesOnlyNonNull()
     {
         var json = """
-        {
-            "limits": {
-                "maxFileSize": "50MB",
-                "maxFiles": 500
-            }
-        }
-        """;
+                   {
+                       "limits": {
+                           "maxFileSize": "50MB",
+                           "maxFiles": 500
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -494,18 +498,18 @@ public class LoaderTests
     public async Task LoadConfig_DiscoveryMerge_OverridesCluster()
     {
         var json = """
-        {
-            "discovery": {
-                "mode": "filesystem",
-                "useGit": false,
-                "followSymlinks": true,
-                "cluster": {
-                    "enabled": true,
-                    "maxDepth": 10
-                }
-            }
-        }
-        """;
+                   {
+                       "discovery": {
+                           "mode": "filesystem",
+                           "useGit": false,
+                           "followSymlinks": true,
+                           "cluster": {
+                               "enabled": true,
+                               "maxDepth": 10
+                           }
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -537,13 +541,13 @@ public class LoaderTests
     public async Task LoadConfig_FiltersMerge_OverridesPatterns()
     {
         var json = """
-        {
-            "filters": {
-                "systemIgnoredPatterns": ["*.log", "tmp/"],
-                "additionalExtensions": ["xyz", "qrs"]
-            }
-        }
-        """;
+                   {
+                       "filters": {
+                           "systemIgnoredPatterns": ["*.log", "tmp/"],
+                           "additionalExtensions": ["xyz", "qrs"]
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -589,60 +593,60 @@ public class LoaderTests
     public async Task LoadConfig_FullConfig_AllFieldsSet()
     {
         var json = """
-        {
-            "version": "2.5.0",
-            "limits": {
-                "maxFileSize": "20MB",
-                "maxClipboardSize": "50MB",
-                "maxMemoryBytes": "500MB",
-                "maxFiles": 25000
-            },
-            "discovery": {
-                "mode": "git",
-                "useGit": true,
-                "followSymlinks": false,
-                "cluster": {
-                    "enabled": true,
-                    "maxDepth": 3,
-                    "repoSeparator": "***",
-                    "includeRepoHeader": true,
-                    "maxParallelRepos": 4,
-                    "skipDirectories": ["vendor", "node_modules"],
-                    "includeRootFiles": true,
-                    "failFast": false
-                }
-            },
-            "filters": {
-                "systemIgnoredPatterns": ["dist/", "build/"],
-                "additionalExtensions": ["txt", "cfg"]
-            },
-            "presets": {
-                "my-preset": {
-                    "extensions": ["cs", "fs", "vb"],
-                    "description": "All .NET languages"
-                }
-            },
-            "languageMappings": {
-                "fs": "fsharp",
-                "vb": "vbnet"
-            },
-            "markdown": {
-                "fence": "~~~",
-                "projectStructureHeader": "## Structure",
-                "fileHeaderTemplate": "### {path}",
-                "languageDetection": "shebang"
-            },
-            "output": {
-                "defaultFormat": "json",
-                "includeStats": false,
-                "sortByPath": false
-            },
-            "logging": {
-                "level": "verbose",
-                "includeTimestamps": true
-            }
-        }
-        """;
+                   {
+                       "version": "2.5.0",
+                       "limits": {
+                           "maxFileSize": "20MB",
+                           "maxClipboardSize": "50MB",
+                           "maxMemoryBytes": "500MB",
+                           "maxFiles": 25000
+                       },
+                       "discovery": {
+                           "mode": "git",
+                           "useGit": true,
+                           "followSymlinks": false,
+                           "cluster": {
+                               "enabled": true,
+                               "maxDepth": 3,
+                               "repoSeparator": "***",
+                               "includeRepoHeader": true,
+                               "maxParallelRepos": 4,
+                               "skipDirectories": ["vendor", "node_modules"],
+                               "includeRootFiles": true,
+                               "failFast": false
+                           }
+                       },
+                       "filters": {
+                           "systemIgnoredPatterns": ["dist/", "build/"],
+                           "additionalExtensions": ["txt", "cfg"]
+                       },
+                       "presets": {
+                           "my-preset": {
+                               "extensions": ["cs", "fs", "vb"],
+                               "description": "All .NET languages"
+                           }
+                       },
+                       "languageMappings": {
+                           "fs": "fsharp",
+                           "vb": "vbnet"
+                       },
+                       "markdown": {
+                           "fence": "~~~",
+                           "projectStructureHeader": "## Structure",
+                           "fileHeaderTemplate": "### {path}",
+                           "languageDetection": "shebang"
+                       },
+                       "output": {
+                           "defaultFormat": "json",
+                           "includeStats": false,
+                           "sortByPath": false
+                       },
+                       "logging": {
+                           "level": "verbose",
+                           "includeTimestamps": true
+                       }
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -715,13 +719,13 @@ public class LoaderTests
     {
         // The serializer is configured with AllowTrailingCommas = true
         var json = """
-        {
-            "version": "1.0.0",
-            "limits": {
-                "maxFileSize": "2MB",
-            },
-        }
-        """;
+                   {
+                       "version": "1.0.0",
+                       "limits": {
+                           "maxFileSize": "2MB",
+                       },
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -811,11 +815,11 @@ public class LoaderTests
     public async Task LoadConfig_JsonWithBlockCommentOnly_Works()
     {
         var json = """
-        /* Only a block comment at top */
-        {
-            "version": "4.0.0"
-        }
-        """;
+                   /* Only a block comment at top */
+                   {
+                       "version": "4.0.0"
+                   }
+                   """;
 
         var tempFile = Path.GetTempFileName();
         try
@@ -885,7 +889,7 @@ public class LoaderTests
         var tempFile = Path.GetTempFileName();
         try
         {
-            var json = System.Text.Json.JsonSerializer.Serialize(original,
+            var json = JsonSerializer.Serialize(original,
                 GcJsonSerializerContext.Default.GcConfiguration);
             File.WriteAllText(tempFile, json);
 

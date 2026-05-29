@@ -21,9 +21,9 @@ public static class MemorySizeParser
             return DefaultMemoryBytes;
 
         long multiplier = 1;
-        bool hasValidUnit = false;
-        bool isKB = false;
-        bool isB = false;
+        var hasValidUnit = false;
+        var isKB = false;
+        var isB = false;
 
         if (size.EndsWith("KB", StringComparison.OrdinalIgnoreCase))
         {
@@ -56,7 +56,7 @@ public static class MemorySizeParser
 
         if (double.TryParse(size, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
         {
-            double threshold = isB ? 100000000000 : (isKB ? 100000000 : 100000);
+            double threshold = isB ? 100000000000 : isKB ? 100000000 : 100000;
             if (value > threshold)
                 return DefaultMemoryBytes;
 
@@ -66,11 +66,11 @@ public static class MemorySizeParser
             if (value > (double)long.MaxValue / multiplier)
                 return DefaultMemoryBytes;
 
-            double result = value * multiplier;
+            var result = value * multiplier;
             if (result > long.MaxValue || double.IsInfinity(result) || result < 0)
                 return DefaultMemoryBytes;
 
-            long finalResult = (long)result;
+            var finalResult = (long)result;
             if (finalResult == 0 && value > 0)
                 return DefaultMemoryBytes;
 

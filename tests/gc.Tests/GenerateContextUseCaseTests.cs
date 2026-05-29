@@ -9,127 +9,6 @@ namespace gc.Tests;
 
 public class GenerateContextUseCaseTests
 {
-    // ─── Mock implementations ───────────────────────────────────────────────
-
-    private class MockFileDiscovery : IFileDiscovery
-    {
-        public Dictionary<string, List<string>> FilesPerDirectory { get; set; } = new();
-        public List<RepoInfo> ReposToReturn { get; set; } = new();
-        public HashSet<string> FailDirectories { get; set; } = new();
-        public bool DiscoverShouldFail { get; set; }
-        public bool DiscoverReposShouldFail { get; set; }
-        public bool RespectCancellation { get; set; }
-
-        public Task<Result<IEnumerable<string>>> DiscoverFilesAsync(
-            string rootPath, GcConfiguration config, CancellationToken ct)
-        {
-            if (RespectCancellation && ct.IsCancellationRequested)
-                return Task.FromResult(Result<IEnumerable<string>>.Failure("Operation cancelled"));
-            if (DiscoverShouldFail)
-                return Task.FromResult(Result<IEnumerable<string>>.Failure("Discovery failed"));
-            if (FailDirectories.Contains(rootPath))
-                return Task.FromResult(Result<IEnumerable<string>>.Failure($"Discovery failed for {rootPath}"));
-            if (FilesPerDirectory.TryGetValue(rootPath, out var files))
-                return Task.FromResult(Result<IEnumerable<string>>.Success(files));
-            return Task.FromResult(Result<IEnumerable<string>>.Success(Array.Empty<string>()));
-        }
-
-        public Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(
-            string rootPath, string reference, GcConfiguration config, CancellationToken ct)
-        {
-            return DiscoverFilesAsync(rootPath, config, ct);
-        }
-
-        public Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(
-            string clusterRoot, ClusterConfiguration clusterConfig, CancellationToken ct)
-        {
-            if (RespectCancellation && ct.IsCancellationRequested)
-                return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Failure("Operation cancelled"));
-            if (DiscoverReposShouldFail)
-                return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Failure("Repo discovery failed"));
-            return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Success(ReposToReturn.AsReadOnly()));
-        }
-    }
-
-    private class MockFileReader : IFileReader
-    {
-        public Task<Result<Stream>> ReadStreamingAsync(string path, CancellationToken ct)
-            => Task.FromResult(Result<Stream>.Success(new MemoryStream()));
-
-        public Task<Result<FileContent>> ReadAsync(FileEntry entry, CancellationToken ct)
-            => Task.FromResult(Result<FileContent>.Success(new FileContent(entry, "", entry.Size)));
-
-        public Task<bool> IsBinaryFileAsync(string path, CancellationToken ct)
-            => Task.FromResult(false);
-    }
-
-    private class MockMarkdownGenerator : IMarkdownGenerator
-    {
-        public List<FileContent> ProcessedContents { get; } = new();
-        public long ReturnSize { get; set; } = 100;
-        public bool ShouldFail { get; set; }
-        public IEnumerable<string>? CapturedExcludeLineIfStart { get; private set; }
-        public IBrainCrusher? CapturedBrainCrusher { get; private set; }
-
-        public Task<Result<long>> GenerateMarkdownStreamingAsync(
-            IEnumerable<FileContent> contents, Stream outputStream,
-            GcConfiguration config, IEnumerable<string>? excludeLineIfStart,
-            IBrainCrusher? brainCrusher = null,
-            CancellationToken ct = default)
-        {
-            return GenerateMarkdownStreamingAsync(contents, outputStream, config, default, excludeLineIfStart, brainCrusher, ct);
-        }
-
-        public Task<Result<long>> GenerateMarkdownStreamingAsync(
-            IEnumerable<FileContent> contents, Stream outputStream,
-            GcConfiguration config, CompiledContentPatterns contentFilter,
-            IEnumerable<string>? excludeLineIfStart,
-            IBrainCrusher? brainCrusher = null,
-            CancellationToken ct = default)
-        {
-            ProcessedContents.AddRange(contents);
-            CapturedExcludeLineIfStart = excludeLineIfStart;
-            CapturedBrainCrusher = brainCrusher;
-            if (ShouldFail)
-                return Task.FromResult(Result<long>.Failure("Generator failed"));
-            outputStream.WriteByte((byte)'#');
-            return Task.FromResult(Result<long>.Success(ReturnSize));
-        }
-    }
-
-    private class MockClipboardService : IClipboardService
-    {
-        public bool ShouldFail { get; set; }
-        public int CopyCallCount { get; private set; }
-
-        public Task<Result> CopyToClipboardAsync(Stream stream, CancellationToken ct)
-            => CopyToClipboardAsync(stream, new LimitsConfiguration(), false, ct);
-
-        public Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append, CancellationToken ct)
-        {
-            CopyCallCount++;
-            return ShouldFail
-                ? Task.FromResult(Result.Failure("Clipboard failed"))
-                : Task.FromResult(Result.Success());
-        }
-
-        public Task<Result> CopyToClipboardAsync(string content, CancellationToken ct)
-            => Task.FromResult(Result.Success());
-
-        public Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append, CancellationToken ct)
-            => Task.FromResult(Result.Success());
-    }
-
-    private class MockLogger : ILogger
-    {
-        public List<(LogLevel Level, string Message)> Messages { get; } = new();
-
-        public void Log(LogLevel level, string message, Exception? ex = null)
-        {
-            Messages.Add((level, message));
-        }
-    }
-
     // ─── Factory ─────────────────────────────────────────────────────────────
 
     private static (GenerateContextUseCase UseCase, MockFileDiscovery Discovery,
@@ -147,12 +26,15 @@ public class GenerateContextUseCaseTests
         return (useCase, discovery, generator, clipboard, logger);
     }
 
-    private static GcConfiguration DefaultConfig() => new()
+    private static GcConfiguration DefaultConfig()
     {
-        Limits = new LimitsConfiguration(),
-        Discovery = new DiscoveryConfiguration { Cluster = new ClusterConfiguration() },
-        Filters = new FiltersConfiguration(),
-    };
+        return new GcConfiguration
+        {
+            Limits = new LimitsConfiguration(),
+            Discovery = new DiscoveryConfiguration { Cluster = new ClusterConfiguration() },
+            Filters = new FiltersConfiguration()
+        };
+    }
 
     // ─── ExecuteAsync tests ──────────────────────────────────────────────────
 
@@ -317,8 +199,8 @@ public class GenerateContextUseCaseTests
         var (useCase, discovery, generator, clipboard, _) = CreateUseCase();
         discovery.ReposToReturn =
         [
-            new() { RootPath = "/cluster/repo1", RelativePath = "repo1", Name = "repo1", IsValid = true },
-            new() { RootPath = "/cluster/repo2", RelativePath = "repo2", Name = "repo2", IsValid = true },
+            new RepoInfo { RootPath = "/cluster/repo1", RelativePath = "repo1", Name = "repo1", IsValid = true },
+            new RepoInfo { RootPath = "/cluster/repo2", RelativePath = "repo2", Name = "repo2", IsValid = true }
         ];
         discovery.FilesPerDirectory["/cluster/repo1"] = ["file1.cs"];
         discovery.FilesPerDirectory["/cluster/repo2"] = ["file2.cs"];
@@ -354,7 +236,7 @@ public class GenerateContextUseCaseTests
         var (useCase, discovery, generator, _, _) = CreateUseCase();
         discovery.ReposToReturn =
         [
-            new() { RootPath = "/cluster/repo1", RelativePath = "repo1", Name = "repo1", IsValid = true },
+            new RepoInfo { RootPath = "/cluster/repo1", RelativePath = "repo1", Name = "repo1", IsValid = true }
         ];
         discovery.FilesPerDirectory["/cluster/repo1"] = ["file1.cs"];
         generator.ShouldFail = true;
@@ -372,8 +254,8 @@ public class GenerateContextUseCaseTests
         var (useCase, discovery, generator, _, _) = CreateUseCase();
         discovery.ReposToReturn =
         [
-            new() { RootPath = "/cluster/alpha", RelativePath = "alpha", Name = "alpha", IsValid = true },
-            new() { RootPath = "/cluster/beta", RelativePath = "beta", Name = "beta", IsValid = true },
+            new RepoInfo { RootPath = "/cluster/alpha", RelativePath = "alpha", Name = "alpha", IsValid = true },
+            new RepoInfo { RootPath = "/cluster/beta", RelativePath = "beta", Name = "beta", IsValid = true }
         ];
         discovery.FilesPerDirectory["/cluster/alpha"] = ["a.cs"];
         discovery.FilesPerDirectory["/cluster/beta"] = ["b.cs"];
@@ -404,8 +286,8 @@ public class GenerateContextUseCaseTests
         var (useCase, discovery, generator, _, _) = CreateUseCase();
         discovery.ReposToReturn =
         [
-            new() { RootPath = "/cluster/repo1", RelativePath = "repo1", Name = "repo1", IsValid = true },
-            new() { RootPath = "/cluster/repo2", RelativePath = "repo2", Name = "repo2", IsValid = true },
+            new RepoInfo { RootPath = "/cluster/repo1", RelativePath = "repo1", Name = "repo1", IsValid = true },
+            new RepoInfo { RootPath = "/cluster/repo2", RelativePath = "repo2", Name = "repo2", IsValid = true }
         ];
         discovery.FilesPerDirectory["/cluster/repo1"] = ["file1.cs"];
         discovery.FilesPerDirectory["/cluster/repo2"] = []; // empty
@@ -430,8 +312,8 @@ public class GenerateContextUseCaseTests
         var (useCase, discovery, generator, _, logger) = CreateUseCase();
         discovery.ReposToReturn =
         [
-            new() { RootPath = "/cluster/good", RelativePath = "good", Name = "good", IsValid = true },
-            new() { RootPath = "/cluster/bad", RelativePath = "bad", Name = "bad", IsValid = true },
+            new RepoInfo { RootPath = "/cluster/good", RelativePath = "good", Name = "good", IsValid = true },
+            new RepoInfo { RootPath = "/cluster/bad", RelativePath = "bad", Name = "bad", IsValid = true }
         ];
         discovery.FilesPerDirectory["/cluster/good"] = ["file1.cs"];
         discovery.FailDirectories.Add("/cluster/bad");
@@ -455,7 +337,7 @@ public class GenerateContextUseCaseTests
         var (useCase, discovery, generator, _, _) = CreateUseCase();
         discovery.ReposToReturn =
         [
-            new() { RootPath = "/c/r1", RelativePath = "r1", Name = "r1", IsValid = true },
+            new RepoInfo { RootPath = "/c/r1", RelativePath = "r1", Name = "r1", IsValid = true }
         ];
         discovery.FilesPerDirectory["/c/r1"] = ["a.cs"];
         var config = DefaultConfig() with
@@ -482,7 +364,7 @@ public class GenerateContextUseCaseTests
         var (useCase, discovery, generator, _, _) = CreateUseCase();
         discovery.ReposToReturn =
         [
-            new() { RootPath = "/c/r1", RelativePath = "r1", Name = "r1", IsValid = true },
+            new RepoInfo { RootPath = "/c/r1", RelativePath = "r1", Name = "r1", IsValid = true }
         ];
         discovery.FilesPerDirectory["/c/r1"] = ["code.cs"];
         var config = DefaultConfig() with
@@ -508,8 +390,8 @@ public class GenerateContextUseCaseTests
         var (useCase, discovery, generator, _, _) = CreateUseCase();
         discovery.ReposToReturn =
         [
-            new() { RootPath = "/c/blank", RelativePath = "blank", Name = "blank", IsValid = true },
-            new() { RootPath = "/c/active", RelativePath = "active", Name = "active", IsValid = true },
+            new RepoInfo { RootPath = "/c/blank", RelativePath = "blank", Name = "blank", IsValid = true },
+            new RepoInfo { RootPath = "/c/active", RelativePath = "active", Name = "active", IsValid = true }
         ];
         discovery.FilesPerDirectory["/c/blank"] = [];
         discovery.FilesPerDirectory["/c/active"] = ["x.cs"];
@@ -528,5 +410,140 @@ public class GenerateContextUseCaseTests
         // No entries from the blank repo (it had no files)
         Assert.All(generator.ProcessedContents, c =>
             Assert.DoesNotContain("blank", c.Entry.Path));
+    }
+    // ─── Mock implementations ───────────────────────────────────────────────
+
+    private class MockFileDiscovery : IFileDiscovery
+    {
+        public Dictionary<string, List<string>> FilesPerDirectory { get; } = new();
+        public List<RepoInfo> ReposToReturn { get; set; } = new();
+        public HashSet<string> FailDirectories { get; } = new();
+        public bool DiscoverShouldFail { get; set; }
+        public bool DiscoverReposShouldFail { get; set; }
+        public bool RespectCancellation { get; set; }
+
+        public Task<Result<IEnumerable<string>>> DiscoverFilesAsync(
+            string rootPath, GcConfiguration config, CancellationToken ct)
+        {
+            if (RespectCancellation && ct.IsCancellationRequested)
+                return Task.FromResult(Result<IEnumerable<string>>.Failure("Operation cancelled"));
+            if (DiscoverShouldFail)
+                return Task.FromResult(Result<IEnumerable<string>>.Failure("Discovery failed"));
+            if (FailDirectories.Contains(rootPath))
+                return Task.FromResult(Result<IEnumerable<string>>.Failure($"Discovery failed for {rootPath}"));
+            if (FilesPerDirectory.TryGetValue(rootPath, out var files))
+                return Task.FromResult(Result<IEnumerable<string>>.Success(files));
+            return Task.FromResult(Result<IEnumerable<string>>.Success(Array.Empty<string>()));
+        }
+
+        public Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(
+            string rootPath, string reference, GcConfiguration config, CancellationToken ct)
+        {
+            return DiscoverFilesAsync(rootPath, config, ct);
+        }
+
+        public Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(
+            string clusterRoot, ClusterConfiguration clusterConfig, CancellationToken ct)
+        {
+            if (RespectCancellation && ct.IsCancellationRequested)
+                return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Failure("Operation cancelled"));
+            if (DiscoverReposShouldFail)
+                return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Failure("Repo discovery failed"));
+            return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Success(ReposToReturn.AsReadOnly()));
+        }
+    }
+
+    private class MockFileReader : IFileReader
+    {
+        public Task<Result<Stream>> ReadStreamingAsync(string path, CancellationToken ct)
+        {
+            return Task.FromResult(Result<Stream>.Success(new MemoryStream()));
+        }
+
+        public Task<Result<FileContent>> ReadAsync(FileEntry entry, CancellationToken ct)
+        {
+            return Task.FromResult(Result<FileContent>.Success(new FileContent(entry, "", entry.Size)));
+        }
+
+        public Task<bool> IsBinaryFileAsync(string path, CancellationToken ct)
+        {
+            return Task.FromResult(false);
+        }
+    }
+
+    private class MockMarkdownGenerator : IMarkdownGenerator
+    {
+        public List<FileContent> ProcessedContents { get; } = new();
+        public long ReturnSize { get; } = 100;
+        public bool ShouldFail { get; set; }
+        public IEnumerable<string>? CapturedExcludeLineIfStart { get; private set; }
+        public IBrainCrusher? CapturedBrainCrusher { get; private set; }
+
+        public Task<Result<long>> GenerateMarkdownStreamingAsync(
+            IEnumerable<FileContent> contents, Stream outputStream,
+            GcConfiguration config, IEnumerable<string>? excludeLineIfStart,
+            IBrainCrusher? brainCrusher = null,
+            CancellationToken ct = default)
+        {
+            return GenerateMarkdownStreamingAsync(contents, outputStream, config, default, excludeLineIfStart,
+                brainCrusher, ct);
+        }
+
+        public Task<Result<long>> GenerateMarkdownStreamingAsync(
+            IEnumerable<FileContent> contents, Stream outputStream,
+            GcConfiguration config, CompiledContentPatterns contentFilter,
+            IEnumerable<string>? excludeLineIfStart,
+            IBrainCrusher? brainCrusher = null,
+            CancellationToken ct = default)
+        {
+            ProcessedContents.AddRange(contents);
+            CapturedExcludeLineIfStart = excludeLineIfStart;
+            CapturedBrainCrusher = brainCrusher;
+            if (ShouldFail)
+                return Task.FromResult(Result<long>.Failure("Generator failed"));
+            outputStream.WriteByte((byte)'#');
+            return Task.FromResult(Result<long>.Success(ReturnSize));
+        }
+    }
+
+    private class MockClipboardService : IClipboardService
+    {
+        public bool ShouldFail { get; set; }
+        public int CopyCallCount { get; private set; }
+
+        public Task<Result> CopyToClipboardAsync(Stream stream, CancellationToken ct)
+        {
+            return CopyToClipboardAsync(stream, new LimitsConfiguration(), false, ct);
+        }
+
+        public Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append,
+            CancellationToken ct)
+        {
+            CopyCallCount++;
+            return ShouldFail
+                ? Task.FromResult(Result.Failure("Clipboard failed"))
+                : Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> CopyToClipboardAsync(string content, CancellationToken ct)
+        {
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append,
+            CancellationToken ct)
+        {
+            return Task.FromResult(Result.Success());
+        }
+    }
+
+    private class MockLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Messages { get; } = new();
+
+        public void Log(LogLevel level, string message, Exception? ex = null)
+        {
+            Messages.Add((level, message));
+        }
     }
 }

@@ -1,8 +1,6 @@
 using gc.CLI.Services;
 using gc.Domain.Constants;
-using gc.Domain.Models.Configuration;
 using gc.Domain.Models;
-using Xunit;
 
 namespace gc.Tests.FeatureTests;
 

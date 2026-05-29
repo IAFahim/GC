@@ -3,14 +3,14 @@ using gc.Domain.Models.Configuration;
 namespace gc.Infrastructure.Configuration;
 
 /// <summary>
-/// Smart configuration merger that only applies non-default values from patches.
-/// Solves BUG-006: partial configs should not overwrite defaults with implicit false.
+///     Smart configuration merger that only applies non-default values from patches.
+///     Solves BUG-006: partial configs should not overwrite defaults with implicit false.
 /// </summary>
 public static class ConfigurationMerger
 {
     /// <summary>
-    /// Merges source into target, preserving target defaults for non-present fields.
-    /// Uses pattern matching to determine if a field was explicitly set vs defaulted.
+    ///     Merges source into target, preserving target defaults for non-present fields.
+    ///     Uses pattern matching to determine if a field was explicitly set vs defaulted.
     /// </summary>
     public static GcConfiguration Merge(GcConfiguration target, GcConfiguration source)
     {
@@ -29,7 +29,8 @@ public static class ConfigurationMerger
         };
     }
 
-    public static PerformanceConfiguration MergePerformance(PerformanceConfiguration target, PerformanceConfiguration source)
+    public static PerformanceConfiguration MergePerformance(PerformanceConfiguration target,
+        PerformanceConfiguration source)
     {
         return target with
         {
@@ -114,7 +115,6 @@ public static class ConfigurationMerger
         foreach (var kvp in target) result[kvp.Key] = kvp.Value;
 
         foreach (var kvp in source)
-        {
             if (result.TryGetValue(kvp.Key, out var existing))
             {
                 var mergedExtensions = new HashSet<string>(existing.Extensions, StringComparer.OrdinalIgnoreCase);
@@ -134,7 +134,7 @@ public static class ConfigurationMerger
             {
                 result[kvp.Key] = kvp.Value;
             }
-        }
+
         return result;
     }
 

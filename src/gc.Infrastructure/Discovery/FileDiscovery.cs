@@ -17,7 +17,8 @@ public sealed class FileDiscovery : IFileDiscovery
         _logger = logger;
     }
 
-    public async Task<Result<IEnumerable<string>>> DiscoverFilesAsync(string rootPath, GcConfiguration config, CancellationToken ct = default)
+    public async Task<Result<IEnumerable<string>>> DiscoverFilesAsync(string rootPath, GcConfiguration config,
+        CancellationToken ct = default)
     {
         try
         {
@@ -27,9 +28,8 @@ public sealed class FileDiscovery : IFileDiscovery
             if (mode == "git")
             {
                 if (!await IsGitRepositoryAsync(rootPath, ct))
-                {
-                    return Result<IEnumerable<string>>.Failure("Not a git repository. git discovery mode requires a git repository.");
-                }
+                    return Result<IEnumerable<string>>.Failure(
+                        "Not a git repository. git discovery mode requires a git repository.");
 
                 return await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
             }
@@ -37,10 +37,7 @@ public sealed class FileDiscovery : IFileDiscovery
             if (mode == "auto")
             {
                 var gitFiles = await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
-                if (gitFiles.IsSuccess)
-                {
-                    return gitFiles;
-                }
+                if (gitFiles.IsSuccess) return gitFiles;
             }
 
             return await DiscoverWithFileSystemAsync(rootPath, discoveryConfig, ct);
@@ -52,7 +49,8 @@ public sealed class FileDiscovery : IFileDiscovery
         }
     }
 
-    public async Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(string rootPath, string reference, GcConfiguration config, CancellationToken ct = default)
+    public async Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(string rootPath, string reference,
+        GcConfiguration config, CancellationToken ct = default)
     {
         try
         {
@@ -83,10 +81,7 @@ public sealed class FileDiscovery : IFileDiscovery
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
                 var trimmed = line.Trim().Replace('\\', '/');
-                if (!string.IsNullOrEmpty(trimmed))
-                {
-                    files.Add(trimmed);
-                }
+                if (!string.IsNullOrEmpty(trimmed)) files.Add(trimmed);
             }
 
             return Result<IEnumerable<string>>.Success(files);
@@ -97,14 +92,13 @@ public sealed class FileDiscovery : IFileDiscovery
         }
     }
 
-    public async Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(string clusterRoot, ClusterConfiguration clusterConfig, CancellationToken ct = default)
+    public async Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(string clusterRoot,
+        ClusterConfiguration clusterConfig, CancellationToken ct = default)
     {
         try
         {
             if (!Directory.Exists(clusterRoot))
-            {
                 return Result<IReadOnlyList<RepoInfo>>.Failure($"Cluster directory does not exist: {clusterRoot}");
-            }
 
             var skipDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -114,13 +108,9 @@ public sealed class FileDiscovery : IFileDiscovery
             };
 
             if (clusterConfig.SkipDirectories != null)
-            {
                 foreach (var skip in clusterConfig.SkipDirectories)
-                {
                     if (!string.IsNullOrWhiteSpace(skip))
                         skipDirs.Add(skip);
-                }
-            }
 
             var maxDepth = clusterConfig.MaxDepth > 0 ? clusterConfig.MaxDepth : 2;
             var repos = new List<RepoInfo>();
@@ -134,13 +124,10 @@ public sealed class FileDiscovery : IFileDiscovery
                 return Result<IReadOnlyList<RepoInfo>>.Success(repos);
             }
 
-            for (int i = 0; i < repos.Count; i++)
+            for (var i = 0; i < repos.Count; i++)
             {
                 var repo = repos[i];
-                if (!repo.IsValid)
-                {
-                    continue;
-                }
+                if (!repo.IsValid) continue;
 
                 var isValid = await IsGitRepositoryAsync(repo.RootPath, ct);
                 repos[i] = repo with { IsValid = isValid, Error = isValid ? null : "Git validation failed" };
@@ -153,9 +140,7 @@ public sealed class FileDiscovery : IFileDiscovery
             {
                 _logger.Warning($"{invalidCount} repo(s) failed validation and were skipped");
                 foreach (var invalid in repos.Where(r => !r.IsValid))
-                {
                     _logger.Debug($"  Skipped: {invalid.RelativePath} - {invalid.Error}");
-                }
             }
 
             _logger.Success($"Discovered {validRepos.Count} git repos in cluster directory");
@@ -189,11 +174,8 @@ public sealed class FileDiscovery : IFileDiscovery
         {
             realPath = Path.GetFullPath(currentDir);
             var dirInfo = new DirectoryInfo(currentDir);
-            var linkTarget = dirInfo.ResolveLinkTarget(returnFinalTarget: true);
-            if (linkTarget != null)
-            {
-                realPath = linkTarget.FullName;
-            }
+            var linkTarget = dirInfo.ResolveLinkTarget(true);
+            if (linkTarget != null) realPath = linkTarget.FullName;
         }
         catch (UnauthorizedAccessException)
         {
@@ -212,14 +194,11 @@ public sealed class FileDiscovery : IFileDiscovery
             return;
         }
 
-        bool isGitRepo = false;
+        var isGitRepo = false;
         try
         {
             var gitPath = Path.Combine(currentDir, ".git");
-            if (Directory.Exists(gitPath) || File.Exists(gitPath))
-            {
-                isGitRepo = true;
-            }
+            if (Directory.Exists(gitPath) || File.Exists(gitPath)) isGitRepo = true;
         }
         catch (UnauthorizedAccessException)
         {
@@ -243,10 +222,7 @@ public sealed class FileDiscovery : IFileDiscovery
             return;
         }
 
-        if (currentDepth >= maxDepth)
-        {
-            return;
-        }
+        if (currentDepth >= maxDepth) return;
 
         string[] subdirectories;
         try
@@ -270,31 +246,29 @@ public sealed class FileDiscovery : IFileDiscovery
 
             var dirName = Path.GetFileName(subdir);
 
-            if (skipDirs.Contains(dirName))
-            {
-                continue;
-            }
+            if (skipDirs.Contains(dirName)) continue;
 
             if (dirName.StartsWith('.') && dirName != ".github")
-            {
                 if (dirName.Length > 1 && !dirName.Equals(".github", StringComparison.OrdinalIgnoreCase))
-                {
                     continue;
-                }
-            }
 
             try
             {
                 var subdirInfo = new DirectoryInfo(subdir);
                 if ((subdirInfo.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
-                {
                     _logger.Debug($"Following symlink: {subdir}");
-                }
             }
-            catch (UnauthorizedAccessException) { continue; }
-            catch (IOException) { continue; }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+            catch (IOException)
+            {
+                continue;
+            }
 
-            await ScanForGitReposAsync(subdir, clusterRoot, skipDirs, maxDepth, repos, visitedRealPaths, ct, currentDepth + 1);
+            await ScanForGitReposAsync(subdir, clusterRoot, skipDirs, maxDepth, repos, visitedRealPaths, ct,
+                currentDepth + 1);
         }
     }
 
@@ -304,11 +278,12 @@ public sealed class FileDiscovery : IFileDiscovery
         // Checking for a .git directory or file (for worktrees) is much faster and sufficient
         // for our discovery purposes before we actually call git ls-files.
         var gitPath = Path.Combine(rootPath, ".git");
-        bool exists = Directory.Exists(gitPath) || File.Exists(gitPath);
+        var exists = Directory.Exists(gitPath) || File.Exists(gitPath);
         return Task.FromResult(exists);
     }
 
-    private async Task<Result<IEnumerable<string>>> DiscoverWithGitAsync(string rootPath, DiscoveryConfiguration config, CancellationToken ct)
+    private async Task<Result<IEnumerable<string>>> DiscoverWithGitAsync(string rootPath, DiscoveryConfiguration config,
+        CancellationToken ct)
     {
         try
         {
@@ -334,53 +309,53 @@ public sealed class FileDiscovery : IFileDiscovery
                 int bytesRead;
                 var position = 0;
 
-                while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(position, buffer.Length - position), ct)) > 0)
+                while ((bytesRead = await stream.ReadAsync(buffer.AsMemory(position, buffer.Length - position), ct)) >
+                       0)
                 {
                     var totalBytes = position + bytesRead;
                     var start = 0;
 
                     for (var i = 0; i < totalBytes; i++)
-                    {
                         if (buffer[i] == 0)
                         {
                             var span = buffer.AsSpan(start, i - start);
                             if (span.Length > 0)
                             {
-                                bool shouldAdd = true;
+                                var shouldAdd = true;
                                 if (config.MaxDepth.HasValue)
                                 {
-                                    int depth = 0;
+                                    var depth = 0;
                                     foreach (var b in span)
-                                    {
                                         if (b == (byte)'/' || b == (byte)'\\')
-                                        {
                                             depth++;
-                                        }
-                                    }
-                                    if (depth > config.MaxDepth.Value)
-                                    {
-                                        shouldAdd = false;
-                                    }
+
+                                    if (depth > config.MaxDepth.Value) shouldAdd = false;
                                 }
 
-                                if (shouldAdd)
-                                {
-                                    files.Add(Encoding.UTF8.GetString(span));
-                                }
+                                if (shouldAdd) files.Add(Encoding.UTF8.GetString(span));
                             }
+
                             start = i + 1;
                         }
-                    }
 
                     if (start < totalBytes)
                     {
                         var remaining = totalBytes - start;
                         if (remaining >= buffer.Length)
                         {
-                            _logger.Error($"Buffer overflow detected in git ls-files parsing. Remaining: {remaining}, Buffer: {buffer.Length}");
-                            try { process.Kill(true); } catch { }
+                            _logger.Error(
+                                $"Buffer overflow detected in git ls-files parsing. Remaining: {remaining}, Buffer: {buffer.Length}");
+                            try
+                            {
+                                process.Kill(true);
+                            }
+                            catch
+                            {
+                            }
+
                             break;
                         }
+
                         Array.Copy(buffer, start, buffer, 0, remaining);
                         position = remaining;
                     }
@@ -410,7 +385,8 @@ public sealed class FileDiscovery : IFileDiscovery
         }
     }
 
-    private async Task<Result<IEnumerable<string>>> DiscoverWithFileSystemAsync(string rootPath, DiscoveryConfiguration config, CancellationToken ct)
+    private async Task<Result<IEnumerable<string>>> DiscoverWithFileSystemAsync(string rootPath,
+        DiscoveryConfiguration config, CancellationToken ct)
     {
         var files = new List<string>(1024);
         var ignoredDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -434,27 +410,28 @@ public sealed class FileDiscovery : IFileDiscovery
             {
                 realPath = Path.GetFullPath(currentDir);
             }
-            catch (IOException) { continue; }
+            catch (IOException)
+            {
+                continue;
+            }
 
             if (config.FollowSymlinks)
-            {
                 try
                 {
                     var dirInfo = new DirectoryInfo(currentDir);
-                    var linkTarget = dirInfo.ResolveLinkTarget(returnFinalTarget: true);
-                    if (linkTarget != null)
-                    {
-                        realPath = linkTarget.FullName;
-                    }
+                    var linkTarget = dirInfo.ResolveLinkTarget(true);
+                    if (linkTarget != null) realPath = linkTarget.FullName;
                 }
-                catch { }
-            }
+                catch
+                {
+                }
 
             if (!visitedPaths.Add(realPath)) continue;
 
             try
             {
-                foreach (var entry in Directory.EnumerateFileSystemEntries(currentDir, "*", SearchOption.TopDirectoryOnly))
+                foreach (var entry in Directory.EnumerateFileSystemEntries(currentDir, "*",
+                             SearchOption.TopDirectoryOnly))
                 {
                     ct.ThrowIfCancellationRequested();
 
@@ -466,10 +443,8 @@ public sealed class FileDiscovery : IFileDiscovery
                             var dirName = Path.GetFileName(entry);
                             if (!ignoredDirs.Contains(dirName))
                             {
-                                if (!config.FollowSymlinks && (attr & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
-                                {
-                                    continue;
-                                }
+                                if (!config.FollowSymlinks &&
+                                    (attr & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint) continue;
 
                                 queue.Enqueue((entry, depth + 1));
                             }
@@ -481,8 +456,12 @@ public sealed class FileDiscovery : IFileDiscovery
                     }
                 }
             }
-            catch (UnauthorizedAccessException) { }
-            catch (IOException) { }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (IOException)
+            {
+            }
         }
 
         return Result<IEnumerable<string>>.Success(files);

@@ -1,18 +1,17 @@
-using gc.CLI.Models;
-using gc.CLI.Services;
-using gc.Domain.Common;
-using gc.Domain.Interfaces;
-using gc.Domain.Models.Configuration;
 using gc.Application.Services;
 using gc.Application.UseCases;
 using gc.Application.Validators;
+using gc.CLI.Models;
+using gc.CLI.Services;
+using gc.Domain.Interfaces;
+using gc.Domain.Models.Configuration;
+using gc.Infrastructure.Benchmark;
 using gc.Infrastructure.Configuration;
 using gc.Infrastructure.Discovery;
 using gc.Infrastructure.IO;
 using gc.Infrastructure.Logging;
 using gc.Infrastructure.System;
 using gc.Infrastructure.Testing;
-using gc.Infrastructure.Benchmark;
 
 namespace gc.CLI;
 
@@ -21,7 +20,11 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         using var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (s, e) => { e.Cancel = true; cts.Cancel(); };
+        Console.CancelKeyPress += (s, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
 
         var console = new SystemConsole();
         var logger = new ConsoleLogger(null, console);
@@ -39,16 +42,34 @@ public static class Program
         }
 
         var cliArgs = parseResult.Value!;
-        if (cliArgs.Debug) logger.Level = gc.Domain.Interfaces.LogLevel.Debug;
-        else if (cliArgs.Verbose) logger.Level = gc.Domain.Interfaces.LogLevel.Info;
+        if (cliArgs.Debug) logger.Level = LogLevel.Debug;
+        else if (cliArgs.Verbose) logger.Level = LogLevel.Info;
 
-        if (cliArgs.ShowHelp) { PrintHelp(); return 0; }
-        if (cliArgs.ShowVersion) { PrintVersion(); return 0; }
-        if (cliArgs.RunTests) { TestRunner.RunTests(); return 0; }
-        if (cliArgs.RunRealBenchmark) { await RealBenchmark.RunRealBenchmarkAsync(logger); return 0; }
+        if (cliArgs.ShowHelp)
+        {
+            PrintHelp();
+            return 0;
+        }
+
+        if (cliArgs.ShowVersion)
+        {
+            PrintVersion();
+            return 0;
+        }
+
+        if (cliArgs.RunTests)
+        {
+            TestRunner.RunTests();
+            return 0;
+        }
+
+        if (cliArgs.RunRealBenchmark)
+        {
+            await RealBenchmark.RunRealBenchmarkAsync(logger);
+            return 0;
+        }
 
         if (!string.IsNullOrEmpty(cliArgs.ExportSchema))
-        {
             try
             {
                 using var stream = typeof(Program).Assembly.GetManifestResourceStream("schema.json")
@@ -70,14 +91,12 @@ public static class Program
                 logger.Error($"Failed to export schema: {ex.Message}");
                 return 1;
             }
-        }
 
         var historyService = new HistoryService(configLoader.GetConfigDirectory(), logger);
 
         if (cliArgs.ShowHistory)
-        {
-            return await HistoryMenu.ShowAsync(historyService, parser, config, cliArgs.HistoryIndex, console, cts.Token);
-        }
+            return await HistoryMenu.ShowAsync(historyService, parser, config, cliArgs.HistoryIndex, console,
+                cts.Token);
 
         var discovery = new FileDiscovery(logger);
         var filter = new FileFilter(logger);
@@ -87,24 +106,22 @@ public static class Program
         var validator = new ConfigurationValidator();
         var configService = new ConfigurationService(logger, validator);
 
-        bool needsReporter = cliArgs.Profile || cliArgs.ShowStats || !string.IsNullOrEmpty(cliArgs.StatsOutput) || !string.IsNullOrEmpty(cliArgs.ProfileOutput);
-        ProfileReporter? profileReporter = needsReporter ? new ProfileReporter() : null;
+        var needsReporter = cliArgs.Profile || cliArgs.ShowStats || !string.IsNullOrEmpty(cliArgs.StatsOutput) ||
+                            !string.IsNullOrEmpty(cliArgs.ProfileOutput);
+        var profileReporter = needsReporter ? new ProfileReporter() : null;
 
         var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
 
-        var exitCode = await ExecuteAsync(Directory.GetCurrentDirectory(), cliArgs, config, useCase, configService, logger, cts.Token, profileReporter);
+        var exitCode = await ExecuteAsync(Directory.GetCurrentDirectory(), cliArgs, config, useCase, configService,
+            logger, cts.Token, profileReporter);
 
         if (profileReporter != null)
         {
             profileReporter.Stop();
-            
-            if (cliArgs.Profile || cliArgs.ShowStats)
-            {
-                logger.Info("\n" + profileReporter.ToMarkdown());
-            }
+
+            if (cliArgs.Profile || cliArgs.ShowStats) logger.Info("\n" + profileReporter.ToMarkdown());
 
             if (!string.IsNullOrEmpty(cliArgs.ProfileOutput))
-            {
                 try
                 {
                     File.WriteAllText(cliArgs.ProfileOutput, profileReporter.ToJson());
@@ -114,10 +131,8 @@ public static class Program
                 {
                     logger.Error($"Failed to write profile JSON: {ex.Message}");
                 }
-            }
 
             if (!string.IsNullOrEmpty(cliArgs.StatsOutput))
-            {
                 try
                 {
                     File.WriteAllText(cliArgs.StatsOutput, profileReporter.ToJson());
@@ -127,21 +142,20 @@ public static class Program
                 {
                     logger.Error($"Failed to write stats JSON: {ex.Message}");
                 }
-            }
         }
 
         if (exitCode == 0)
-        {
             await historyService.AddEntryAsync(
                 Directory.GetCurrentDirectory(),
                 args.Where(a => !a.Equals("--history", StringComparison.OrdinalIgnoreCase)).ToArray(),
                 cts.Token);
-        }
 
         return exitCode;
     }
 
-    internal static async Task<int> ExecuteAsync(string currentDirectory, CliArguments cliArgs, GcConfiguration config, GenerateContextUseCase useCase, ConfigurationService configService, ILogger logger, CancellationToken ct, ProfileReporter? profileReporter = null)
+    internal static async Task<int> ExecuteAsync(string currentDirectory, CliArguments cliArgs, GcConfiguration config,
+        GenerateContextUseCase useCase, ConfigurationService configService, ILogger logger, CancellationToken ct,
+        ProfileReporter? profileReporter = null)
     {
         if (cliArgs.InitConfig) return (await configService.InitializeConfigAsync()).IsSuccess ? 0 : 1;
         if (cliArgs.ValidateConfig)
@@ -149,10 +163,10 @@ public static class Program
             var validationResult = configService.ValidateConfig(config);
             return validationResult.IsSuccess && validationResult.Value?.IsValid == true ? 0 : 1;
         }
+
         if (cliArgs.DumpConfig) return configService.DumpConfig(config).IsSuccess ? 0 : 1;
 
         if (cliArgs.Force)
-        {
             config = config with
             {
                 Discovery = config.Discovery with
@@ -160,10 +174,8 @@ public static class Program
                     Mode = "filesystem"
                 }
             };
-        }
 
         if (cliArgs.Depth.HasValue)
-        {
             config = config with
             {
                 Discovery = config.Discovery with
@@ -171,21 +183,17 @@ public static class Program
                     MaxDepth = cliArgs.Depth
                 }
             };
-        }
 
         if (cliArgs.MaxMemoryBytes > 0)
-        {
             config = config with
             {
                 Limits = config.Limits with
                 {
-                    MaxMemoryBytes = cliArgs.MaxMemoryBytes.ToString() + "B"
+                    MaxMemoryBytes = cliArgs.MaxMemoryBytes + "B"
                 }
             };
-        }
 
         if (cliArgs.NoSort)
-        {
             config = config with
             {
                 Output = config.Output with
@@ -193,7 +201,6 @@ public static class Program
                     SortByPath = false
                 }
             };
-        }
 
         if (!string.IsNullOrEmpty(cliArgs.ExplainFilter))
         {
@@ -237,22 +244,20 @@ public static class Program
             // Shard mode for dry-run: show only the requested shard's files
             if (cliArgs.ShardInfo != null && cliArgs.ShardInfo.Of > 1)
             {
-                var splitter = new gc.Application.Services.ShardSplitter();
-                var shardLists = splitter.SplitIntoShards(entries, cliArgs.ShardInfo.Of, cliArgs.ShardInfo.Slice, logger);
-                var shardEntries = shardLists.Count >= cliArgs.ShardInfo.Slice ? shardLists[cliArgs.ShardInfo.Slice - 1] : entries;
-                logger.Info($"Files that would be processed (shard {cliArgs.ShardInfo.Slice}/{cliArgs.ShardInfo.Of}): {shardEntries.Count} of {entries.Count}");
-                foreach (var entry in shardEntries)
-                {
-                    Console.WriteLine(entry.DisplayPath ?? entry.Path);
-                }
+                var splitter = new ShardSplitter();
+                var shardLists =
+                    splitter.SplitIntoShards(entries, cliArgs.ShardInfo.Of, cliArgs.ShardInfo.Slice, logger);
+                var shardEntries = shardLists.Count >= cliArgs.ShardInfo.Slice
+                    ? shardLists[cliArgs.ShardInfo.Slice - 1]
+                    : entries;
+                logger.Info(
+                    $"Files that would be processed (shard {cliArgs.ShardInfo.Slice}/{cliArgs.ShardInfo.Of}): {shardEntries.Count} of {entries.Count}");
+                foreach (var entry in shardEntries) Console.WriteLine(entry.DisplayPath ?? entry.Path);
                 return 0;
             }
 
             logger.Info($"Files that would be processed ({entries.Count}):");
-            foreach (var entry in entries)
-            {
-                Console.WriteLine(entry.DisplayPath ?? entry.Path);
-            }
+            foreach (var entry in entries) Console.WriteLine(entry.DisplayPath ?? entry.Path);
             return 0;
         }
 
@@ -295,8 +300,11 @@ public static class Program
                         totalTokens += TokenEstimator.EstimateTokens(text);
                     }
                 }
-                catch { }
+                catch
+                {
+                }
             }
+
             logger.Info($"Estimated token count: {totalTokens:N0}");
             return 0;
         }

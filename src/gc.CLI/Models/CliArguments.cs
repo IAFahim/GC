@@ -1,10 +1,11 @@
+using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
 
 namespace gc.CLI.Models;
 
 /// <summary>
-/// Mutable CLI argument bag — populated by the declarative CliParser table.
-/// Properties use { get; set; } so the OptionSpec.Apply lambdas can write them.
+///     Mutable CLI argument bag — populated by the declarative CliParser table.
+///     Properties use { get; set; } so the OptionSpec.Apply lambdas can write them.
 /// </summary>
 public sealed class CliArguments
 {
@@ -69,5 +70,5 @@ public sealed class CliArguments
 
     public string? ExportSchema { get; set; }
 
-    public gc.Domain.Models.ShardInfo? ShardInfo { get; set; }
+    public ShardInfo? ShardInfo { get; set; }
 }

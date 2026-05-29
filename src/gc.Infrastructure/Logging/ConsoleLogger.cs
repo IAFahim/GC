@@ -1,17 +1,17 @@
 using gc.Domain.Interfaces;
 using gc.Domain.Models.Configuration;
+using gc.Infrastructure.System;
 
 namespace gc.Infrastructure.Logging;
 
 public sealed class ConsoleLogger : ILogger
 {
-    private bool _includeTimestamps;
     private readonly IConsole _console;
-    public LogLevel Level { get; set; }
+    private readonly bool _includeTimestamps;
 
     public ConsoleLogger(LoggingConfiguration? config = null, IConsole? console = null)
     {
-        _console = console ?? new gc.Infrastructure.System.SystemConsole();
+        _console = console ?? new SystemConsole();
         Level = config?.Level switch
         {
             "debug" => LogLevel.Debug,
@@ -22,6 +22,8 @@ public sealed class ConsoleLogger : ILogger
         };
         _includeTimestamps = config?.IncludeTimestamps ?? false;
     }
+
+    public LogLevel Level { get; set; }
 
     public void Log(LogLevel level, string message, Exception? ex = null)
     {
@@ -41,19 +43,12 @@ public sealed class ConsoleLogger : ILogger
         if (ex != null)
         {
             output += $": {ex.Message}";
-            if (Level == LogLevel.Debug)
-            {
-                output += $"\n{ex.StackTrace}";
-            }
+            if (Level == LogLevel.Debug) output += $"\n{ex.StackTrace}";
         }
 
         if (level == LogLevel.Error)
-        {
             _console.WriteErrorLine(output);
-        }
         else
-        {
             _console.WriteLine(output);
-        }
     }
 }

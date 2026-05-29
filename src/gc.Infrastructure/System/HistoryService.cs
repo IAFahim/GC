@@ -1,6 +1,4 @@
-using System.IO;
 using System.Text.Json;
-using System.Threading;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models.Configuration;
@@ -9,8 +7,8 @@ namespace gc.Infrastructure.System;
 
 public sealed class HistoryService : IHistoryService
 {
-    private readonly string _historyFilePath;
     private const int MaxHistoryEntries = 50;
+    private readonly string _historyFilePath;
     private readonly ILogger _logger;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
@@ -99,7 +97,8 @@ public sealed class HistoryService : IHistoryService
         if (!File.Exists(_historyFilePath))
             return [];
 
-        await using var fs = new FileStream(_historyFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.Asynchronous);
+        await using var fs = new FileStream(_historyFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
+            FileOptions.Asynchronous);
         using var reader = new StreamReader(fs);
         var json = await reader.ReadToEndAsync();
         if (string.IsNullOrWhiteSpace(json))
@@ -117,7 +116,8 @@ public sealed class HistoryService : IHistoryService
         var tmpPath = _historyFilePath + ".tmp." + Guid.NewGuid().ToString("N")[..8];
         try
         {
-            await using (var fs = new FileStream(tmpPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
+            await using (var fs = new FileStream(tmpPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096,
+                             FileOptions.Asynchronous))
             await using (var writer = new StreamWriter(fs))
             {
                 var typeInfo = GcJsonSerializerContext.Default.ListHistoryEntry;
@@ -131,9 +131,13 @@ public sealed class HistoryService : IHistoryService
         finally
         {
             if (File.Exists(tmpPath))
-            {
-                try { File.Delete(tmpPath); } catch { }
-            }
+                try
+                {
+                    File.Delete(tmpPath);
+                }
+                catch
+                {
+                }
         }
     }
 }

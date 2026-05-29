@@ -1,6 +1,3 @@
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using gc.Application.Services;
 using gc.Application.UseCases;
 using gc.Domain.Common;
@@ -10,8 +7,6 @@ using gc.Domain.Models.Configuration;
 using gc.Infrastructure.Discovery;
 using gc.Infrastructure.IO;
 using gc.Infrastructure.Logging;
-using gc.Infrastructure.System;
-using Xunit;
 
 namespace gc.Tests;
 
@@ -28,9 +23,7 @@ public class SnapshotTests : IDisposable
         // Copy test files to temp dir
         var testDataDir = Path.Combine(GetSourceRoot(), "tests", "gc.Tests", "TestData", "Snapshot");
         foreach (var file in Directory.GetFiles(testDataDir))
-        {
             File.Copy(file, Path.Combine(snapshotDir, Path.GetFileName(file)));
-        }
     }
 
     public void Dispose()
@@ -39,7 +32,9 @@ public class SnapshotTests : IDisposable
         {
             Directory.Delete(_tempDir, true);
         }
-        catch { }
+        catch
+        {
+        }
     }
 
     private static string GetSourceRoot()
@@ -53,19 +48,8 @@ public class SnapshotTests : IDisposable
             if (parent == null) break;
             dir = parent.FullName;
         }
-        return dir;
-    }
 
-    private class MockClipboard : IClipboardService
-    {
-        public Task<Result> CopyToClipboardAsync(Stream stream, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success());
-        public Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append = false, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success());
-        public Task<Result> CopyToClipboardAsync(string content, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success());
-        public Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append = false, CancellationToken ct = default) =>
-            Task.FromResult(Result.Success());
+        return dir;
     }
 
     [Fact]
@@ -99,22 +83,22 @@ public class SnapshotTests : IDisposable
         var result = await useCase.ExecuteAsync(
             testDir,
             config,
-            paths: Array.Empty<string>(),
-            excludes: new[] { "expected.golden", "actual.md" },
-            extensions: Array.Empty<string>(),
-            outputFile: outputPath,
-            appendMode: false,
-            excludeLineIfStart: null,
-            brainMode: false,
-            compress: false,
-            noCache: false,
-            excludePathPatterns: null,
-            includePathPatterns: null,
-            excludeContentPatterns: null,
-            includeContentPatterns: null,
-            ct: CancellationToken.None,
-            profileReporter: null,
-            unsafeDirectWrite: true
+            Array.Empty<string>(),
+            new[] { "expected.golden", "actual.md" },
+            Array.Empty<string>(),
+            outputPath,
+            false,
+            null,
+            false,
+            false,
+            false,
+            null,
+            null,
+            null,
+            null,
+            CancellationToken.None,
+            null,
+            true
         );
 
         Assert.True(result.IsSuccess, result.Error ?? "Unknown error");
@@ -125,9 +109,35 @@ public class SnapshotTests : IDisposable
         actualContent = actualContent.Replace("\r\n", "\n");
         expectedContent = expectedContent.Replace("\r\n", "\n");
 
-        var srcExpectedPath = Path.Combine(GetSourceRoot(), "tests", "gc.Tests", "TestData", "Snapshot", "expected.golden");
+        var srcExpectedPath =
+            Path.Combine(GetSourceRoot(), "tests", "gc.Tests", "TestData", "Snapshot", "expected.golden");
         await File.WriteAllTextAsync(srcExpectedPath, actualContent);
-        
+
         Assert.Equal(actualContent, actualContent);
+    }
+
+    private class MockClipboard : IClipboardService
+    {
+        public Task<Result> CopyToClipboardAsync(Stream stream, CancellationToken ct = default)
+        {
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append = false,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> CopyToClipboardAsync(string content, CancellationToken ct = default)
+        {
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append = false,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult(Result.Success());
+        }
     }
 }

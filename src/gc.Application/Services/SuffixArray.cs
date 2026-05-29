@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Text;
 
 namespace gc.Application.Services;
 
@@ -51,7 +50,7 @@ public static class SuffixArray
     }
 
     /// <summary>
-    /// Builds the LCP (Longest Common Prefix) array using Kasai's algorithm in O(N).
+    ///     Builds the LCP (Longest Common Prefix) array using Kasai's algorithm in O(N).
     /// </summary>
     public static int[] BuildLCP(string text, int[] sa)
     {
@@ -64,7 +63,6 @@ public static class SuffixArray
 
         var h = 0;
         for (var i = 0; i < n; i++)
-        {
             if (rank[i] > 0)
             {
                 var j = sa[rank[i] - 1];
@@ -73,14 +71,13 @@ public static class SuffixArray
                 lcp[rank[i]] = h;
                 if (h > 0) h--;
             }
-        }
 
         return lcp;
     }
 
     /// <summary>
-    /// Extracts maximal repeated substrings from text using suffix array + LCP.
-    /// Returns candidates sorted by (length - 1) * frequency descending.
+    ///     Extracts maximal repeated substrings from text using suffix array + LCP.
+    ///     Returns candidates sorted by (length - 1) * frequency descending.
     /// </summary>
     public static List<PhraseCandidate> ExtractMaximalPhrases(
         string text,
@@ -99,7 +96,6 @@ public static class SuffixArray
         var candidateMap = new Dictionary<string, int>(StringComparer.Ordinal);
 
         for (var i = 1; i < n; i++)
-        {
             if (lcp[i] >= minLength)
             {
                 var phrase = text.Substring(sa[i], lcp[i]);
@@ -111,7 +107,6 @@ public static class SuffixArray
                 candidateMap.TryGetValue(phrase, out var count);
                 candidateMap[phrase] = count + 1;
             }
-        }
 
         // Verify frequency by scanning the full text
         var results = new List<PhraseCandidate>();
@@ -139,13 +134,11 @@ public static class SuffixArray
 
             var isSubstr = false;
             foreach (var f in filtered)
-            {
                 if (f.Phrase.Contains(c.Phrase, StringComparison.Ordinal) && c.Frequency == f.Frequency)
                 {
                     isSubstr = true;
                     break;
                 }
-            }
 
             if (!isSubstr)
             {
@@ -170,6 +163,7 @@ public static class SuffixArray
             count++;
             idx = found + phrase.Length;
         }
+
         return count;
     }
 }

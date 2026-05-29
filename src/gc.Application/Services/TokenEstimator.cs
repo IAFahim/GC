@@ -3,18 +3,18 @@ using System.Runtime.CompilerServices;
 namespace gc.Application.Services;
 
 /// <summary>
-/// Fast, zero-allocation heuristic estimator for LLM token counts (o200k_base / cl100k_base).
-/// <para>
-/// The heuristic counts: alphanumeric word boundaries + CamelCase transitions + punctuation symbols.
-/// For example: "_configurationValidator" = _ + configuration + Validator = 3 tokens.
-/// "public async Task&lt;Result&gt;" = public + async + Task + &lt; + Result + &gt; = 6 tokens.
-/// "IConfigurationValidator" = I + Configuration + Validator = 3 tokens.
-/// </para>
+///     Fast, zero-allocation heuristic estimator for LLM token counts (o200k_base / cl100k_base).
+///     <para>
+///         The heuristic counts: alphanumeric word boundaries + CamelCase transitions + punctuation symbols.
+///         For example: "_configurationValidator" = _ + configuration + Validator = 3 tokens.
+///         "public async Task&lt;Result&gt;" = public + async + Task + &lt; + Result + &gt; = 6 tokens.
+///         "IConfigurationValidator" = I + Configuration + Validator = 3 tokens.
+///     </para>
 /// </summary>
 public static class TokenEstimator
 {
     /// <summary>
-    /// Estimates the number of LLM tokens for the given text using a BPE-aware heuristic.
+    ///     Estimates the number of LLM tokens for the given text using a BPE-aware heuristic.
     /// </summary>
     /// <param name="text">The input text to estimate tokens for.</param>
     /// <returns>An estimated token count.</returns>
@@ -23,13 +23,13 @@ public static class TokenEstimator
         if (text.Length == 0)
             return 0;
 
-        int tokens = 0;
-        int i = 0;
-        int length = text.Length;
+        var tokens = 0;
+        var i = 0;
+        var length = text.Length;
 
         while (i < length)
         {
-            char c = text[i];
+            var c = text[i];
 
             // Whitespace: skip, acts as a boundary separator
             if (IsWhitespace(c))
@@ -52,7 +52,7 @@ public static class TokenEstimator
 
             while (i < length)
             {
-                char current = text[i];
+                var current = text[i];
 
                 // Stop at whitespace or punctuation
                 if (IsWhitespace(current) || IsPunctuation(current))
@@ -68,7 +68,7 @@ public static class TokenEstimator
                 // CamelCase transition: lowercase-to-uppercase or digit-to-alpha or alpha-to-digit
                 if (i > 0)
                 {
-                    char prev = text[i - 1];
+                    var prev = text[i - 1];
 
                     // lowercase/digit followed by uppercase => new token boundary
                     // e.g., "configurationValidator" — the 'V' after 'n' triggers a new token
@@ -106,7 +106,7 @@ public static class TokenEstimator
     }
 
     /// <summary>
-    /// Estimates the number of LLM tokens for the given text using a BPE-aware heuristic.
+    ///     Estimates the number of LLM tokens for the given text using a BPE-aware heuristic.
     /// </summary>
     /// <param name="text">The input text to estimate tokens for.</param>
     /// <returns>An estimated token count.</returns>
@@ -118,28 +118,44 @@ public static class TokenEstimator
     // Range-check based char classification for speed (avoids char.IsXyz virtual calls)
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsUpper(char c) => (uint)(c - 'A') <= 'Z' - 'A';
+    private static bool IsUpper(char c)
+    {
+        return (uint)(c - 'A') <= 'Z' - 'A';
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsLower(char c) => (uint)(c - 'a') <= 'z' - 'a';
+    private static bool IsLower(char c)
+    {
+        return (uint)(c - 'a') <= 'z' - 'a';
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsDigit(char c) => (uint)(c - '0') <= '9' - '0';
+    private static bool IsDigit(char c)
+    {
+        return (uint)(c - '0') <= '9' - '0';
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsAlpha(char c) => IsUpper(c) || IsLower(c);
+    private static bool IsAlpha(char c)
+    {
+        return IsUpper(c) || IsLower(c);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsWhitespace(char c) =>
-        c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+    private static bool IsWhitespace(char c)
+    {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsPunctuation(char c) =>
+    private static bool IsPunctuation(char c)
+    {
         // Covers common punctuation and symbols that BPE tends to split on
         // ASCII ranges: 33-47 (!-/), 58-64 (:-@), 91-96 ([-`), 123-126 ({-~)
-        c == '!' || c == '"' || c == '#' || c == '$' || c == '%' || c == '&' ||
-        c == '\'' || c == '(' || c == ')' || c == '*' || c == '+' || c == ',' ||
-        c == '-' || c == '.' || c == '/' || c == ':' || c == ';' || c == '<' ||
-        c == '=' || c == '>' || c == '?' || c == '@' || c == '[' || c == '\\' ||
-        c == ']' || c == '^' || c == '`' || c == '{' || c == '|' || c == '}' || c == '~';
+        return c == '!' || c == '"' || c == '#' || c == '$' || c == '%' || c == '&' ||
+               c == '\'' || c == '(' || c == ')' || c == '*' || c == '+' || c == ',' ||
+               c == '-' || c == '.' || c == '/' || c == ':' || c == ';' || c == '<' ||
+               c == '=' || c == '>' || c == '?' || c == '@' || c == '[' || c == '\\' ||
+               c == ']' || c == '^' || c == '`' || c == '{' || c == '|' || c == '}' || c == '~';
+    }
 }

@@ -1,8 +1,9 @@
+using System.Text;
 using System.Text.Json;
+using gc.Application.Validators;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models.Configuration;
-using gc.Application.Validators;
 
 namespace gc.Application.Services;
 
@@ -30,7 +31,8 @@ public sealed class ConfigurationService
         if (File.Exists(configPath))
         {
             _logger.Info($"Configuration file already exists: {configPath}");
-            return Result.Failure($"Configuration file already exists: {configPath}. Manual intervention required to overwrite.");
+            return Result.Failure(
+                $"Configuration file already exists: {configPath}. Manual intervention required to overwrite.");
         }
 
         return await WriteDefaultConfigAsync(configPath);
@@ -65,7 +67,7 @@ public sealed class ConfigurationService
         try
         {
             var json = JsonSerializer.Serialize(defaultConfig, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(configPath, json, new System.Text.UTF8Encoding(false));
+            await File.WriteAllTextAsync(configPath, json, new UTF8Encoding(false));
             _logger.Info($"✓ Configuration file created: {configPath}");
             return Result.Success();
         }

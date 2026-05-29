@@ -4,15 +4,16 @@ using gc.Domain.Models;
 namespace gc.Application.Services;
 
 /// <summary>
-/// Splits a list of file entries into N shards and returns the requested slice.
-/// Smart grouping: groups by top-level module/folder first, then falls back to
-/// size-based sorting if too few distinct groups.
+///     Splits a list of file entries into N shards and returns the requested slice.
+///     Smart grouping: groups by top-level module/folder first, then falls back to
+///     size-based sorting if too few distinct groups.
 /// </summary>
 public sealed class ShardSplitter
 {
     /// <summary>
-    /// Group files into shards using smart grouping by module/folder first,
-    /// then by size when not enough distinct groups.</summary>
+    ///     Group files into shards using smart grouping by module/folder first,
+    ///     then by size when not enough distinct groups.
+    /// </summary>
     public List<List<FileEntry>> SplitIntoShards(
         IReadOnlyList<FileEntry> entries,
         int totalShards,
@@ -26,20 +27,18 @@ public sealed class ShardSplitter
 
         var groups = GroupByModule(entries);
 
-        if (groups.Count >= totalShards)
-        {
-            return AssignByGroup(groups, totalShards, desiredShardSlice, logger);
-        }
+        if (groups.Count >= totalShards) return AssignByGroup(groups, totalShards, desiredShardSlice, logger);
 
         // Not enough groups: merge small groups and re-split by size
-        logger?.Debug($"Shard: only {groups.Count} module groups for {totalShards} shards — using size-based splitting");
+        logger?.Debug(
+            $"Shard: only {groups.Count} module groups for {totalShards} shards — using size-based splitting");
 
         var merged = MergeSmallGroups(groups);
         return AssignBySize(merged, totalShards, desiredShardSlice, logger);
     }
 
     /// <summary>
-    /// Group entries by their top-level module (first path segment).
+    ///     Group entries by their top-level module (first path segment).
     /// </summary>
     private Dictionary<string, List<FileEntry>> GroupByModule(IReadOnlyList<FileEntry> entries)
     {
@@ -66,6 +65,7 @@ public sealed class ShardSplitter
                 list = new List<FileEntry>();
                 groups[key] = list;
             }
+
             list.Add(entry);
         }
 
@@ -86,18 +86,23 @@ public sealed class ShardSplitter
 
         // Spread groups across shards to balance size
         var shardBuckets = new List<FileEntry>[totalShards];
-        for (int i = 0; i < totalShards; i++) shardBuckets[i] = new List<FileEntry>();
+        for (var i = 0; i < totalShards; i++) shardBuckets[i] = new List<FileEntry>();
 
         foreach (var group in sortedGroups)
         {
             // Find the shard with the least total size so far
-            int smallestIdx = 0;
-            long smallestSize = shardBuckets[0].Sum(e => e.Size);
-            for (int i = 1; i < totalShards; i++)
+            var smallestIdx = 0;
+            var smallestSize = shardBuckets[0].Sum(e => e.Size);
+            for (var i = 1; i < totalShards; i++)
             {
-                long size = shardBuckets[i].Sum(e => e.Size);
-                if (size < smallestSize) { smallestSize = size; smallestIdx = i; }
+                var size = shardBuckets[i].Sum(e => e.Size);
+                if (size < smallestSize)
+                {
+                    smallestSize = size;
+                    smallestIdx = i;
+                }
             }
+
             shardBuckets[smallestIdx].AddRange(group);
         }
 
@@ -117,16 +122,10 @@ public sealed class ShardSplitter
         var misc = new List<FileEntry>();
 
         foreach (var (group, entries) in sorted)
-        {
             if ("_root".Equals(group) || entries.Count < 2)
-            {
                 misc.AddRange(entries);
-            }
             else
-            {
                 merged.Add(entries);
-            }
-        }
 
         if (misc.Count > 0) merged.Insert(0, misc);
         return merged;
@@ -145,35 +144,41 @@ public sealed class ShardSplitter
 
         // Sort files within each group by size descending
         var withSizes = sorted
-            .SelectMany(g => g.Select(e => (Entry: e, Size: e.Size)))
+            .SelectMany(g => g.Select(e => (Entry: e, e.Size)))
             .OrderByDescending(x => x.Size)
             .Select(x => x.Entry)
             .ToList();
 
         // Split sorted list into N roughly-equal shards
         var shardBuckets = new List<FileEntry>[totalShards];
-        for (int i = 0; i < totalShards; i++) shardBuckets[i] = new List<FileEntry>();
+        for (var i = 0; i < totalShards; i++) shardBuckets[i] = new List<FileEntry>();
 
         foreach (var entry in withSizes)
         {
             // Assign to shard with least accumulated size
-            int smallestIdx = 0;
-            long smallestSize = shardBuckets[0].Sum(e => e.Size);
-            for (int i = 1; i < totalShards; i++)
+            var smallestIdx = 0;
+            var smallestSize = shardBuckets[0].Sum(e => e.Size);
+            for (var i = 1; i < totalShards; i++)
             {
-                long size = shardBuckets[i].Sum(e => e.Size);
-                if (size < smallestSize) { smallestSize = size; smallestIdx = i; }
+                var size = shardBuckets[i].Sum(e => e.Size);
+                if (size < smallestSize)
+                {
+                    smallestSize = size;
+                    smallestIdx = i;
+                }
             }
+
             shardBuckets[smallestIdx].Add(entry);
         }
 
-        logger?.Info($"Shard {desiredShardSlice}/{totalShards}: {shardBuckets[desiredShardSlice - 1].Count} files ({shardBuckets[desiredShardSlice - 1].Sum(e => e.Size):N0} bytes)");
+        logger?.Info(
+            $"Shard {desiredShardSlice}/{totalShards}: {shardBuckets[desiredShardSlice - 1].Count} files ({shardBuckets[desiredShardSlice - 1].Sum(e => e.Size):N0} bytes)");
 
         return shardBuckets.ToList();
     }
 
     /// <summary>
-    /// Returns a preview of all shards — for --list output showing what each shard contains.
+    ///     Returns a preview of all shards — for --list output showing what each shard contains.
     /// </summary>
     public List<(int Slice, List<FileEntry> Files)> GetAllShardsPreview(
         IReadOnlyList<FileEntry> entries,
@@ -186,13 +191,10 @@ public sealed class ShardSplitter
 
         // Compute all shard buckets once by requesting slice 1 (we don't use the logger
         // output anyway — we just need the partitioned bucket lists)
-        var allBuckets = SplitIntoShards(entries, totalShards, 1, null);
+        var allBuckets = SplitIntoShards(entries, totalShards, 1);
 
         var results = new List<(int Slice, List<FileEntry> Files)>();
-        for (int i = 0; i < allBuckets.Count; i++)
-        {
-            results.Add((i + 1, allBuckets[i]));
-        }
+        for (var i = 0; i < allBuckets.Count; i++) results.Add((i + 1, allBuckets[i]));
         return results;
     }
 }

@@ -1,15 +1,16 @@
-using gc.Infrastructure.IO;
-using gc.Infrastructure.Logging;
-using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
-using gc.Domain.Common;
+using gc.Infrastructure.IO;
+using gc.Infrastructure.Logging;
 
 namespace gc.Tests;
 
 public class FileReaderTests
 {
-    private static FileReader CreateReader() => new(new ConsoleLogger());
+    private static FileReader CreateReader()
+    {
+        return new FileReader(new ConsoleLogger());
+    }
 
     // ─── ReadStreamingAsync basic ─────────────────────────────────────────
 
@@ -139,7 +140,7 @@ public class FileReaderTests
     public async Task ReadAsync_NonexistentFile_ReturnsFailure()
     {
         var reader = CreateReader();
-        var entry = new FileEntry(Root: "", Relative: "/nonexistent/file.txt", Extension: "txt", Language: "text", Size: 0);
+        var entry = new FileEntry("", "/nonexistent/file.txt", "txt", "text", 0);
         var result = await reader.ReadAsync(entry, CancellationToken.None);
 
         Assert.False(result.IsSuccess);
@@ -154,7 +155,7 @@ public class FileReaderTests
         {
             const string expected = "file content here";
             File.WriteAllText(tempFile, expected);
-            var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "txt", Language: "text", Size: new FileInfo(tempFile).Length);
+            var entry = new FileEntry("", tempFile, "txt", "text", new FileInfo(tempFile).Length);
             var reader = CreateReader();
             var result = await reader.ReadAsync(entry, CancellationToken.None);
 
@@ -176,7 +177,7 @@ public class FileReaderTests
         {
             // 3+ consecutive nulls triggers binary detection
             File.WriteAllBytes(tempFile, new byte[] { 0x00, 0x00, 0x00, 0x41 });
-            var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "bin", Language: "binary", Size: new FileInfo(tempFile).Length);
+            var entry = new FileEntry("", tempFile, "bin", "binary", new FileInfo(tempFile).Length);
             var reader = CreateReader();
             var result = await reader.ReadAsync(entry, CancellationToken.None);
 
@@ -200,7 +201,7 @@ public class FileReaderTests
             const string expected = "content within limit";
             File.WriteAllText(tempFile, expected);
             var limits = new LimitsConfiguration { MaxFileSize = "1MB" };
-            var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "txt", Language: "text", Size: new FileInfo(tempFile).Length);
+            var entry = new FileEntry("", tempFile, "txt", "text", new FileInfo(tempFile).Length);
             var reader = CreateReader();
             var result = await reader.ReadAsync(entry, limits, CancellationToken.None);
 
@@ -221,7 +222,7 @@ public class FileReaderTests
         {
             File.WriteAllText(tempFile, "this content is definitely more than one byte");
             var limits = new LimitsConfiguration { MaxFileSize = "1B" };
-            var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "txt", Language: "text", Size: new FileInfo(tempFile).Length);
+            var entry = new FileEntry("", tempFile, "txt", "text", new FileInfo(tempFile).Length);
             var reader = CreateReader();
             var result = await reader.ReadAsync(entry, limits, CancellationToken.None);
 
@@ -360,7 +361,7 @@ public class FileReaderTests
         try
         {
             File.WriteAllText(tempFile, "locked content");
-            var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "txt", Language: "text", Size: new FileInfo(tempFile).Length);
+            var entry = new FileEntry("", tempFile, "txt", "text", new FileInfo(tempFile).Length);
             var reader = CreateReader();
 
             // Open with FileShare.None to simulate a locked file.
@@ -389,7 +390,7 @@ public class FileReaderTests
             File.WriteAllText(tempFile, expected);
 
             // FileEntry with empty extension
-            var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "", Language: "", Size: new FileInfo(tempFile).Length);
+            var entry = new FileEntry("", tempFile, "", "", new FileInfo(tempFile).Length);
             var reader = CreateReader();
             var result = await reader.ReadAsync(entry, CancellationToken.None);
 

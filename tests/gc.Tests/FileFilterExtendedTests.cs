@@ -14,9 +14,11 @@ public class FileFilterExtendedTests
     [Fact]
     public void Filter_DotnetExtensions_Passes()
     {
-        var rawFiles = new[] { "Program.cs", "App.csproj", "Index.razor", "config.json", "app.exe", "lib.dll", "photo.png" };
+        var rawFiles = new[]
+            { "Program.cs", "App.csproj", "Index.razor", "config.json", "app.exe", "lib.dll", "photo.png" };
         var config = new GcConfiguration();
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), BuiltInPresets.PresetDotnet);
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            BuiltInPresets.PresetDotnet);
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -34,7 +36,8 @@ public class FileFilterExtendedTests
     {
         var rawFiles = new[] { "game.exe", "lib.dll", "icon.png", "video.mp4" };
         var config = new GcConfiguration();
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), BuiltInPresets.PresetDotnet);
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            BuiltInPresets.PresetDotnet);
 
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Value!);
@@ -45,7 +48,8 @@ public class FileFilterExtendedTests
     {
         var rawFiles = new[] { "index.html", "styles.css", "app.js", "app.ts", "Program.cs", "readme.md" };
         var config = new GcConfiguration();
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), BuiltInPresets.PresetWeb);
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            BuiltInPresets.PresetWeb);
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -80,9 +84,11 @@ public class FileFilterExtendedTests
     public void Filter_WithDotnetPreset_OnlyReturnsMatchingFiles()
     {
         var dotnetExtensions = BuiltInPresets.GetAllPresets()["dotnet"].Extensions;
-        var rawFiles = new[] { "Program.cs", "App.csproj", "Index.razor", "appsettings.json", "UnitTest.cs", "style.css" };
+        var rawFiles = new[]
+            { "Program.cs", "App.csproj", "Index.razor", "appsettings.json", "UnitTest.cs", "style.css" };
         var config = new GcConfiguration();
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), dotnetExtensions);
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            dotnetExtensions);
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -110,7 +116,8 @@ public class FileFilterExtendedTests
         // Empty extensions means no extension filter — everything passes (unless excluded)
         var rawFiles = new[] { "Program.cs", "app.js", "style.css", "README.md", "Dockerfile" };
         var config = new GcConfiguration();
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            Array.Empty<string>());
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -136,7 +143,8 @@ public class FileFilterExtendedTests
                 SystemIgnoredPatterns = new[] { "node_modules" }
             }
         };
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            Array.Empty<string>());
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -162,7 +170,8 @@ public class FileFilterExtendedTests
                 SystemIgnoredPatterns = new[] { "bin/", "obj/" }
             }
         };
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            Array.Empty<string>());
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -187,7 +196,8 @@ public class FileFilterExtendedTests
                 SystemIgnoredPatterns = new[] { ".git/" }
             }
         };
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            Array.Empty<string>());
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -224,7 +234,8 @@ public class FileFilterExtendedTests
     public void Filter_EmptyList_ReturnsEmptyList()
     {
         var config = new GcConfiguration();
-        var result = _filter.FilterFiles(Array.Empty<string>(), config, Array.Empty<string>(), Array.Empty<string>(), new[] { "cs" });
+        var result = _filter.FilterFiles(Array.Empty<string>(), config, Array.Empty<string>(), Array.Empty<string>(),
+            new[] { "cs" });
 
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Value!);
@@ -241,7 +252,8 @@ public class FileFilterExtendedTests
                 SystemIgnoredPatterns = new[] { "node_modules", ".git", "bin/" }
             }
         };
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            Array.Empty<string>());
 
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Value!);
@@ -254,7 +266,8 @@ public class FileFilterExtendedTests
         var rawFiles = new[] { "Dockerfile", "Makefile", "README", "src/main.cs" };
         var config = new GcConfiguration();
         // Include "Dockerfile" and "Makefile" as extension-like entries
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), new[] { "Dockerfile", "Makefile", "cs" });
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            new[] { "Dockerfile", "Makefile", "cs" });
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -270,7 +283,8 @@ public class FileFilterExtendedTests
     {
         var rawFiles = new[] { "Program.CS", "app.Js", "style.CSS", "readme.MD" };
         var config = new GcConfiguration();
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), new[] { "cs", "js", "css" });
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            new[] { "cs", "js", "css" });
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -287,7 +301,8 @@ public class FileFilterExtendedTests
         // BuiltInPresets maps "js" -> "javascript", "ts" -> "typescript", "cs" -> "cs"
         var rawFiles = new[] { "app.js", "module.ts", "Program.cs" };
         var config = new GcConfiguration();
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), new[] { "js", "ts", "cs" });
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            new[] { "js", "ts", "cs" });
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -311,7 +326,8 @@ public class FileFilterExtendedTests
         {
             Limits = new LimitsConfiguration { MaxFiles = 3 }
         };
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), new[] { "cs" });
+        var result =
+            _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), new[] { "cs" });
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -323,10 +339,10 @@ public class FileFilterExtendedTests
     {
         var rawFiles = new[]
         {
-            "src/main.cs",          // should pass
-            "node_modules/a.js",    // blocked by SystemIgnoredPatterns
-            "temp/debug.cs",        // blocked by excludePatterns
-            "src/util.cs"           // should pass
+            "src/main.cs", // should pass
+            "node_modules/a.js", // blocked by SystemIgnoredPatterns
+            "temp/debug.cs", // blocked by excludePatterns
+            "src/util.cs" // should pass
         };
         var config = new GcConfiguration
         {

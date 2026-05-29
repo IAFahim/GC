@@ -1,32 +1,28 @@
 using System.Buffers;
-using System.Collections.Frozen;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using gc.Application.Services;
-using gc.Domain.Common;
 using gc.Domain.Constants;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
-using gc.Infrastructure.Configuration;
 using gc.Infrastructure.Discovery;
-using gc.Infrastructure.IO;
 using gc.Infrastructure.Logging;
 using Xunit.Abstractions;
 
 namespace gc.Tests;
 
 /// <summary>
-/// Phase 1 performance optimization tests — zero-allocation hot path, Span-based filtering,
-/// SearchValues binary detection, StringBuilder pooling.
+///     Phase 1 performance optimization tests — zero-allocation hot path, Span-based filtering,
+///     SearchValues binary detection, StringBuilder pooling.
 /// </summary>
 public class Phase1PerformanceTests : IDisposable
 {
-    private readonly ITestOutputHelper _output;
-    private readonly ILogger _logger;
-    private readonly string _tempDir;
     private readonly GcConfiguration _config;
+    private readonly ILogger _logger;
+    private readonly ITestOutputHelper _output;
+    private readonly string _tempDir;
 
     public Phase1PerformanceTests(ITestOutputHelper output)
     {
@@ -35,6 +31,29 @@ public class Phase1PerformanceTests : IDisposable
         _tempDir = Path.Combine(Path.GetTempPath(), $"gc_phase1_test_{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempDir);
         _config = BuiltInPresets.GetDefaultConfiguration();
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (Directory.Exists(_tempDir))
+            {
+                foreach (var file in Directory.GetFiles(_tempDir, "*", SearchOption.AllDirectories))
+                    try
+                    {
+                        File.SetAttributes(file, FileAttributes.Normal);
+                    }
+                    catch
+                    {
+                    }
+
+                Directory.Delete(_tempDir, true);
+            }
+        }
+        catch
+        {
+        }
     }
 
     // ========================================================================
@@ -72,11 +91,11 @@ public class Phase1PerformanceTests : IDisposable
         var filter = new FileFilter(_logger);
         var files = new[]
         {
-            "src/test.CS",        // uppercase extension
-            "src/test.Razor",     // mixed case
-            "Dockerfile",          // no extension
-            "src/.gitignore",      // dot-file
-            "src/file.test.js",    // double extension
+            "src/test.CS", // uppercase extension
+            "src/test.Razor", // mixed case
+            "Dockerfile", // no extension
+            "src/.gitignore", // dot-file
+            "src/file.test.js" // double extension
         };
 
         var result = filter.FilterFiles(files, _config,
@@ -105,11 +124,9 @@ public class Phase1PerformanceTests : IDisposable
             .ToArray();
 
         var sw = Stopwatch.StartNew();
-        for (int iter = 0; iter < 100; iter++)
-        {
+        for (var iter = 0; iter < 100; iter++)
             filter.FilterFiles(forwardSlashPaths, _config,
                 Array.Empty<string>(), Array.Empty<string>(), new[] { "cs" });
-        }
         sw.Stop();
 
         _output.WriteLine($"100 iterations of 100-file filtering: {sw.ElapsedMilliseconds}ms");
@@ -260,11 +277,11 @@ public class Phase1PerformanceTests : IDisposable
     public async Task Optimization12_StringBuilderReuse_LineExclusion()
     {
         // Verify line exclusion still works with pooled StringBuilder
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var content = "// comment 1\ncode line\n// comment 2\nmore code\n// comment 3";
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: content.Length), content, content.Length)
+            new(new FileEntry("", "test.cs", "cs", "cs", content.Length), content, content.Length)
         };
 
         using var ms = new MemoryStream();
@@ -282,12 +299,12 @@ public class Phase1PerformanceTests : IDisposable
     public async Task Optimization12_StringBuilderReuse_MultipleFilesInSequence()
     {
         // Verify the pooled StringBuilder works correctly across multiple files
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = Enumerable.Range(0, 10).Select(i =>
         {
             var c = $"// header {i}\ncode_{i}_line1\n// footer {i}\ncode_{i}_line2";
             return new FileContent(
-                new FileEntry(Root: "", Relative: $"file{i}.cs", Extension: "cs", Language: "cs", Size: c.Length), c, c.Length);
+                new FileEntry("", $"file{i}.cs", "cs", "cs", c.Length), c, c.Length);
         }).ToList();
 
         using var ms = new MemoryStream();
@@ -297,7 +314,7 @@ public class Phase1PerformanceTests : IDisposable
         Assert.True(result.IsSuccess);
         var output = Encoding.UTF8.GetString(ms.ToArray());
 
-        for (int i = 0; i < 10; i++)
+        for (var i = 0; i < 10; i++)
         {
             Assert.Contains($"code_{i}_line1", output);
             Assert.Contains($"code_{i}_line2", output);
@@ -312,11 +329,11 @@ public class Phase1PerformanceTests : IDisposable
     public async Task Optimization12_StringBuilderReuse_EmptyLineExclusion()
     {
         // Verify excluding blank lines works with pooled SB
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var content = "line1\n\nline2\n\n\nline3";
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: "test.txt", Extension: "txt", Language: "text", Size: content.Length), content, content.Length)
+            new(new FileEntry("", "test.txt", "txt", "text", content.Length), content, content.Length)
         };
 
         using var ms = new MemoryStream();
@@ -334,13 +351,13 @@ public class Phase1PerformanceTests : IDisposable
     [Fact]
     public async Task Optimization12_Performance_LineExclusion_200Files()
     {
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = Enumerable.Range(0, 200).Select(i =>
         {
             var c = string.Join("\n", Enumerable.Range(0, 20).Select(j =>
                 j % 3 == 0 ? $"// comment {j}" : $"code_line_{j}"));
             return new FileContent(
-                new FileEntry(Root: "", Relative: $"file{i}.cs", Extension: "cs", Language: "cs", Size: c.Length), c, c.Length);
+                new FileEntry("", $"file{i}.cs", "cs", "cs", c.Length), c, c.Length);
         }).ToList();
 
         // Warm up
@@ -403,10 +420,10 @@ public class Phase1PerformanceTests : IDisposable
         data[100] = 0x00; // null byte = binary
         await File.WriteAllBytesAsync(tmpFile, data);
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "dat", Language: "dat", Size: -1), null, -1)
+            new(new FileEntry("", tmpFile, "dat", "dat", -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -425,10 +442,10 @@ public class Phase1PerformanceTests : IDisposable
         var tmpFile = Path.Combine(_tempDir, "text_test.txt");
         await File.WriteAllTextAsync(tmpFile, "This is valid text content\nWith multiple lines\n");
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "txt", Language: "text", Size: -1), null, -1)
+            new(new FileEntry("", tmpFile, "txt", "text", -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -451,10 +468,10 @@ public class Phase1PerformanceTests : IDisposable
         data[500] = 0x00; // null byte in first 4096 bytes
         await File.WriteAllBytesAsync(tmpFile, data);
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "bin", Language: "bin", Size: -1), null, -1)
+            new(new FileEntry("", tmpFile, "bin", "bin", -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -479,10 +496,10 @@ public class Phase1PerformanceTests : IDisposable
         data[5000] = 0x00; // after the 4096-byte check window
         await File.WriteAllBytesAsync(tmpFile, data);
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "txt", Language: "text", Size: -1), null, -1)
+            new(new FileEntry("", tmpFile, "txt", "text", -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -519,12 +536,10 @@ public class Phase1PerformanceTests : IDisposable
         Directory.CreateDirectory(filesDir);
 
         // Create text files
-        for (int i = 0; i < 5; i++)
-        {
+        for (var i = 0; i < 5; i++)
             File.WriteAllText(
                 Path.Combine(filesDir, $"file{i}.cs"),
                 $"// comment\nusing System;\nnamespace N{i} {{ class C{i} {{ }} }}");
-        }
 
         // Create a binary file (should be skipped)
         var binData = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x00 }; // PNG-like header with null
@@ -542,12 +557,12 @@ public class Phase1PerformanceTests : IDisposable
         Assert.True(entries.All(e => e.Size >= -1)); // Size populated or deferred for non-existent
 
         // Generate with line exclusion
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var contents = entries.Select(e =>
         {
             var fullPath = Path.Combine(filesDir, e.Path);
             return new FileContent(
-                new FileEntry(Root: "", Relative: fullPath, Extension: e.Extension, Language: e.Language, Size: -1), null, -1);
+                new FileEntry("", fullPath, e.Extension, e.Language, -1), null, -1);
         }).ToList();
 
         using var ms = new MemoryStream();
@@ -568,13 +583,13 @@ public class Phase1PerformanceTests : IDisposable
     public async Task EndToEnd_Phase1_ByteCountStillAccurate()
     {
         // Verify all Phase 1 changes maintain byte count accuracy
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
 
         // In-memory with line exclusion (uses pooled SB)
         var content = "// skip\nkeep1\n// skip\nkeep2\n// skip\nkeep3";
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: content.Length), content, content.Length)
+            new(new FileEntry("", "test.cs", "cs", "cs", content.Length), content, content.Length)
         };
 
         using var ms = new MemoryStream();
@@ -593,25 +608,7 @@ public class Phase1PerformanceTests : IDisposable
     {
         var current = AppContext.BaseDirectory;
         while (current != null && !File.Exists(Path.Combine(current, "gc.sln")))
-        {
             current = Directory.GetParent(current)?.FullName;
-        }
         return current;
-    }
-
-    public void Dispose()
-    {
-        try
-        {
-            if (Directory.Exists(_tempDir))
-            {
-                foreach (var file in Directory.GetFiles(_tempDir, "*", SearchOption.AllDirectories))
-                {
-                    try { File.SetAttributes(file, FileAttributes.Normal); } catch { }
-                }
-                Directory.Delete(_tempDir, true);
-            }
-        }
-        catch { }
     }
 }

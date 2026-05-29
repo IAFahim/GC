@@ -1,6 +1,4 @@
 using gc.Domain.Common;
-using gc.Domain.Constants;
-using Xunit;
 
 namespace gc.Tests.FeatureTests;
 

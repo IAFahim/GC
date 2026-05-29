@@ -1,8 +1,7 @@
-using gc.Domain.Common;
+using System.Text.Json;
 using gc.Domain.Models.Configuration;
 using gc.Infrastructure.Logging;
 using gc.Infrastructure.System;
-using System.Text.Json;
 
 namespace gc.Tests;
 
@@ -38,7 +37,8 @@ public class HistoryServiceTests
 
             Assert.False(File.Exists(historyPath));
 
-            var result = await service.AddEntryAsync(tempDir, ["clone", "https://github.com/test/repo"], CancellationToken.None);
+            var result = await service.AddEntryAsync(tempDir, ["clone", "https://github.com/test/repo"],
+                CancellationToken.None);
 
             Assert.True(result.IsSuccess);
             Assert.True(File.Exists(historyPath));
@@ -113,10 +113,7 @@ public class HistoryServiceTests
             var service = CreateService(tempDir);
 
             // Add 55 entries with unique dir+args combinations
-            for (int i = 0; i < 55; i++)
-            {
-                await service.AddEntryAsync($"/dir-{i}", [$"arg-{i}"], CancellationToken.None);
-            }
+            for (var i = 0; i < 55; i++) await service.AddEntryAsync($"/dir-{i}", [$"arg-{i}"], CancellationToken.None);
 
             var json = await File.ReadAllTextAsync(GetHistoryPath(tempDir));
             var entries = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.ListHistoryEntry);
@@ -353,7 +350,7 @@ public class HistoryServiceTests
             var service = CreateService(tempDir);
 
             // Fire off 10 adds quickly (sequentially since the service uses a lock)
-            for (int i = 0; i < 10; i++)
+            for (var i = 0; i < 10; i++)
             {
                 var result = await service.AddEntryAsync($"/rapid-{i}", [$"arg-{i}"], CancellationToken.None);
                 Assert.True(result.IsSuccess, $"Add {i} failed: {result.Error}");
@@ -383,7 +380,8 @@ public class HistoryServiceTests
         Assert.Equal(original.Directory, deserialized.Directory);
         Assert.Equal(original.Arguments, deserialized.Arguments);
         // DateTime may lose precision in JSON; compare to nearest second
-        Assert.Equal(original.LastRun.Ticks / TimeSpan.TicksPerSecond, deserialized.LastRun.Ticks / TimeSpan.TicksPerSecond);
+        Assert.Equal(original.LastRun.Ticks / TimeSpan.TicksPerSecond,
+            deserialized.LastRun.Ticks / TimeSpan.TicksPerSecond);
     }
 
     [Fact]

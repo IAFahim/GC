@@ -9,10 +9,8 @@ namespace gc.Infrastructure.System;
 
 public sealed class ClipboardService : IClipboardService
 {
-    private readonly ILogger _logger;
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
-
-    private enum OsKind { Windows, Mac, Linux }
+    private readonly ILogger _logger;
     private readonly OsKind _platform;
 
     public ClipboardService(ILogger logger)
@@ -27,17 +25,18 @@ public sealed class ClipboardService : IClipboardService
     {
         try
         {
-            bool success = _platform switch
+            var success = _platform switch
             {
                 OsKind.Windows => await CopyToWindowsAsync(stream, ct),
-                OsKind.Mac      => await CopyToMacAsync(stream, ct),
-                OsKind.Linux    => await CopyToLinuxAsync(stream, ct),
-                _               => false
+                OsKind.Mac => await CopyToMacAsync(stream, ct),
+                OsKind.Linux => await CopyToLinuxAsync(stream, ct),
+                _ => false
             };
 
             return success
                 ? Result.Success()
-                : Result.Failure("Failed to copy to clipboard. Clipboard tools may not be available. Use --output file.md to save to a file instead.");
+                : Result.Failure(
+                    "Failed to copy to clipboard. Clipboard tools may not be available. Use --output file.md to save to a file instead.");
         }
         catch (Exception ex)
         {
@@ -46,7 +45,8 @@ public sealed class ClipboardService : IClipboardService
         }
     }
 
-    public async Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append = false, CancellationToken ct = default)
+    public async Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append = false,
+        CancellationToken ct = default)
     {
         try
         {
@@ -58,11 +58,11 @@ public sealed class ClipboardService : IClipboardService
                 if (stream.CanSeek)
                 {
                     if (stream.Length > maxClipboardSize)
-                    {
-                        return Result.Failure($"Content size ({stream.Length} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
-                    }
+                        return Result.Failure(
+                            $"Content size ({stream.Length} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
                     stream.Position = 0;
                 }
+
                 return await CopyToClipboardAsync(stream, ct);
             }
 
@@ -90,13 +90,15 @@ public sealed class ClipboardService : IClipboardService
         return await CopyToClipboardAsync(ms, ct);
     }
 
-    public async Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append = false, CancellationToken ct = default)
+    public async Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append = false,
+        CancellationToken ct = default)
     {
         var maxClipboardSize = limits.GetMaxClipboardSizeBytes();
         return await CopyToClipboardStringInternalAsync(content, maxClipboardSize, append, ct);
     }
 
-    private async Task<Result> CopyToClipboardStringInternalAsync(string newContent, long maxClipboardSize, bool append, CancellationToken ct)
+    private async Task<Result> CopyToClipboardStringInternalAsync(string newContent, long maxClipboardSize, bool append,
+        CancellationToken ct)
     {
         try
         {
@@ -105,13 +107,9 @@ public sealed class ClipboardService : IClipboardService
             {
                 var existingContent = await GetClipboardTextAsync(ct);
                 if (!string.IsNullOrEmpty(existingContent))
-                {
                     finalContent = existingContent + Environment.NewLine + newContent;
-                }
                 else
-                {
                     finalContent = newContent;
-                }
             }
             else
             {
@@ -120,9 +118,8 @@ public sealed class ClipboardService : IClipboardService
 
             var finalBytes = Utf8NoBom.GetBytes(finalContent);
             if (finalBytes.Length > maxClipboardSize)
-            {
-                return Result.Failure($"Combined content size ({finalBytes.Length} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
-            }
+                return Result.Failure(
+                    $"Combined content size ({finalBytes.Length} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
 
             using var combinedStream = new MemoryStream(finalBytes);
             return await CopyToClipboardAsync(combinedStream, ct);
@@ -141,9 +138,9 @@ public sealed class ClipboardService : IClipboardService
             return _platform switch
             {
                 OsKind.Windows => await RunClipboardGetProcessAsync("powershell.exe", "-Command \"Get-Clipboard\"", ct),
-                OsKind.Mac      => await RunClipboardGetProcessAsync("pbpaste", "", ct),
-                OsKind.Linux    => await GetLinuxClipboardTextAsync(ct),
-                _               => string.Empty
+                OsKind.Mac => await RunClipboardGetProcessAsync("pbpaste", "", ct),
+                OsKind.Linux => await GetLinuxClipboardTextAsync(ct),
+                _ => string.Empty
             };
         }
         catch (Exception ex)
@@ -192,7 +189,8 @@ public sealed class ClipboardService : IClipboardService
     {
         // Prefer PowerShell's Set-Clipboard for UTF-8/UTF-16 safe handling.
         // clip.exe truncates/garbles non-ANSI text (including PUA symbols from brain mode).
-        var success = await RunClipboardProcessAsync("powershell.exe", "-Command \"$input | Out-String | Set-Clipboard\"", stream, ct);
+        var success = await RunClipboardProcessAsync("powershell.exe",
+            "-Command \"$input | Out-String | Set-Clipboard\"", stream, ct);
         if (success) return true;
 
         // Fallback to clip.exe only if PowerShell fails
@@ -201,6 +199,7 @@ public sealed class ClipboardService : IClipboardService
             stream.Position = 0;
             success = await RunClipboardProcessAsync("clip.exe", "", stream, ct);
         }
+
         return success;
     }
 
@@ -217,10 +216,12 @@ public sealed class ClipboardService : IClipboardService
             stream.Position = 0;
             success = await RunClipboardProcessAsync("xclip", "-selection clipboard", stream, ct);
         }
+
         return success;
     }
 
-    private async Task<bool> RunClipboardProcessAsync(string fileName, string arguments, Stream inputStream, CancellationToken ct)
+    private async Task<bool> RunClipboardProcessAsync(string fileName, string arguments, Stream inputStream,
+        CancellationToken ct)
     {
         try
         {
@@ -250,5 +251,12 @@ public sealed class ClipboardService : IClipboardService
             // Fail silently so the caller can try a fallback tool without polluting logs
             return false;
         }
+    }
+
+    private enum OsKind
+    {
+        Windows,
+        Mac,
+        Linux
     }
 }

@@ -1,14 +1,13 @@
-using System.Buffers;
 using System.Runtime.CompilerServices;
+using System.Text;
 using gc.Domain.Interfaces;
-using gc.Domain.Models.Configuration;
 
 namespace gc.Application.Services;
 
 /// <summary>
-/// Filters files by content using fast keyword matching.
-/// Uses Aho-Corasick for exact keywords.
-/// The automaton is built once and reused across all match operations.
+///     Filters files by content using fast keyword matching.
+///     Uses Aho-Corasick for exact keywords.
+///     The automaton is built once and reused across all match operations.
 /// </summary>
 public sealed class ContentFilter
 {
@@ -20,8 +19,8 @@ public sealed class ContentFilter
     }
 
     /// <summary>
-    /// Returns a compiled pattern set suitable for batch content filtering.
-    /// Compile once, use for all files.
+    ///     Returns a compiled pattern set suitable for batch content filtering.
+    ///     Compile once, use for all files.
     /// </summary>
     public CompiledContentPatterns CompilePatterns(string[] excludePatterns, string[] includePatterns)
     {
@@ -31,15 +30,9 @@ public sealed class ContentFilter
         // Build Aho-Corasick automatons
         AhoCorasick? excludeAc = null, includeAc = null;
 
-        if (excludePatterns.Length > 0)
-        {
-            excludeAc = new AhoCorasick(excludePatterns);
-        }
+        if (excludePatterns.Length > 0) excludeAc = new AhoCorasick(excludePatterns);
 
-        if (includePatterns.Length > 0)
-        {
-            includeAc = new AhoCorasick(includePatterns);
-        }
+        if (includePatterns.Length > 0) includeAc = new AhoCorasick(includePatterns);
 
         // Capture into closures for the domain struct
         var exAc = excludeAc;
@@ -55,14 +48,14 @@ public sealed class ContentFilter
             if (inAc == null) return true;
             if (AhoCorasickContainsAny(inAc, content))
                 return true;
-            
+
             return false;
         }
 
         bool shouldIncludeBytes(byte[] buffer, int length)
         {
             var checkLen = Math.Min(length, 8192);
-            var preview = System.Text.Encoding.UTF8.GetString(buffer, 0, checkLen);
+            var preview = Encoding.UTF8.GetString(buffer, 0, checkLen);
             return shouldIncludeText(preview);
         }
 
@@ -70,14 +63,14 @@ public sealed class ContentFilter
     }
 
     /// <summary>
-    /// Uses Aho-Corasick to check if content contains any of the exact keywords.
-    /// Single-pass O(n) scan for all keywords simultaneously.
+    ///     Uses Aho-Corasick to check if content contains any of the exact keywords.
+    ///     Single-pass O(n) scan for all keywords simultaneously.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool AhoCorasickContainsAny(AhoCorasick ac, string content)
     {
         var state = 0;
-        for (int i = 0; i < content.Length; i++)
+        for (var i = 0; i < content.Length; i++)
         {
             if (!ac.TryGetCharIndex(content[i], out var ci))
             {
@@ -93,15 +86,13 @@ public sealed class ContentFilter
                     state = next;
                     break;
                 }
+
                 if (state == 0) break;
                 state = ac.GetFail(state);
             }
 
             // Check output chain
-            if (ac.GetOutput(state) != -1)
-            {
-                return true;
-            }
+            if (ac.GetOutput(state) != -1) return true;
         }
 
         return false;

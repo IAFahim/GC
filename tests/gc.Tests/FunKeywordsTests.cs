@@ -1,19 +1,17 @@
-using gc.CLI.Models;
 using gc.CLI.Services;
 using gc.Domain.Constants;
 using gc.Domain.Models.Configuration;
-using Xunit;
 
 namespace gc.Tests;
 
 /// <summary>
-/// Tests for fun CLI keywords: grab, yeet, type, spit, zap, brain, horde.
-/// Also tests the new short flags: -g, -y, -t, -s, -z, -b.
+///     Tests for fun CLI keywords: grab, yeet, type, spit, zap, brain, horde.
+///     Also tests the new short flags: -g, -y, -t, -s, -z, -b.
 /// </summary>
 public class FunKeywordsTests
 {
-    private readonly CliParser _parser = new();
     private readonly GcConfiguration _config = BuiltInPresets.GetDefaultConfiguration();
+    private readonly CliParser _parser = new();
 
     // =========================================================================
     // 1. grab keyword → Paths
@@ -197,7 +195,8 @@ public class FunKeywordsTests
     public void FullCombo_GrabYeetTypeBrainSpit()
     {
         // gc grab src yeet tests type cs brain spit brain.md
-        var result = _parser.Parse(["grab", "src", "yeet", "tests", "type", "cs", "brain", "spit", "brain.md"], _config);
+        var result = _parser.Parse(["grab", "src", "yeet", "tests", "type", "cs", "brain", "spit", "brain.md"],
+            _config);
         Assert.True(result.IsSuccess);
         Assert.Contains("src", result.Value!.Paths);
         Assert.Contains("tests", result.Value!.Excludes);
@@ -210,7 +209,8 @@ public class FunKeywordsTests
     public void FullCombo_HordeYeetZapSpit()
     {
         // gc horde yeet bin obj zap "Console.Log" spit context.md
-        var result = _parser.Parse(["horde", "yeet", "bin", "obj", "zap", "Console.Log", "spit", "context.md"], _config);
+        var result = _parser.Parse(["horde", "yeet", "bin", "obj", "zap", "Console.Log", "spit", "context.md"],
+            _config);
         Assert.True(result.IsSuccess);
         Assert.True(result.Value!.Cluster);
         Assert.Equal(2, result.Value.Excludes.Length);

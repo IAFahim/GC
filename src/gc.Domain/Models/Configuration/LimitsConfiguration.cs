@@ -1,4 +1,3 @@
-using System.Globalization;
 using gc.Domain.Common;
 
 namespace gc.Domain.Models.Configuration;

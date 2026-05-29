@@ -1,13 +1,14 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Xunit.Abstractions;
 
 namespace gc.Tests;
 
 public class ClusterEdgeCaseTests : IDisposable
 {
+    private readonly string _binaryPath;
     private readonly ITestOutputHelper _output;
     private readonly string _testDir;
-    private readonly string _binaryPath;
 
     public ClusterEdgeCaseTests(ITestOutputHelper output)
     {
@@ -20,21 +21,22 @@ public class ClusterEdgeCaseTests : IDisposable
         // Find the project root by looking for the .sln file
         var current = AppContext.BaseDirectory;
         while (current != null && !File.Exists(Path.Combine(current, "gc.sln")))
-        {
             current = Directory.GetParent(current)?.FullName;
-        }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
 
-        var isWindows = System.Runtime.InteropServices.RuntimeInformation
-            .IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var isWindows = RuntimeInformation
+            .IsOSPlatform(OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
         _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
 
         if (!File.Exists(_binaryPath))
-        {
             throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
-        }
+    }
+
+    public void Dispose()
+    {
+        TryDeleteDirectory(_testDir);
     }
 
     // ─── Test 1: Cluster dir doesn't exist returns error ───
@@ -52,7 +54,7 @@ public class ClusterEdgeCaseTests : IDisposable
         Assert.Equal(1, result.ExitCode);
         Assert.DoesNotContain("✔ Exported", result.StandardOutput);
 
-        _output.WriteLine($"✅ Non-existent cluster dir correctly returns exit code 1");
+        _output.WriteLine("✅ Non-existent cluster dir correctly returns exit code 1");
     }
 
     // ─── Test 2: Cluster dir with only non-git folders ───
@@ -79,7 +81,7 @@ public class ClusterEdgeCaseTests : IDisposable
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("No git repositories found", result.StandardOutput);
 
-        _output.WriteLine($"✅ Non-git folders handled gracefully");
+        _output.WriteLine("✅ Non-git folders handled gracefully");
     }
 
     // ─── Test 3: Deeply nested repos (3+ levels deep) ───
@@ -123,7 +125,7 @@ public class ClusterEdgeCaseTests : IDisposable
         Assert.Contains("app.ts", content);
         Assert.Contains("core.rs", content);
 
-        _output.WriteLine($"✅ Deeply nested repos (up to 4 levels) discovered correctly");
+        _output.WriteLine("✅ Deeply nested repos (up to 4 levels) discovered correctly");
     }
 
     // ─── Test 4: Repos with identical file names produce distinct output ───
@@ -165,7 +167,7 @@ public class ClusterEdgeCaseTests : IDisposable
         Assert.Contains("FrontendProgram", content);
         Assert.Contains("BackendProgram", content);
 
-        _output.WriteLine($"✅ Identical file names produce distinct output sections");
+        _output.WriteLine("✅ Identical file names produce distinct output sections");
     }
 
     // ─── Test 5: Repos with binary files skip them gracefully ───
@@ -214,7 +216,7 @@ public class ClusterEdgeCaseTests : IDisposable
         // Binary files should be skipped — no raw PNG bytes in the output
         Assert.DoesNotContain("PK\u0003\u0004", content);
 
-        _output.WriteLine($"✅ Binary files skipped gracefully");
+        _output.WriteLine("✅ Binary files skipped gracefully");
     }
 
     // ─── Test 6: Empty git repos (no commits) handled ───
@@ -252,7 +254,7 @@ public class ClusterEdgeCaseTests : IDisposable
             Assert.Contains("hello.cs", content);
         }
 
-        _output.WriteLine($"✅ Empty git repos handled gracefully");
+        _output.WriteLine("✅ Empty git repos handled gracefully");
     }
 
     // ─── Test 7: Cluster with 20+ repos ───
@@ -266,7 +268,7 @@ public class ClusterEdgeCaseTests : IDisposable
         Directory.CreateDirectory(clusterDir);
 
         const int repoCount = 25;
-        for (int i = 0; i < repoCount; i++)
+        for (var i = 0; i < repoCount; i++)
         {
             var repoPath = Path.Combine(clusterDir, $"repo-{i:D3}");
             InitGitRepo(repoPath, $"repo-{i:D3}", new[]
@@ -284,10 +286,7 @@ public class ClusterEdgeCaseTests : IDisposable
         var content = File.ReadAllText(outputFile);
 
         // Verify all repos are represented
-        for (int i = 0; i < repoCount; i++)
-        {
-            Assert.Contains($"repo-{i:D3}", content);
-        }
+        for (var i = 0; i < repoCount; i++) Assert.Contains($"repo-{i:D3}", content);
 
         _output.WriteLine($"✅ All {repoCount} repos discovered and processed");
     }
@@ -325,7 +324,7 @@ public class ClusterEdgeCaseTests : IDisposable
         Assert.DoesNotContain("nested-repo", content);
         Assert.DoesNotContain("nested.cs", content);
 
-        _output.WriteLine($"✅ --cluster-depth 1 only finds top-level repos");
+        _output.WriteLine("✅ --cluster-depth 1 only finds top-level repos");
     }
 
     // ─── Test 9: --cluster-depth 5 finds very deep repos ───
@@ -365,7 +364,7 @@ public class ClusterEdgeCaseTests : IDisposable
         Assert.Contains("mid content", content);
         Assert.Contains("deep content", content);
 
-        _output.WriteLine($"✅ --cluster-depth 5 finds repos up to 5 levels deep");
+        _output.WriteLine("✅ --cluster-depth 5 finds repos up to 5 levels deep");
     }
 
     // ─── Test 10: Cluster with symlinks to repos outside the dir ───
@@ -404,7 +403,7 @@ public class ClusterEdgeCaseTests : IDisposable
         Assert.Contains("local-repo", content);
         Assert.Contains("local.cs", content);
 
-        _output.WriteLine($"✅ Symlinks to repos outside cluster dir are followed");
+        _output.WriteLine("✅ Symlinks to repos outside cluster dir are followed");
     }
 
     // ─── Test 11: Mixed git and non-git dirs at same level ───
@@ -449,7 +448,7 @@ public class ClusterEdgeCaseTests : IDisposable
         Assert.DoesNotContain("notes.txt", content);
         Assert.DoesNotContain("data.json", content);
 
-        _output.WriteLine($"✅ Only git repos processed; non-git dirs skipped");
+        _output.WriteLine("✅ Only git repos processed; non-git dirs skipped");
     }
 
     // ─── Test 12: Cluster dir with .gitignore files per repo ───
@@ -499,7 +498,7 @@ public class ClusterEdgeCaseTests : IDisposable
         // repo1's app.cs should be present, proving each repo has its own ignore rules
         Assert.Contains("app.cs", content);
 
-        _output.WriteLine($"✅ Each repo respects its own .gitignore independently");
+        _output.WriteLine("✅ Each repo respects its own .gitignore independently");
     }
 
     // ─── Helper Methods ───
@@ -511,10 +510,7 @@ public class ClusterEdgeCaseTests : IDisposable
         RunGit(repoPath, "config", "user.email", "test@example.com");
         RunGit(repoPath, "config", "user.name", "Test User");
 
-        foreach (var (fileName, content) in files)
-        {
-            AddFileToRepo(repoPath, fileName, content);
-        }
+        foreach (var (fileName, content) in files) AddFileToRepo(repoPath, fileName, content);
 
         // Ensure at least one commit exists
         if (files.Length == 0)
@@ -528,10 +524,7 @@ public class ClusterEdgeCaseTests : IDisposable
     {
         var fullPath = Path.Combine(repoPath, fileName);
         var dir = Path.GetDirectoryName(fullPath);
-        if (!string.IsNullOrEmpty(dir))
-        {
-            Directory.CreateDirectory(dir);
-        }
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         File.WriteAllText(fullPath, content);
         RunGit(repoPath, "add", fileName);
         RunGit(repoPath, "commit", "-m", $"Add {fileName}");
@@ -551,19 +544,15 @@ public class ClusterEdgeCaseTests : IDisposable
         };
 
         using var process = Process.Start(psi);
-        if (process != null)
-        {
-            process.WaitForExit();
-        }
+        if (process != null) process.WaitForExit();
     }
 
     private void CreateSymlink(string linkPath, string targetPath)
     {
-        var isWindows = System.Runtime.InteropServices.RuntimeInformation
-            .IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var isWindows = RuntimeInformation
+            .IsOSPlatform(OSPlatform.Windows);
 
         if (isWindows)
-        {
             // On Windows, create a directory junction if symlinks require admin
             Process.Start(new ProcessStartInfo
             {
@@ -574,9 +563,7 @@ public class ClusterEdgeCaseTests : IDisposable
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             })?.WaitForExit();
-        }
         else
-        {
             // On Linux/macOS, create a symbolic link
             Process.Start(new ProcessStartInfo
             {
@@ -587,7 +574,6 @@ public class ClusterEdgeCaseTests : IDisposable
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             })?.WaitForExit();
-        }
     }
 
     private ProcessResult RunGC(string args)
@@ -604,10 +590,7 @@ public class ClusterEdgeCaseTests : IDisposable
         };
 
         using var process = Process.Start(psi);
-        if (process == null)
-        {
-            return new ProcessResult(-1, "", "Failed to start process");
-        }
+        if (process == null) return new ProcessResult(-1, "", "Failed to start process");
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
@@ -617,9 +600,7 @@ public class ClusterEdgeCaseTests : IDisposable
         _output.WriteLine($"  Exit={process.ExitCode}");
         _output.WriteLine($"  Stdout: {Truncate(stdoutTask.Result, 500)}");
         if (!string.IsNullOrEmpty(stderrTask.Result))
-        {
             _output.WriteLine($"  Stderr: {Truncate(stderrTask.Result, 500)}");
-        }
 
         return new ProcessResult(process.ExitCode, stdoutTask.Result, stderrTask.Result);
     }
@@ -630,11 +611,6 @@ public class ClusterEdgeCaseTests : IDisposable
         return s.Length <= maxLength ? s : s[..maxLength] + "...(truncated)";
     }
 
-    public void Dispose()
-    {
-        TryDeleteDirectory(_testDir);
-    }
-
     private void TryDeleteDirectory(string path, int retryCount = 0)
     {
         if (!Directory.Exists(path)) return;
@@ -642,10 +618,13 @@ public class ClusterEdgeCaseTests : IDisposable
         try
         {
             foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
-            {
-                try { File.SetAttributes(file, FileAttributes.Normal); }
-                catch { }
-            }
+                try
+                {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                }
+                catch
+                {
+                }
 
             Directory.Delete(path, true);
         }

@@ -7,10 +7,7 @@ public sealed class ConfigurationValidator
 {
     public Result<ValidationResult> Validate(GcConfiguration? config)
     {
-        if (config == null)
-        {
-            return Result<ValidationResult>.Failure("Configuration is null");
-        }
+        if (config == null) return Result<ValidationResult>.Failure("Configuration is null");
 
         var errors = new List<string>();
         var warnings = new List<string>();
@@ -44,7 +41,8 @@ public sealed class ConfigurationValidator
             errors.Add($"Invalid MaxFileSize format: '{limits.MaxFileSize}'. Expected format: 100MB, 1GB, etc.");
 
         if (!ValidateMemorySize(limits.MaxClipboardSize))
-            errors.Add($"Invalid MaxClipboardSize format: '{limits.MaxClipboardSize}'. Expected format: 100MB, 1GB, etc.");
+            errors.Add(
+                $"Invalid MaxClipboardSize format: '{limits.MaxClipboardSize}'. Expected format: 100MB, 1GB, etc.");
 
         if (!ValidateMemorySize(limits.MaxMemoryBytes))
             errors.Add($"Invalid MaxMemoryBytes format: '{limits.MaxMemoryBytes}'. Expected format: 100MB, 1GB, etc.");
@@ -68,10 +66,7 @@ public sealed class ConfigurationValidator
                 errors.Add($"Invalid DiscoveryMode: '{discovery.Mode}'. Must be: auto, git, or filesystem");
         }
 
-        if (discovery.Cluster != null)
-        {
-            ValidateCluster(discovery.Cluster, errors, warnings);
-        }
+        if (discovery.Cluster != null) ValidateCluster(discovery.Cluster, errors, warnings);
     }
 
     private static void ValidateCluster(ClusterConfiguration cluster, List<string> errors, List<string> warnings)
@@ -89,13 +84,9 @@ public sealed class ConfigurationValidator
             warnings.Add("Cluster RepoSeparator is empty, repos will be concatenated without visual separation");
 
         if (cluster.SkipDirectories != null)
-        {
             foreach (var skip in cluster.SkipDirectories)
-            {
                 if (string.IsNullOrWhiteSpace(skip))
                     warnings.Add("Empty entry in Cluster SkipDirectories");
-            }
-        }
     }
 
     private static void ValidateFilters(FiltersConfiguration? filters, List<string> errors, List<string> warnings)
@@ -112,7 +103,8 @@ public sealed class ConfigurationValidator
                     warnings.Add("Empty pattern in SystemIgnoredPatterns");
     }
 
-    private static void ValidatePresets(IReadOnlyDictionary<string, PresetConfiguration>? presets, List<string> errors, List<string> warnings)
+    private static void ValidatePresets(IReadOnlyDictionary<string, PresetConfiguration>? presets, List<string> errors,
+        List<string> warnings)
     {
         if (presets == null || presets.Count == 0)
         {
@@ -120,13 +112,11 @@ public sealed class ConfigurationValidator
             return;
         }
 
-        foreach (var presetKvp in presets)
-        {
-            ValidatePreset(presetKvp.Key, presetKvp.Value, errors, warnings);
-        }
+        foreach (var presetKvp in presets) ValidatePreset(presetKvp.Key, presetKvp.Value, errors, warnings);
     }
 
-    private static void ValidatePreset(string presetName, PresetConfiguration? preset, List<string> errors, List<string> warnings)
+    private static void ValidatePreset(string presetName, PresetConfiguration? preset, List<string> errors,
+        List<string> warnings)
     {
         if (preset == null)
         {
@@ -135,13 +125,9 @@ public sealed class ConfigurationValidator
         }
 
         if (preset.Extensions == null || preset.Extensions.Length == 0)
-        {
             errors.Add($"Preset '{presetName}' has no extensions defined");
-        }
         else
-        {
             ValidatePresetExtensions(presetName, preset.Extensions, warnings);
-        }
     }
 
     private static void ValidatePresetExtensions(string presetName, string[] extensions, List<string> warnings)
@@ -159,7 +145,8 @@ public sealed class ConfigurationValidator
             warnings.Add($"Preset '{presetName}' contains duplicate extension: '{duplicate}'");
     }
 
-    private static void ValidateLanguageMappings(IReadOnlyDictionary<string, string>? mappings, List<string> errors, List<string> warnings)
+    private static void ValidateLanguageMappings(IReadOnlyDictionary<string, string>? mappings, List<string> errors,
+        List<string> warnings)
     {
         if (mappings == null)
         {

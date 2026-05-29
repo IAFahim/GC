@@ -1,9 +1,9 @@
+using System.Text.Json;
+using gc.CLI.Models;
 using gc.Domain.Common;
+using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
-using gc.Domain.Interfaces;
-using gc.CLI.Models;
-using System.Text.Json;
 
 namespace gc.Tests;
 
@@ -160,7 +160,7 @@ public class DomainModelTests
     [Fact]
     public void FileEntry_DefaultDisplayPath_ReturnsRelative()
     {
-        var entry = new FileEntry(Root: "", Relative: "some/path.cs", Extension: "cs", Language: "csharp", Size: 100);
+        var entry = new FileEntry("", "some/path.cs", "cs", "csharp", 100);
         // When no explicit Display is set, DisplayPath falls back to the Relative path
         Assert.Equal("some/path.cs", entry.DisplayPath);
     }
@@ -168,14 +168,14 @@ public class DomainModelTests
     [Fact]
     public void FileEntry_WithDisplayPath_SetCorrectly()
     {
-        var entry = new FileEntry(Root: "", Relative: "/some/path.cs", Extension: "cs", Language: "csharp", Size: 100, "custom/path.cs");
+        var entry = new FileEntry("", "/some/path.cs", "cs", "csharp", 100, "custom/path.cs");
         Assert.Equal("custom/path.cs", entry.DisplayPath);
     }
 
     [Fact]
     public void FileEntry_Properties_Set()
     {
-        var entry = new FileEntry(Root: "", Relative: "/a/b.cs", Extension: "cs", Language: "csharp", Size: 42, "b.cs");
+        var entry = new FileEntry("", "/a/b.cs", "cs", "csharp", 42, "b.cs");
         Assert.Equal("/a/b.cs", entry.Path);
         Assert.Equal("cs", entry.Extension);
         Assert.Equal("csharp", entry.Language);
@@ -187,7 +187,7 @@ public class DomainModelTests
     [Fact]
     public void FileContent_IsStreaming_WhenContentNull()
     {
-        var entry = new FileEntry(Root: "", Relative: "/x.cs", Extension: "cs", Language: "csharp", Size: 10);
+        var entry = new FileEntry("", "/x.cs", "cs", "csharp", 10);
         var content = new FileContent(entry, null, 10);
         Assert.True(content.IsStreaming);
     }
@@ -195,7 +195,7 @@ public class DomainModelTests
     [Fact]
     public void FileContent_IsNotStreaming_WhenContentSet()
     {
-        var entry = new FileEntry(Root: "", Relative: "/x.cs", Extension: "cs", Language: "csharp", Size: 10);
+        var entry = new FileEntry("", "/x.cs", "cs", "csharp", 10);
         var content = new FileContent(entry, "hello", 10);
         Assert.False(content.IsStreaming);
     }
@@ -413,13 +413,6 @@ public class DomainModelTests
         Assert.Equal("dbg", logEntries[4].Message);
     }
 
-    private sealed class TestLogger : ILogger
-    {
-        private readonly Action<LogLevel, string> _onLog;
-        public TestLogger(Action<LogLevel, string> onLog) => _onLog = onLog;
-        public void Log(LogLevel level, string message, Exception? ex = null) => _onLog(level, message);
-    }
-
     // ─── GcJsonSerializerContext ──────────────────────────────────────
 
     [Fact]
@@ -481,5 +474,20 @@ public class DomainModelTests
         Assert.False(args.Cluster);
         Assert.Equal(string.Empty, args.ClusterDir);
         Assert.Null(args.ClusterDepth);
+    }
+
+    private sealed class TestLogger : ILogger
+    {
+        private readonly Action<LogLevel, string> _onLog;
+
+        public TestLogger(Action<LogLevel, string> onLog)
+        {
+            _onLog = onLog;
+        }
+
+        public void Log(LogLevel level, string message, Exception? ex = null)
+        {
+            _onLog(level, message);
+        }
     }
 }

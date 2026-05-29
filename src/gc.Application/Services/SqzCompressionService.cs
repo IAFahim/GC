@@ -5,21 +5,20 @@ namespace gc.Application.Services;
 
 public sealed class SqzCompressionService
 {
-    private readonly bool _sqzAvailable;
-
     public SqzCompressionService()
     {
-        _sqzAvailable = IsSqzInstalled();
+        IsAvailable = IsSqzInstalled();
     }
 
-    public bool IsAvailable => _sqzAvailable;
+    public bool IsAvailable { get; }
+
+    public static string InstallHint =>
+        "sqz not found. Install: curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh" +
+        "\nSee: https://github.com/ojuschugh1/sqz";
 
     public async Task<string> CompressAsync(string markdownContent, bool noCache = false)
     {
-        if (!_sqzAvailable)
-        {
-            return markdownContent;
-        }
+        if (!IsAvailable) return markdownContent;
 
         var args = noCache ? "compress --no-cache" : "compress";
         using var process = new Process
@@ -33,7 +32,7 @@ public sealed class SqzCompressionService
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 StandardInputEncoding = Encoding.UTF8,
-                StandardOutputEncoding = Encoding.UTF8,
+                StandardOutputEncoding = Encoding.UTF8
             }
         };
 
@@ -83,8 +82,4 @@ public sealed class SqzCompressionService
             return false;
         }
     }
-
-    public static string InstallHint =>
-        "sqz not found. Install: curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh" +
-        "\nSee: https://github.com/ojuschugh1/sqz";
 }

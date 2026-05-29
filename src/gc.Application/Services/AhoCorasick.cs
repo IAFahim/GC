@@ -1,19 +1,17 @@
-using System.Buffers;
 using System.Runtime.CompilerServices;
-using System.Text;
 
 namespace gc.Application.Services;
 
 public sealed class AhoCorasick
 {
-    private readonly int[] _gotoFunc;
-    private readonly int[] _fail;
-    private readonly int[] _output;
     private readonly int _alphabetSize;
-    private readonly int _root;
-    private readonly int _nodeCount;
 
     private readonly Dictionary<char, int> _charMap;
+    private readonly int[] _fail;
+    private readonly int[] _gotoFunc;
+    private readonly int _nodeCount;
+    private readonly int[] _output;
+    private readonly int _root;
 
     public AhoCorasick(string[] patterns)
     {
@@ -35,8 +33,8 @@ public sealed class AhoCorasick
 
         var chars = new HashSet<char>();
         foreach (var p in validPatterns)
-            foreach (var c in p)
-                chars.Add(c);
+        foreach (var c in p)
+            chars.Add(c);
 
         _charMap = new Dictionary<char, int>(chars.Count);
         var idx = 0;
@@ -45,6 +43,7 @@ public sealed class AhoCorasick
             _charMap[c] = idx;
             idx++;
         }
+
         _alphabetSize = chars.Count;
 
         var maxNodes = validPatterns.Sum(p => p.Length) + 1;
@@ -69,8 +68,10 @@ public sealed class AhoCorasick
                     next = _nodeCount++;
                     SetGoto(currentState, ci, next);
                 }
+
                 currentState = next;
             }
+
             _output[currentState] = i;
         }
 
@@ -124,8 +125,8 @@ public sealed class AhoCorasick
     }
 
     /// <summary>
-    /// Try to get the index for a character in the automaton's alphabet.
-    /// Returns false if the character was never seen in any pattern.
+    ///     Try to get the index for a character in the automaton's alphabet.
+    ///     Returns false if the character was never seen in any pattern.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetCharIndex(char c, out int index)
@@ -134,8 +135,8 @@ public sealed class AhoCorasick
     }
 
     /// <summary>
-    /// Get the next state from current state via character index.
-    /// Returns -1 if no transition exists.
+    ///     Get the next state from current state via character index.
+    ///     Returns -1 if no transition exists.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetGoto(int state, int charIndex)
@@ -144,7 +145,7 @@ public sealed class AhoCorasick
     }
 
     /// <summary>
-    /// Get the fail function value for a state.
+    ///     Get the fail function value for a state.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetFail(int state)
@@ -153,7 +154,7 @@ public sealed class AhoCorasick
     }
 
     /// <summary>
-    /// Get the output index for a state (-1 means no pattern matched).
+    ///     Get the output index for a state (-1 means no pattern matched).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetOutput(int state)

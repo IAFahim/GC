@@ -1,14 +1,14 @@
-using Xunit;
+using gc.Application.Services;
 using gc.Domain.Common;
 using gc.Domain.Models;
-using gc.Domain.Constants;
-using gc.Application.Services;
+using gc.Infrastructure.Logging;
+using gc.Infrastructure.System;
 
 namespace gc.Tests;
 
 /// <summary>
-/// Unit tests for core algorithms in gc.
-/// These tests verify correctness of foundational components.
+///     Unit tests for core algorithms in gc.
+///     These tests verify correctness of foundational components.
 /// </summary>
 public class CoreAlgorithmTests
 {
@@ -58,7 +58,7 @@ public class CoreAlgorithmTests
     public void Result_T_Tap_DoesNotExecuteOnFailure()
     {
         var failure = Result<string>.Failure("error");
-        string? captured = "initial";
+        var captured = "initial";
         failure.Tap(s => captured = s);
         Assert.Equal("initial", captured);
     }
@@ -114,7 +114,7 @@ public class CoreAlgorithmTests
     {
         var symbol0 = SingleTokenLexicon.GetSymbol(0);
         var symbolNeg = SingleTokenLexicon.GetSymbol(-1);
-        
+
         // Negative index wraps to the last element
         var lastSymbol = SingleTokenLexicon.GetSymbol(SingleTokenLexicon.Count - 1);
         Assert.Equal(lastSymbol, symbolNeg);
@@ -218,9 +218,9 @@ public class CoreAlgorithmTests
         // An adversarial pattern that causes exponential backtracking
         var pattern = "**/**/**/**/nomatch.txt";
         var input = "this/is/a/very/long/path/that/wont/match/at/all.txt";
-        
+
         // With budget limit, this should return quickly rather than hanging
-        var result = GlobMatcher.IsMatch(input, pattern, maxBacktrackIterations: 100);
+        var result = GlobMatcher.IsMatch(input, pattern, 100);
         // Should not throw - returns false when budget exhausted
         Assert.False(result);
     }
@@ -232,9 +232,9 @@ public class CoreAlgorithmTests
     [Fact]
     public void ContentFilter_EmptyPatterns_ReturnsTrue()
     {
-        var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, new gc.Infrastructure.System.SystemConsole());
+        var logger = new ConsoleLogger(null, new SystemConsole());
         var filter = new ContentFilter(logger);
-        
+
         var compiled = filter.CompilePatterns(Array.Empty<string>(), Array.Empty<string>());
         Assert.True(compiled.ShouldInclude("any content"));
     }
@@ -242,9 +242,9 @@ public class CoreAlgorithmTests
     [Fact]
     public void ContentFilter_ExcludeMatch_ReturnsFalse()
     {
-        var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, new gc.Infrastructure.System.SystemConsole());
+        var logger = new ConsoleLogger(null, new SystemConsole());
         var filter = new ContentFilter(logger);
-        
+
         var compiled = filter.CompilePatterns(new[] { "TODO" }, Array.Empty<string>());
         Assert.False(compiled.ShouldInclude("this contains TODO and needs review"));
     }
@@ -252,9 +252,9 @@ public class CoreAlgorithmTests
     [Fact]
     public void ContentFilter_IncludeMatch_ReturnsTrue()
     {
-        var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, new gc.Infrastructure.System.SystemConsole());
+        var logger = new ConsoleLogger(null, new SystemConsole());
         var filter = new ContentFilter(logger);
-        
+
         var compiled = filter.CompilePatterns(Array.Empty<string>(), new[] { "IMPORTANT" });
         Assert.True(compiled.ShouldInclude("this contains IMPORTANT keyword"));
     }
@@ -262,9 +262,9 @@ public class CoreAlgorithmTests
     [Fact]
     public void ContentFilter_NoIncludeMatch_ReturnsFalse()
     {
-        var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, new gc.Infrastructure.System.SystemConsole());
+        var logger = new ConsoleLogger(null, new SystemConsole());
         var filter = new ContentFilter(logger);
-        
+
         var compiled = filter.CompilePatterns(Array.Empty<string>(), new[] { "important" });
         Assert.False(compiled.ShouldInclude("this has no keyword"));
     }
@@ -272,9 +272,9 @@ public class CoreAlgorithmTests
     [Fact]
     public void ContentFilter_WildcardPattern_Works()
     {
-        var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, new gc.Infrastructure.System.SystemConsole());
+        var logger = new ConsoleLogger(null, new SystemConsole());
         var filter = new ContentFilter(logger);
-        
+
         var compiled = filter.CompilePatterns(Array.Empty<string>(), new[] { "auto-*" });
         // After refactor to exact match, "auto-*" expects literal "auto-*" 
         Assert.True(compiled.ShouldInclude("this is auto-* code"));
@@ -339,13 +339,14 @@ public class CoreAlgorithmTests
     {
         var compressor = new DynamicCompressor();
         // Use a sufficiently long input with repeated phrases
-        var input = string.Join("\n", Enumerable.Range(0, 10).Select(i => $"public class Class{i} {{ }} public Class{i}() {{ }}"));
-        
+        var input = string.Join("\n",
+            Enumerable.Range(0, 10).Select(i => $"public class Class{i} {{ }} public Class{i}() {{ }}"));
+
         var result = compressor.Compress(input);
-        
+
         // Verify legend contains expected format
         Assert.Contains("# GC_DICT", result.Legend);
-        
+
         // Verify output can be understood with legend
         Assert.NotEmpty(result.Legend);
     }
@@ -357,16 +358,16 @@ public class CoreAlgorithmTests
     [Fact]
     public void FileEntry_Size_Persists()
     {
-        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "src/test.cs", Language: "csharp", Size: 1234);
+        var entry = new FileEntry("", "test.cs", "src/test.cs", "csharp", 1234);
         Assert.Equal(1234, entry.Size);
     }
 
     [Fact]
     public void FileEntry_With_ClonesCorrectly()
     {
-        var original = new FileEntry(Root: "", Relative: "test.cs", Extension: "src/test.cs", Language: "csharp", Size: 1234);
+        var original = new FileEntry("", "test.cs", "src/test.cs", "csharp", 1234);
         var cloned = original with { Language = "cs" };
-        
+
         Assert.Equal("csharp", original.Language);
         Assert.Equal("cs", cloned.Language);
         Assert.Equal(original.Size, cloned.Size);

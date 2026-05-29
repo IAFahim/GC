@@ -1,0 +1,828 @@
+Solution gc.sln
+    Project gc.Application
+      src\gc.Application\Adapters\OutputTransformAdapters.cs:16 Convert into primary constructor
+      src\gc.Application\Adapters\OutputTransformAdapters.cs:37 Convert into primary constructor
+      src\gc.Application\Adapters\OutputTransformAdapters.cs:60 Convert into primary constructor
+      src\gc.Application\Adapters\OutputTransformAdapters.cs:75 Parameter 'ct' is never used
+      src\gc.Application\Adapters\OutputTransformAdapters.cs:90 Convert into primary constructor
+      src\gc.Application\Adapters\OutputTransformAdapters.cs:98 Method 'Apply' is never used
+      src\gc.Application\Native\LinuxFastPath.cs: Using directive is not required by the code and can be safely removed
+      src\gc.Application\Native\LinuxFastPath.cs:2 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Native\LinuxFastPath.cs:4 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Native\LinuxFastPath.cs:5 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Native\LinuxFastPath.cs:12 Constant 'O_RDONLY' can be made private
+      src\gc.Application\Native\LinuxFastPath.cs:12 Name 'O_RDONLY' does not match rule 'Constant fields (not private)'. Suggested name is 'ORdonly'.
+      src\gc.Application\Native\LinuxFastPath.cs:13 Constant 'O_NOATIME' can be made private
+      src\gc.Application\Native\LinuxFastPath.cs:13 Name 'O_NOATIME' does not match rule 'Constant fields (not private)'. Suggested name is 'ONoatime'.
+      src\gc.Application\Native\LinuxFastPath.cs:14 Name 'POSIX_FADV_SEQUENTIAL' does not match rule 'Constant fields (not private)'. Suggested name is 'PosixFadvSequential'.
+      src\gc.Application\Native\LinuxFastPath.cs:15 Constant 'POSIX_FADV_WILLNEED' can be made private
+      src\gc.Application\Native\LinuxFastPath.cs:15 Name 'POSIX_FADV_WILLNEED' does not match rule 'Constant fields (not private)'. Suggested name is 'PosixFadvWillneed'.
+      src\gc.Application\Native\LinuxFastPath.cs:18 Constant 'DefaultPrewarmFileLimit' can be made private
+      src\gc.Application\Native\LinuxFastPath.cs:19 Constant 'DefaultPrewarmBytesPerFile' can be made private
+      src\gc.Application\Native\LinuxFastPath.cs:25 Method 'close' can be made private
+      src\gc.Application\Native\LinuxFastPath.cs:31 Method 'readahead' can be made private
+      src\gc.Application\Native\LinuxFastPath.cs:37 Method 'PrewarmAsync' is never used
+      src\gc.Application\Native\LinuxFastPath.cs:46 This async method lacks 'await' operators and will run synchronously. Consider using 'await' for non-blocking API calls, or remove the 'async' modifier to avoid generating a state machine for this method.
+      src\gc.Application\Native\LinuxFastPath.cs:68 Method has 'async' overload
+      src\gc.Application\Native\LinuxFastPath.cs:74 Method has 'async' overload
+      src\gc.Application\Native\LinuxFastPath.cs:84 Method 'Prewarm' is never used
+      src\gc.Application\Services\AhoCorasick.cs: Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\AhoCorasick.cs:3 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\AhoCorasick.cs:13 The field is always assigned before being used and can be converted into a local variable
+      src\gc.Application\Services\AhoCorasick.cs:14 The field is always assigned before being used and can be converted into a local variable
+      src\gc.Application\Services\AhoCorasick.cs:28 Use collection expression
+      src\gc.Application\Services\AhoCorasick.cs:29 Use collection expression
+      src\gc.Application\Services\BrainCrusher.cs:30 Field 'HashCommentExtensions' is never used
+      src\gc.Application\Services\BrainCrusher.cs:44 Duplicate element '"cpp"' in the initialization of a 'HashSet' collection
+      src\gc.Application\Services\BrainCrusher.cs:48 Method 'IsShebangLine' is never used
+      src\gc.Application\Services\BrainCrusher.cs:51 Field can be made readonly
+      src\gc.Application\Services\BrainCrusher.cs:53 Convert into primary constructor
+      src\gc.Application\Services\BrainCrusher.cs:81 Method 'StripComments' can be made private
+      src\gc.Application\Services\BrainCrusher.cs:317 Duplicated statements
+      src\gc.Application\Services\BrainCrusher.cs:335 Method 'CollapseWhitespace' can be made private
+      src\gc.Application\Services\ConfigurationService.cs:14 Convert into primary constructor
+      src\gc.Application\Services\ContentFilter.cs: Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\ContentFilter.cs:4 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\ContentFilter.cs:15 Field '_logger' is assigned but its value is never used
+      src\gc.Application\Services\ContentFilter.cs:17 Convert into primary constructor
+      src\gc.Application\Services\ContentFilter.cs:48 Name 'shouldIncludeText' does not match rule 'Local functions'. Suggested name is 'ShouldIncludeText'.
+      src\gc.Application\Services\ContentFilter.cs:62 Name 'shouldIncludeBytes' does not match rule 'Local functions'. Suggested name is 'ShouldIncludeBytes'.
+      src\gc.Application\Services\ContentFilter.cs:77 Method 'AhoCorasickContainsAny' can be made private
+      src\gc.Application\Services\ContentFilter.cs:80 'for' loop can be converted into 'foreach' loop
+      src\gc.Application\Services\DynamicCompressor.cs:160 Convert into '?:' expression
+      src\gc.Application\Services\DynamicCompressor.cs:191 Convert into '?:' expression
+      src\gc.Application\Services\FileFilter.cs:15 Convert into primary constructor
+      src\gc.Application\Services\FileFilter.cs:33 Conditional access qualifier expression is never null according to nullable reference types' annotations
+      src\gc.Application\Services\FileFilter.cs:101 Redundant string interpolation
+      src\gc.Application\Services\FileFilter.cs:105 Redundant string interpolation
+      src\gc.Application\Services\FileFilter.cs:108 Conditional access qualifier expression is never null according to nullable reference types' annotations
+      src\gc.Application\Services\FileFilter.cs:125 Redundant string interpolation
+      src\gc.Application\Services\FileFilter.cs:139 Redundant string interpolation
+      src\gc.Application\Services\FileFilter.cs:162 Redundant string interpolation
+      src\gc.Application\Services\FileFilter.cs:190 Redundant string interpolation
+      src\gc.Application\Services\FileFilter.cs:228 Qualifier is redundant
+      src\gc.Application\Services\FileFilter.cs:230 Qualifier is redundant
+      src\gc.Application\Services\FileFilter.cs:234 Qualifier is redundant
+      src\gc.Application\Services\FileFilter.cs:250 Qualifier is redundant
+      src\gc.Application\Services\FileFilter.cs:251 Qualifier is redundant
+      src\gc.Application\Services\FileFilter.cs:252 Qualifier is redundant
+      src\gc.Application\Services\FileFilter.cs:254 Empty general catch clause suppresses any errors
+      src\gc.Application\Services\FileFilter.cs:303 Dictionary lookup can be simplified with 'GetValueOrDefault'
+      src\gc.Application\Services\FileFilter.cs:342 Convert into '?:' expression
+      src\gc.Application\Services\MarkdownGenerator.cs: Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\MarkdownGenerator.cs:2 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\MarkdownGenerator.cs:4 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\MarkdownGenerator.cs:5 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\MarkdownGenerator.cs:6 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\MarkdownGenerator.cs:7 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\MarkdownGenerator.cs:8 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\MarkdownGenerator.cs:28 Field 'DefaultFenceByteCount' is never used
+      src\gc.Application\Services\MarkdownGenerator.cs:31 Redundant explicit collection creation in argument of 'params' parameter
+      src\gc.Application\Services\MarkdownGenerator.cs:31 Type cast is redundant
+      src\gc.Application\Services\MarkdownGenerator.cs:34 Name 't_lineExclusionBuilder' does not match rule 'Static fields (private)'. Suggested name is '_tLineExclusionBuilder'.
+      src\gc.Application\Services\MarkdownGenerator.cs:36 Convert into primary constructor
+      src\gc.Application\Services\MarkdownGenerator.cs:53 Comparison with true is redundant
+      src\gc.Application\Services\MarkdownGenerator.cs:103 Qualifier is redundant
+      src\gc.Application\Services\MarkdownGenerator.cs:106 Qualifier is redundant
+      src\gc.Application\Services\MarkdownGenerator.cs:110 Qualifier is redundant
+      src\gc.Application\Services\MarkdownGenerator.cs:110 Qualifier is redundant
+      src\gc.Application\Services\MarkdownGenerator.cs:111 Type cast is redundant
+      src\gc.Application\Services\MarkdownGenerator.cs:171 Possible multiple enumeration
+      src\gc.Application\Services\MarkdownGenerator.cs:173 Possible multiple enumeration
+      src\gc.Application\Services\MarkdownGenerator.cs:293 Value assigned is not used in any execution path
+      src\gc.Application\Services\MarkdownGenerator.cs:305 Possible multiple enumeration
+      src\gc.Application\Services\MarkdownGenerator.cs:307 Possible multiple enumeration
+      src\gc.Application\Services\MarkdownGenerator.cs:345 Replace with single assignment
+      src\gc.Application\Services\MarkdownGenerator.cs:346 Merge into pattern
+      src\gc.Application\Services\MarkdownGenerator.cs:360 Use 'String.IsNullOrEmpty'
+      src\gc.Application\Services\MarkdownGenerator.cs:360 Merge into pattern
+      src\gc.Application\Services\MarkdownGenerator.cs:392 Qualifier is redundant
+      src\gc.Application\Services\MarkdownGenerator.cs:401 Method has overload with cancellation support
+      src\gc.Application\Services\MarkdownGenerator.cs:492 'for' loop can be converted into 'foreach' loop
+      src\gc.Application\Services\MarkdownGenerator.cs:513 Method 'ProcessLineSequence' is never used
+      src\gc.Application\Services\ProfileReporter.cs:33 Redundant string interpolation
+      src\gc.Application\Services\ProfileReporter.cs:34 Redundant string interpolation
+      src\gc.Application\Services\SafeFileWriter.cs:15 Method 'WriteAllTextAsync' is never used
+      src\gc.Application\Services\SafeFileWriter.cs:29 Method has overload with cancellation support
+      src\gc.Application\Services\SafeFileWriter.cs:40 Empty general catch clause suppresses any errors
+      src\gc.Application\Services\SafeFileWriter.cs:61 Method has overload with cancellation support
+      src\gc.Application\Services\SafeFileWriter.cs:71 Empty general catch clause suppresses any errors
+      src\gc.Application\Services\ShardSplitter.cs:148 Redundant explicit tuple component name
+      src\gc.Application\Services\ShardSplitter.cs:181 Parameter 'logger' is never used
+      src\gc.Application\Services\ShardSplitter.cs:189 The parameter 'logger' has the same default value
+      src\gc.Application\Services\SingleTokenLexicon.cs:23 Use collection expression
+      src\gc.Application\Services\SingleTokenLexicon.cs:23 Redundant explicit array type specification
+      src\gc.Application\Services\SqzCompressionService.cs:10 Convert constructor into member initializers
+      src\gc.Application\Services\SqzCompressionService.cs:25 Initialize object properties inside the 'using' statement to ensure that the object is disposed if an exception is thrown during initialization
+      src\gc.Application\Services\SqzCompressionService.cs:59 Method has 'async' overload
+      src\gc.Application\Services\SuffixArray.cs:2 Using directive is not required by the code and can be safely removed
+      src\gc.Application\Services\SuffixArray.cs:56 Method 'BuildLCP' can be made private
+      src\gc.Application\Services\SuffixArray.cs:56 Name 'BuildLCP' does not match rule 'Methods'. Suggested name is 'BuildLcp'.
+      src\gc.Application\Services\TokenEstimator.cs:21 Method 'EstimateTokens' can be made private
+      src\gc.Application\Services\TokenEstimator.cs:96 Duplicated statements
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:27 Convert into primary constructor
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:64 Qualifier is redundant
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:99 Merge into pattern
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:136 Parameter 'changedSince' is never used
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:137 Qualifier is redundant
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:139 Conditional access qualifier expression is never null according to nullable reference types' annotations
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:161 Local variable 'maxParallel' is never used
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:253 Merge into pattern
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:271 Parameter 'clusterRoot' is never used
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:328 Parameter 'fileCount' is never used
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:329 Parameter 'rootPath' is never used
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:400 Local variable 'generatedBytes' is only assigned but its value is never used
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:405 Possible multiple enumeration
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:412 Value assigned is not used in any execution path
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:455 Possible multiple enumeration
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:461 Possible multiple enumeration
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:495 Use 'await using'
+      src\gc.Application\UseCases\GenerateContextUseCase.cs:513 Use 'await using'
+      src\gc.Application\Validators\ConfigurationValidator.cs:91 Expression is always true according to nullable reference types' annotations
+      src\gc.Application\Validators\ConfigurationValidator.cs:101 Parameter 'errors' is never used
+      src\gc.Application\Validators\ConfigurationValidator.cs:109 Expression is always true according to nullable reference types' annotations
+      src\gc.Application\Validators\ConfigurationValidator.cs:137 Expression is always false according to nullable reference types' annotations
+      src\gc.Application\Validators\ConfigurationValidator.cs:191 Expression is always true according to nullable reference types' annotations
+      src\gc.Application\Validators\ConfigurationValidator.cs:191 Merge into pattern
+      src\gc.Application\Validators\ConfigurationValidator.cs:194 Expression is always true according to nullable reference types' annotations
+      src\gc.Application\Validators\ConfigurationValidator.cs:210 Parameter 'errors' is never used
+      src\gc.Application\Validators\ConfigurationValidator.cs:218 Expression is always true according to nullable reference types' annotations
+      src\gc.Application\Validators\ConfigurationValidator.cs:226 Parameter 'errors' is never used
+      src\gc.Application\Validators\ConfigurationValidator.cs:234 Expression is always true according to nullable reference types' annotations
+    
+    Project gc.CLI
+      src\gc.CLI\Models\CliArguments.cs:33 Property can be made init-only
+      src\gc.CLI\Program.cs:3 Using directive is not required by the code and can be safely removed
+      src\gc.CLI\Program.cs:24 Parameter 's' is never used
+      src\gc.CLI\Program.cs:24 Captured variable is disposed in the outer scope
+      src\gc.CLI\Program.cs:42 Qualifier is redundant
+      src\gc.CLI\Program.cs:43 Qualifier is redundant
+      src\gc.CLI\Program.cs:54 Use 'await using'
+      src\gc.CLI\Program.cs:63 Use 'await using'
+      src\gc.CLI\Program.cs:110 Method has 'async' overload with cancellation support
+      src\gc.CLI\Program.cs:123 Method has 'async' overload with cancellation support
+      src\gc.CLI\Program.cs:150 Merge into pattern
+      src\gc.CLI\Program.cs:238 Merge into pattern
+      src\gc.CLI\Program.cs:240 Qualifier is redundant
+      src\gc.CLI\Program.cs:298 Empty general catch clause suppresses any errors
+      src\gc.CLI\Program.cs:323 Conditional access qualifier expression is never null according to nullable reference types' annotations
+      src\gc.CLI\Program.cs:336 Conditional access qualifier expression is never null according to nullable reference types' annotations
+      src\gc.CLI\Services\CliParser.cs: Using directive is not required by the code and can be safely removed
+      src\gc.CLI\Services\CliParser.cs:75 Qualifier is redundant
+      src\gc.CLI\Services\CliParser.cs:187 Merge into pattern
+      src\gc.CLI\Services\HistoryMenu.cs:113 Qualifier is redundant
+      src\gc.CLI\Services\HistoryMenu.cs:114 Qualifier is redundant
+      src\gc.CLI\Services\HistoryMenu.cs:119 Qualifier is redundant
+      src\gc.CLI\Services\HistoryMenu.cs:120 Qualifier is redundant
+    
+    Project gc.Domain
+      src\gc.Domain\Common\MemorySizeParser.cs:17 Method 'Parse' can be made private
+      src\gc.Domain\Common\MemorySizeParser.cs:25 Name 'isKB' does not match rule 'Local variables'. Suggested name is 'isKb'.
+      src\gc.Domain\Common\Result.cs:5 Accessor 'Error.init' can be made private
+      src\gc.Domain\Common\Result.cs:14 Method 'Map' is never used
+      src\gc.Domain\Common\Result.cs:19 Method 'Tap' is never used
+      src\gc.Domain\Common\Result.cs:24 Method 'Match' is never used
+      src\gc.Domain\Common\Result.cs:30 Accessor 'Value.init' can be made private
+      src\gc.Domain\Common\Result.cs:31 Accessor 'Error.init' can be made private
+      src\gc.Domain\Common\Result.cs:40 Name 'U' does not match rule 'Type parameters'. Suggested name is 'TU'.
+      src\gc.Domain\Common\Result.cs:46 Name 'U' does not match rule 'Type parameters'. Suggested name is 'TU'.
+      src\gc.Domain\Common\Result.cs:52 Method 'Tap' return value is never used
+      src\gc.Domain\Common\Result.cs:57 Name 'U' does not match rule 'Type parameters'. Suggested name is 'TU'.
+      src\gc.Domain\Constants\BuiltInPresets.cs:26 Field 'PresetConfig' can be made private
+      src\gc.Domain\Interfaces\CompiledContentPatterns.cs:15 Convert into primary constructor
+      src\gc.Domain\Interfaces\IBrainCrusher.cs:10 Only implementations of method 'Uncrush' are used
+      src\gc.Domain\Interfaces\IBrainCrusher.cs:12 Only implementations of method 'GetDictionaryHeader' are used
+      src\gc.Domain\Interfaces\IClipboardService.cs:8 Only implementations of method 'CopyToClipboardAsync' are used
+      src\gc.Domain\Interfaces\IClipboardService.cs:10 Only implementations of method 'CopyToClipboardAsync' are used
+      src\gc.Domain\Interfaces\IClipboardService.cs:11 Only implementations of method 'CopyToClipboardAsync' are used
+      src\gc.Domain\Interfaces\IFileReader.cs:8 Only implementations of method 'ReadStreamingAsync' are used
+      src\gc.Domain\Interfaces\IFileReader.cs:8 Parameter 'ct' is not used in any of the implementations
+      src\gc.Domain\Interfaces\IFileReader.cs:9 Only implementations of method 'ReadAsync' are used
+      src\gc.Domain\Interfaces\IFileReader.cs:10 Only implementations of method 'IsBinaryFileAsync' are used
+      src\gc.Domain\Interfaces\IHistoryService.cs:10 Only implementations of method 'ClearHistoryAsync' are used
+      src\gc.Domain\Interfaces\IMarkdownGenerator.cs:9 Only implementations of method 'GenerateMarkdownStreamingAsync' are used
+      src\gc.Domain\Interfaces\IOutputTransform.cs: Using directive is not required by the code and can be safely removed
+      src\gc.Domain\Interfaces\IOutputTransform.cs:14 Property 'Name' is never used
+      src\gc.Domain\Interfaces\IOutputTransform.cs:38 Interface 'ILegendlessTransform' is never used
+      src\gc.Domain\Interfaces\IOutputTransform.cs:38 Redundant empty interface declaration body
+      src\gc.Domain\Interfaces\IOutputTransform.cs:43 Redundant empty interface declaration body
+      src\gc.Domain\Language\LanguageProfiles.cs:8 Class 'LanguageProfiles' is never used
+      src\gc.Domain\Language\LanguageProfiles.cs:13 Method 'For' is never used
+      src\gc.Domain\Language\LanguageProfiles.cs:88 Name 'C_Cpp' does not match rule 'Static readonly fields (private)'. Suggested name is 'CCpp'.
+      src\gc.Domain\Language\LanguageProfiles.cs:174 Positional property 'gc.Domain.Language.LanguageProfile.LineComment' is never accessed (except in implicit Equals/ToString implementations)
+      src\gc.Domain\Language\LanguageProfiles.cs:175 Positional property 'gc.Domain.Language.LanguageProfile.BlockComment' is never accessed (except in implicit Equals/ToString implementations)
+      src\gc.Domain\Language\LanguageProfiles.cs:176 Positional property 'gc.Domain.Language.LanguageProfile.HashComment' is never accessed (except in implicit Equals/ToString implementations)
+      src\gc.Domain\Language\LanguageProfiles.cs:177 Positional property 'gc.Domain.Language.LanguageProfile.SqlComment' is never accessed (except in implicit Equals/ToString implementations)
+      src\gc.Domain\Models\Configuration\ClusterConfiguration.cs:9 Initializing property by default value is redundant
+      src\gc.Domain\Models\Configuration\DiscoveryConfiguration.cs:7 Initializing property by default value is redundant
+      src\gc.Domain\Models\Configuration\GcJsonSerializerContext.cs:23 Redundant empty class declaration body
+      src\gc.Domain\Models\Configuration\LimitsConfiguration.cs: Using directive is not required by the code and can be safely removed
+      src\gc.Domain\Models\Configuration\LoggingConfiguration.cs:6 Initializing property by default value is redundant
+      src\gc.Domain\Models\FileContent.cs:3 Positional property 'gc.Domain.Models.FileContent.Size' is never accessed (except in implicit Equals/ToString implementations)
+      src\gc.Domain\Models\FileEntry.cs:3 Using directive is not required by the code and can be safely removed
+      src\gc.Domain\Models\FileEntry.cs:27 Property 'Absolute' can be made private
+      src\gc.Domain\Models\ShardInfo.cs:9 Auto-property can be made get-only
+      src\gc.Domain\Models\ShardInfo.cs:10 Auto-property can be made get-only
+    
+    Project gc.Infrastructure
+      src\gc.Infrastructure\Benchmark\RealBenchmark.cs:2 Using directive is not required by the code and can be safely removed
+      src\gc.Infrastructure\Benchmark\RealBenchmark.cs:5 Using directive is not required by the code and can be safely removed
+      src\gc.Infrastructure\Benchmark\RealBenchmark.cs:17 Constructor 'RealBenchmark' can be made private
+      src\gc.Infrastructure\Benchmark\RealBenchmark.cs:17 Convert into primary constructor
+      src\gc.Infrastructure\Benchmark\RealBenchmark.cs:28 Method 'ExecuteAsync' can be made private
+      src\gc.Infrastructure\Benchmark\RealBenchmark.cs:50 Local variable 'reader' is never used
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:14 Consider changing the type of '_cacheLock' field to 'System.Threading.Lock' to express the field's intent
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:16 Convert into primary constructor
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:67 Merge into pattern
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:77 Merge into pattern
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:87 Merge into pattern
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:104 Method 'FindProjectConfig' can be made private
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:110 Expression is always true according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:154 Use 'await using'
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:178 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:191 Method 'MergeLimits' is never used
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:193 'with' expression modifies all accessible instance members
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:195 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:196 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:197 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:202 Method 'MergeDiscovery' is never used
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:223 Method 'MergePresets' is never used
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:227 Expression is always false according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:236 Expression is always true according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:257 Method 'MergeLanguageMappings' is never used
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:261 Expression is always false according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:268 Method 'MergeMarkdown' is never used
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:270 'with' expression modifies all accessible instance members
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:272 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:273 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:274 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:275 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:279 Method 'MergeOutput' is never used
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:281 'with' expression modifies all accessible instance members
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:283 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:289 Method 'MergeLogging' is never used
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:291 'with' expression modifies all accessible instance members
+      src\gc.Infrastructure\Configuration\ConfigurationLoader.cs:293 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:15 Method 'Merge' is never used
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:19 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:34 'with' expression modifies all accessible instance members
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:47 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:48 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:49 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:57 'with' expression modifies all accessible instance members
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:83 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:86 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:98 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:99 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:100 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:101 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:102 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:103 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:121 Expression is always true according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:154 'with' expression modifies all accessible instance members
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:156 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:157 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:158 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:159 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:165 'with' expression modifies all accessible instance members
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:167 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:175 'with' expression modifies all accessible instance members
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:177 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:184 Expression is always false according to nullable reference types' annotations
+      src\gc.Infrastructure\Configuration\ConfigurationMerger.cs:185 Expression is always false according to nullable reference types' annotations
+      src\gc.Infrastructure\Discovery\FileDiscovery.cs:15 Convert into primary constructor
+      src\gc.Infrastructure\Discovery\FileDiscovery.cs:24 '??' left operand is never 'null' according to nullable reference types' annotations
+      src\gc.Infrastructure\Discovery\FileDiscovery.cs:116 Expression is always true according to nullable reference types' annotations
+      src\gc.Infrastructure\Discovery\FileDiscovery.cs:301 Parameter 'ct' is never used
+      src\gc.Infrastructure\Discovery\FileDiscovery.cs:381 Empty general catch clause suppresses any errors
+      src\gc.Infrastructure\Discovery\FileDiscovery.cs:413 This async method lacks 'await' operators and will run synchronously. Consider using 'await' for non-blocking API calls, or remove the 'async' modifier to avoid generating a state machine for this method.
+      src\gc.Infrastructure\Discovery\FileDiscovery.cs:450 Empty general catch clause suppresses any errors
+      src\gc.Infrastructure\IO\FileReader.cs:14 Convert into primary constructor
+      src\gc.Infrastructure\IO\FileReader.cs:19 This async method lacks 'await' operators and will run synchronously. Consider using 'await' for non-blocking API calls, or remove the 'async' modifier to avoid generating a state machine for this method.
+      src\gc.Infrastructure\IO\FileReader.cs:43 This async method lacks 'await' operators and will run synchronously. Consider using 'await' for non-blocking API calls, or remove the 'async' modifier to avoid generating a state machine for this method.
+      src\gc.Infrastructure\IO\FileReader.cs:43 Parameter 'ct' is never used
+      src\gc.Infrastructure\IO\FileReader.cs:85 Use 'await using'
+      src\gc.Infrastructure\IO\FileReader.cs:127 Use 'await using'
+      src\gc.Infrastructure\IO\FileReader.cs:204 Use 'await using'
+      src\gc.Infrastructure\Logging\ConsoleLogger.cs:8 Field can be made readonly
+      src\gc.Infrastructure\Logging\ConsoleLogger.cs:12 Convert into primary constructor
+      src\gc.Infrastructure\Logging\ConsoleLogger.cs:14 Qualifier is redundant
+      src\gc.Infrastructure\Logging\ConsoleLogger.cs:20 Redundant 'switch' expression arm
+      src\gc.Infrastructure\System\ClipboardService.cs:18 Convert into primary constructor
+      src\gc.Infrastructure\System\HistoryService.cs: Using directive is not required by the code and can be safely removed
+      src\gc.Infrastructure\System\HistoryService.cs:3 Using directive is not required by the code and can be safely removed
+      src\gc.Infrastructure\System\HistoryService.cs:17 Convert into primary constructor
+      src\gc.Infrastructure\System\HistoryService.cs:135 Empty general catch clause suppresses any errors
+      src\gc.Infrastructure\System\SystemConsole.cs: Using directive is not required by the code and can be safely removed
+      src\gc.Infrastructure\Testing\TestRunner.cs:9 Constructor 'TestRunner' can be made private
+      src\gc.Infrastructure\Testing\TestRunner.cs:9 Convert into primary constructor
+      src\gc.Infrastructure\Testing\TestRunner.cs:33 Method 'ExecuteAsync' can be made private
+      src\gc.Infrastructure\Testing\TestRunner.cs:49 Initialize object properties inside the 'using' statement to ensure that the object is disposed if an exception is thrown during initialization
+      src\gc.Infrastructure\Testing\TestRunner.cs:51 Parameter 's' is never used
+      src\gc.Infrastructure\Testing\TestRunner.cs:52 Parameter 's' is never used
+      src\gc.Infrastructure\Testing\TestRunner.cs:62 Method has 'async' overload
+      src\gc.Infrastructure\Testing\TestRunner.cs:72 Method has 'async' overload
+    
+    Project gc.Tests
+      tests\gc.Tests\ApplicationCoverageTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\ApplicationCoverageTests.cs:296 Method 'CreateAhoCorasick' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:302 The nullable warning suppression expression is redundant
+      tests\gc.Tests\ApplicationCoverageTests.cs:305 Method 'AhoCorasickReplaceAll' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:360 Auto-property can be made get-only
+      tests\gc.Tests\ApplicationCoverageTests.cs:361 Property 'ReposToReturn' can be made private
+      tests\gc.Tests\ApplicationCoverageTests.cs:361 Content of collection 'ReposToReturn' is never updated
+      tests\gc.Tests\ApplicationCoverageTests.cs:361 Auto-property can be made get-only
+      tests\gc.Tests\ApplicationCoverageTests.cs:362 Property 'FailDirectories' can be made private
+      tests\gc.Tests\ApplicationCoverageTests.cs:362 Content of collection 'FailDirectories' is never updated
+      tests\gc.Tests\ApplicationCoverageTests.cs:362 Auto-property can be made get-only
+      tests\gc.Tests\ApplicationCoverageTests.cs:363 Auto-property accessor 'DiscoverShouldFail.set' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:364 Auto-property accessor 'DiscoverReposShouldFail.set' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:365 Auto-property accessor 'RespectCancellation.set' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:412 Property 'ProcessedContents' can be made private
+      tests\gc.Tests\ApplicationCoverageTests.cs:412 Content of collection 'ProcessedContents' is only updated but never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:413 Property 'ReturnSize' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:414 Auto-property accessor 'ShouldFail.set' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:415 Auto-property accessor 'CapturedExcludeLineIfStart.get' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:416 Auto-property accessor 'CapturedBrainCrusher.get' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:450 Auto-property accessor 'ShouldFail.set' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:452 Auto-property accessor 'LastStream.get' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:491 Local variable 'reader' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:509 Local variable 'generator' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:526 Local variable 'logger' is never used
+      tests\gc.Tests\ApplicationCoverageTests.cs:554 Local variable 'logger' is never used
+      tests\gc.Tests\BrainCrusherTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\BrainCrusherTests.cs:3 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\BugFixTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\BugFixTests.cs:8 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\BugFixTests.cs:46 Local variable 'stream' is never used
+      tests\gc.Tests\BugFixTests.cs:70 Value assigned is not used in any execution path
+      tests\gc.Tests\BugFixTests.cs:78 Method has 'async' overload
+      tests\gc.Tests\BugFixTests.cs:100 Use 'await using'
+      tests\gc.Tests\BugFixTests.cs:535 Use 'await using'
+      tests\gc.Tests\BugFixTests.cs:562 Use 'await using'
+      tests\gc.Tests\BugFixTests.cs:588 Method has 'async' overload
+      tests\gc.Tests\BugFixTests.cs:592 Use 'await using'
+      tests\gc.Tests\BugFixTests.cs:616 Use 'await using'
+      tests\gc.Tests\BugFixTests.cs:617 Use 'await using'
+      tests\gc.Tests\BugFixTests.cs:752 Use 'await using'
+      tests\gc.Tests\BugFixTests.cs:898 Use collection expression
+      tests\gc.Tests\CliAndConfigCoverageTests.cs:5 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\CliParserExtendedTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\CliParserExtendedTests.cs:5 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\CliParserTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\CliParserTests.cs:4 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\CliParserTests.cs:5 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\CliParserTests.cs:7 Namespace does not correspond to file location, must be: 'gc.Tests'
+      tests\gc.Tests\ClipboardServiceTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\ClipboardServiceTests.cs:106 'Encoding.GetBytes' invocation can be replaced with a UTF-8 string literal
+      tests\gc.Tests\ClipboardServiceTests.cs:154 'Encoding.GetBytes' invocation can be replaced with a UTF-8 string literal
+      tests\gc.Tests\ClusterCliParserTests.cs:3 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\ClusterCliParserTests.cs:4 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\ClusterCliParserTests.cs:6 Namespace does not correspond to file location, must be: 'gc.Tests'
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:55 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:82 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:101 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:102 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:103 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:104 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:126 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:143 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:147 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:168 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:217 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:232 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:255 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:272 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:307 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:311 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:328 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:343 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:347 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:351 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:368 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:380 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:391 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:407 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:422 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:432 Use collection expression
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:452 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:502 Redundant string interpolation
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:507 Parameter 'name' is never used
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:593 Name 'RunGC' does not match rule 'Methods'. Suggested name is 'RunGc'.
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:647 Empty general catch clause suppresses any errors
+      tests\gc.Tests\ClusterEdgeCaseTests.cs:663 Positional property 'gc.Tests.ClusterEdgeCaseTests.ProcessResult.StandardError' is never accessed (except in implicit Equals/ToString implementations)
+      tests\gc.Tests\ConfigurationTests.cs:137 Redundant type specification
+      tests\gc.Tests\ConfigurationTests.cs:232 Method has 'async' overload
+      tests\gc.Tests\ConfigurationTests.cs:268 Method has 'async' overload
+      tests\gc.Tests\ConfigurationTests.cs:377 Use collection expression
+      tests\gc.Tests\ConfigurationTests.cs:514 The nullable warning suppression expression is redundant
+      tests\gc.Tests\ConfigurationTests.cs:549 The nullable warning suppression expression is redundant
+      tests\gc.Tests\ConsoleLoggerTests.cs:12 Redundant type specification
+      tests\gc.Tests\ConsoleLoggerTests.cs:13 Redundant type specification
+      tests\gc.Tests\CoreAlgorithmTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\CoreAlgorithmTests.cs:4 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\CoreAlgorithmTests.cs:61 'captured' can be declared as non-nullable
+      tests\gc.Tests\CoreAlgorithmTests.cs:74 Parameter 'e' is never used
+      tests\gc.Tests\CoreAlgorithmTests.cs:115 Local variable 'symbol0' is never used
+      tests\gc.Tests\CoreAlgorithmTests.cs:137 Merge into pattern
+      tests\gc.Tests\CoreAlgorithmTests.cs:144 Local variable 'twoWords' is never used
+      tests\gc.Tests\CoreAlgorithmTests.cs:235 Qualifier is redundant
+      tests\gc.Tests\CoreAlgorithmTests.cs:245 Qualifier is redundant
+      tests\gc.Tests\CoreAlgorithmTests.cs:248 Use collection expression
+      tests\gc.Tests\CoreAlgorithmTests.cs:255 Qualifier is redundant
+      tests\gc.Tests\CoreAlgorithmTests.cs:258 Use collection expression
+      tests\gc.Tests\CoreAlgorithmTests.cs:265 Qualifier is redundant
+      tests\gc.Tests\CoreAlgorithmTests.cs:268 Use collection expression
+      tests\gc.Tests\CoreAlgorithmTests.cs:275 Qualifier is redundant
+      tests\gc.Tests\CoreAlgorithmTests.cs:278 Use collection expression
+      tests\gc.Tests\DomainCoverageTests.cs:170 Use '0' instead of 'default'
+      tests\gc.Tests\DomainCoverageTests.cs:249 Expression is always false
+      tests\gc.Tests\DomainCoverageTests.cs:265 Expression is always false
+      tests\gc.Tests\DomainModelTests.cs:29 Use '0' instead of 'default'
+      tests\gc.Tests\DomainModelTests.cs:279 Use collection expression
+      tests\gc.Tests\DomainModelTests.cs:292 Use collection expression
+      tests\gc.Tests\DomainModelTests.cs:419 Convert into primary constructor
+      tests\gc.Tests\DomainModelTests.cs:433 Use collection expression
+      tests\gc.Tests\DynamicCompressorTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\EdgeCaseHammerTests.cs:8 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\EdgeCaseHammerTests.cs:208 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:216 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:225 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:237 Local variable 'reader' is never used
+      tests\gc.Tests\EdgeCaseHammerTests.cs:262 Local variable 'reader' is never used
+      tests\gc.Tests\EdgeCaseHammerTests.cs:283 Local variable 'reader' is never used
+      tests\gc.Tests\EdgeCaseHammerTests.cs:328 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:338 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:348 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:358 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:368 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:378 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:388 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:398 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:408 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:419 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:429 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:434 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:439 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:444 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:449 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:459 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:469 Use collection expression
+      tests\gc.Tests\EdgeCaseHammerTests.cs:534 Property 'Messages' can be made private
+      tests\gc.Tests\EdgeCaseHammerTests.cs:534 Content of collection 'Messages' is only updated but never used
+      tests\gc.Tests\EdgeCaseHammerTests.cs:535 Property 'MinimumLevel' is never used
+      tests\gc.Tests\EdgeCaseHammerTests.cs:549 Convert into primary constructor
+      tests\gc.Tests\EdgeCaseTests.cs:52 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:68 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:106 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:124 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:151 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:171 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:187 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:207 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:222 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:238 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:255 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:271 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:298 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:307 Empty general catch clause suppresses any errors
+      tests\gc.Tests\EdgeCaseTests.cs:325 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:356 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:377 Redundant string interpolation
+      tests\gc.Tests\EdgeCaseTests.cs:418 Name 'RunGC' does not match rule 'Methods'. Suggested name is 'RunGc'.
+      tests\gc.Tests\EdgeCaseTests.cs:497 Empty general catch clause suppresses any errors
+      tests\gc.Tests\EdgeCaseTests.cs:505 Qualifier is redundant
+      tests\gc.Tests\FileDiscoveryTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\FileDiscoveryTests.cs:63 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:64 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:65 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:89 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:90 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:91 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:92 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:115 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:118 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:119 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:138 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:141 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:144 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:163 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:166 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:167 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:187 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:193 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:217 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:221 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:223 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:246 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:247 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:266 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:312 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:317 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:358 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:367 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:380 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:401 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:419 Method has 'async' overload
+      tests\gc.Tests\FileDiscoveryTests.cs:448 Empty general catch clause suppresses any errors
+      tests\gc.Tests\FileDiscoveryTests.cs:457 Empty general catch clause suppresses any errors
+      tests\gc.Tests\FileFilterExtendedTests.cs:136 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:162 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:187 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:212 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:227 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:241 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:257 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:273 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:290 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:314 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:335 Use collection expression
+      tests\gc.Tests\FileFilterExtendedTests.cs:341 Use collection expression
+      tests\gc.Tests\FileFilterTests.cs:5 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\FileFilterTests.cs:7 Namespace does not correspond to file location, must be: 'gc.Tests'
+      tests\gc.Tests\FileFilterTests.cs:11 The field is always assigned before being used and can be converted into a local variable
+      tests\gc.Tests\FileFilterTests.cs:27 Use collection expression
+      tests\gc.Tests\FileFilterTests.cs:56 Use collection expression
+      tests\gc.Tests\FileFilterTests.cs:60 Use collection expression
+      tests\gc.Tests\FileFilterTests.cs:81 Use collection expression
+      tests\gc.Tests\FileReaderTests.cs:3 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\FileReaderTests.cs:6 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\FileReaderTests.cs:33 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:55 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:78 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:100 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:120 Byte array can be converted to a UTF-8 string literal
+      tests\gc.Tests\FileReaderTests.cs:121 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:156 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:162 The nullable warning suppression expression is redundant
+      tests\gc.Tests\FileReaderTests.cs:163 The nullable warning suppression expression is redundant
+      tests\gc.Tests\FileReaderTests.cs:178 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:178 Byte array can be converted to a UTF-8 string literal
+      tests\gc.Tests\FileReaderTests.cs:201 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:208 The nullable warning suppression expression is redundant
+      tests\gc.Tests\FileReaderTests.cs:222 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:245 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:264 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:264 Byte array can be converted to a UTF-8 string literal
+      tests\gc.Tests\FileReaderTests.cs:284 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:302 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:332 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:362 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:389 Method has 'async' overload
+      tests\gc.Tests\FileReaderTests.cs:397 The nullable warning suppression expression is redundant
+      tests\gc.Tests\FileReaderTests.cs:411 Method has 'async' overload
+      tests\gc.Tests\FunKeywordsTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\FunKeywordsTests.cs:5 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\GenerateContextUseCaseTests.cs:16 Auto-property can be made get-only
+      tests\gc.Tests\GenerateContextUseCaseTests.cs:18 Auto-property can be made get-only
+      tests\gc.Tests\GenerateContextUseCaseTests.cs:20 Auto-property accessor 'DiscoverReposShouldFail.set' is never used
+      tests\gc.Tests\GenerateContextUseCaseTests.cs:69 Property 'ReturnSize' can be made private
+      tests\gc.Tests\GenerateContextUseCaseTests.cs:69 Auto-property can be made get-only
+      tests\gc.Tests\GenerateContextUseCaseTests.cs:72 Auto-property accessor 'CapturedBrainCrusher.get' is never used
+      tests\gc.Tests\GenerateContextUseCaseTests.cs:143 Local variable 'reader' is never used
+      tests\gc.Tests\GlobMatcherTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\HistoryMenuTests.cs:13 Redundant type specification
+      tests\gc.Tests\HistoryMenuTests.cs:16 Convert into primary constructor
+      tests\gc.Tests\HistoryMenuTests.cs:34 Convert into primary constructor
+      tests\gc.Tests\HistoryMenuTests.cs:177 Local variable 'exitCode' is never used
+      tests\gc.Tests\HistoryMenuTests.cs:193 Local variable 'output' is never used
+      tests\gc.Tests\HistoryMenuTests.cs:203 Local variable 'output' is never used
+      tests\gc.Tests\HistoryMenuTests.cs:213 Local variable 'output' is never used
+      tests\gc.Tests\HistoryServiceTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\LoaderTests.cs:38 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:68 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:104 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:132 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:176 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:215 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:282 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:302 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:345 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:378 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:413 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:444 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:474 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:513 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:551 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:650 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:729 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:751 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:773 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:795 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:823 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:845 Method has 'async' overload
+      tests\gc.Tests\LoaderTests.cs:890 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:3 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:5 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:6 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:13 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:20 Field '_reader' is assigned but its value is never used
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:54 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:90 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:122 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:141 Use collection expression
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:145 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:168 Use collection expression
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:172 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:198 Use collection expression
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:202 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:228 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:285 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:315 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:341 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:364 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:383 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:405 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:439 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:471 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:506 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:532 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:574 Content of collection 'entries' is never updated
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:581 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:608 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:635 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:652 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:681 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:699 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorExtendedTests.cs:726 Method has 'async' overload
+      tests\gc.Tests\MarkdownGeneratorTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorTests.cs:3 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorTests.cs:5 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorTests.cs:6 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorTests.cs:13 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MarkdownGeneratorTests.cs:20 Field '_reader' is assigned but its value is never used
+      tests\gc.Tests\MemorySizeParserTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MemorySizeParserTests.cs:3 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\MemorySizeParserTests.cs:5 Namespace does not correspond to file location, must be: 'gc.Tests'
+      tests\gc.Tests\NonGitDiscoveryTests.cs:62 Redundant string interpolation
+      tests\gc.Tests\NonGitDiscoveryTests.cs:85 Redundant string interpolation
+      tests\gc.Tests\NonGitDiscoveryTests.cs:107 Redundant string interpolation
+      tests\gc.Tests\NonGitDiscoveryTests.cs:132 Redundant string interpolation
+      tests\gc.Tests\NonGitDiscoveryTests.cs:159 Redundant string interpolation
+      tests\gc.Tests\NonGitDiscoveryTests.cs:187 Redundant string interpolation
+      tests\gc.Tests\NonGitDiscoveryTests.cs:206 Redundant string interpolation
+      tests\gc.Tests\NonGitDiscoveryTests.cs:240 Redundant string interpolation
+      tests\gc.Tests\NonGitDiscoveryTests.cs:243 Name 'RunGC' does not match rule 'Methods'. Suggested name is 'RunGc'.
+      tests\gc.Tests\NonGitDiscoveryTests.cs:287 Empty general catch clause suppresses any errors
+      tests\gc.Tests\NonGitDiscoveryTests.cs:295 Qualifier is redundant
+      tests\gc.Tests\NonGitDiscoveryTests.cs:304 Positional property 'gc.Tests.NonGitDiscoveryTests.ProcessResult.StandardError' is never accessed (except in implicit Equals/ToString implementations)
+      tests\gc.Tests\PerformanceTests.cs:119 Captured variable is modified in the outer scope
+      tests\gc.Tests\PerformanceTests.cs:139 Redundant string interpolation
+      tests\gc.Tests\PerformanceTests.cs:166 Redundant string interpolation
+      tests\gc.Tests\PerformanceTests.cs:202 Redundant string interpolation
+      tests\gc.Tests\PerformanceTests.cs:225 Convert into method call with '?:' expression inside
+      tests\gc.Tests\PerformanceTests.cs:234 Redundant string interpolation
+      tests\gc.Tests\PerformanceTests.cs:262 Redundant string interpolation
+      tests\gc.Tests\PerformanceTests.cs:288 Name 'RunGC' does not match rule 'Methods'. Suggested name is 'RunGc'.
+      tests\gc.Tests\PerformanceTests.cs:363 Empty general catch clause suppresses any errors
+      tests\gc.Tests\PerformanceTests.cs:371 Qualifier is redundant
+      tests\gc.Tests\Phase0PerformanceTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase0PerformanceTests.cs:6 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase0PerformanceTests.cs:11 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase0PerformanceTests.cs:13 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase0PerformanceTests.cs:58 Use 'await using'
+      tests\gc.Tests\Phase0PerformanceTests.cs:173 Method has 'async' overload
+      tests\gc.Tests\Phase0PerformanceTests.cs:219 Use collection expression
+      tests\gc.Tests\Phase0PerformanceTests.cs:244 Use collection expression
+      tests\gc.Tests\Phase0PerformanceTests.cs:274 Use collection expression
+      tests\gc.Tests\Phase0PerformanceTests.cs:415 Method has 'async' overload
+      tests\gc.Tests\Phase0PerformanceTests.cs:439 The nullable warning suppression expression is redundant
+      tests\gc.Tests\Phase0PerformanceTests.cs:592 This async method lacks 'await' operators and will run synchronously. Consider using 'await' for non-blocking API calls, or remove the 'async' modifier to avoid generating a state machine for this method.
+      tests\gc.Tests\Phase0PerformanceTests.cs:604 Use collection expression
+      tests\gc.Tests\Phase0PerformanceTests.cs:606 Use collection expression
+      tests\gc.Tests\Phase0PerformanceTests.cs:646 Method has 'async' overload
+      tests\gc.Tests\Phase0PerformanceTests.cs:666 Use collection expression
+      tests\gc.Tests\Phase0PerformanceTests.cs:721 Method has 'async' overload
+      tests\gc.Tests\Phase0PerformanceTests.cs:731 Use collection expression
+      tests\gc.Tests\Phase0PerformanceTests.cs:812 Method has 'async' overload
+      tests\gc.Tests\Phase0PerformanceTests.cs:851 Method has 'async' overload
+      tests\gc.Tests\Phase0PerformanceTests.cs:876 Redundant type specification
+      tests\gc.Tests\Phase0PerformanceTests.cs:896 Empty general catch clause suppresses any errors
+      tests\gc.Tests\Phase0PerformanceTests.cs:901 Empty general catch clause suppresses any errors
+      tests\gc.Tests\Phase1PerformanceTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase1PerformanceTests.cs:7 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase1PerformanceTests.cs:12 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase1PerformanceTests.cs:14 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase1PerformanceTests.cs:59 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:111 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:132 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:174 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:194 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:213 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:217 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:272 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:295 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:324 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:350 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:356 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:507 The nullable warning suppression expression is redundant
+      tests\gc.Tests\Phase1PerformanceTests.cs:524 Method has 'async' overload
+      tests\gc.Tests\Phase1PerformanceTests.cs:531 Method has 'async' overload
+      tests\gc.Tests\Phase1PerformanceTests.cs:537 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:555 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:582 Use collection expression
+      tests\gc.Tests\Phase1PerformanceTests.cs:610 Empty general catch clause suppresses any errors
+      tests\gc.Tests\Phase1PerformanceTests.cs:615 Empty general catch clause suppresses any errors
+      tests\gc.Tests\Phase2PerformanceTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase2PerformanceTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase2PerformanceTests.cs:8 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase2PerformanceTests.cs:9 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\Phase2PerformanceTests.cs:17 Field '_output' is assigned but its value is never used
+      tests\gc.Tests\Phase2PerformanceTests.cs:18 Qualifier is redundant
+      tests\gc.Tests\Phase2PerformanceTests.cs:55 String.IndexOf(string) is culture-specific
+      tests\gc.Tests\Phase2PerformanceTests.cs:56 String.IndexOf(string) is culture-specific
+      tests\gc.Tests\Phase2PerformanceTests.cs:81 Empty general catch clause suppresses any errors
+      tests\gc.Tests\ReleaseBinaryTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\ReleaseBinaryTests.cs:14 The field is always assigned before being used and can be converted into a local variable
+      tests\gc.Tests\ReleaseBinaryTests.cs:20 Qualifier is redundant
+      tests\gc.Tests\ReleaseBinaryTests.cs:51 Qualifier is redundant
+      tests\gc.Tests\ReleaseBinaryTests.cs:51 Qualifier is redundant
+      tests\gc.Tests\ReleaseBinaryTests.cs:80 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:95 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:125 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:138 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:151 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:173 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:189 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:198 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:210 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:219 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:235 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:244 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:260 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:269 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:283 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:292 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:303 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:312 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:320 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:329 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:338 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:347 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:356 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:365 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:378 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:387 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:401 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:410 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:427 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:436 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:450 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:459 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:467 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:480 Redundant string interpolation
+      tests\gc.Tests\ReleaseBinaryTests.cs:489 Use collection expression
+      tests\gc.Tests\ReleaseBinaryTests.cs:504 Name 'RunGC' does not match rule 'Methods'. Suggested name is 'RunGc'.
+      tests\gc.Tests\ReleaseBinaryTests.cs:509 Name 'RunGCInDirectory' does not match rule 'Methods'. Suggested name is 'RunGcInDirectory'.
+      tests\gc.Tests\ReleaseBinaryTests.cs:535 Parameter 'files' is never used
+      tests\gc.Tests\ReleaseBinaryTests.cs:632 Conditional access qualifier expression is never null according to nullable reference types' annotations
+      tests\gc.Tests\ReleaseBinaryTests.cs:649 Empty general catch clause suppresses any errors
+      tests\gc.Tests\ReleaseBinaryTests.cs:657 Qualifier is redundant
+      tests\gc.Tests\SecurityTests.cs:29 Qualifier is redundant
+      tests\gc.Tests\SecurityTests.cs:29 Qualifier is redundant
+      tests\gc.Tests\SecurityTests.cs:67 Redundant string interpolation
+      tests\gc.Tests\SecurityTests.cs:108 Redundant string interpolation
+      tests\gc.Tests\SecurityTests.cs:122 Byte array can be converted to a UTF-8 string literal
+      tests\gc.Tests\SecurityTests.cs:139 Redundant string interpolation
+      tests\gc.Tests\SecurityTests.cs:152 Byte array can be converted to a UTF-8 string literal
+      tests\gc.Tests\SecurityTests.cs:169 Redundant string interpolation
+      tests\gc.Tests\SecurityTests.cs:187 Redundant string interpolation
+      tests\gc.Tests\SecurityTests.cs:201 Redundant string interpolation
+      tests\gc.Tests\SecurityTests.cs:217 Redundant string interpolation
+      tests\gc.Tests\SecurityTests.cs:255 Redundant string interpolation
+      tests\gc.Tests\SecurityTests.cs:260 Empty general catch clause suppresses any errors
+      tests\gc.Tests\SecurityTests.cs:291 Redundant string interpolation
+      tests\gc.Tests\SecurityTests.cs:300 Use collection expression
+      tests\gc.Tests\SecurityTests.cs:324 Redundant string interpolation
+      tests\gc.Tests\SecurityTests.cs:382 Name 'RunGC' does not match rule 'Methods'. Suggested name is 'RunGc'.
+      tests\gc.Tests\SecurityTests.cs:437 Name 'chmod' does not match rule 'Methods'. Suggested name is 'Chmod'.
+      tests\gc.Tests\SecurityTests.cs:504 Empty general catch clause suppresses any errors
+      tests\gc.Tests\SecurityTests.cs:514 Empty general catch clause suppresses any errors
+      tests\gc.Tests\SecurityTests.cs:522 Qualifier is redundant
+      tests\gc.Tests\ShardCliParserTests.cs:3 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\ShardCliParserTests.cs:5 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\ShardCliParserTests.cs:7 Namespace does not correspond to file location, must be: 'gc.Tests'
+      tests\gc.Tests\ShardSplitterTests.cs:3 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\ShardSplitterTests.cs:5 Namespace does not correspond to file location, must be: 'gc.Tests'
+      tests\gc.Tests\ShardSplitterTests.cs:9 Redundant type specification
+      tests\gc.Tests\ShardSplitterTests.cs:12 Redundant type specification
+      tests\gc.Tests\ShardSplitterTests.cs:117 The parameter 'size' has the same default value
+      tests\gc.Tests\SnapshotTests.cs: Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\SnapshotTests.cs:2 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\SnapshotTests.cs:3 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\SnapshotTests.cs:13 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\SnapshotTests.cs:14 Using directive is not required by the code and can be safely removed
+      tests\gc.Tests\SnapshotTests.cs:42 Empty general catch clause suppresses any errors
+      tests\gc.Tests\SnapshotTests.cs:81 Local variable 'reader' is never used
+      tests\gc.Tests\SnapshotTests.cs:92 Use collection expression
+      tests\gc.Tests\SnapshotTests.cs:103 Use collection expression
+      tests\gc.Tests\SnapshotTests.cs:126 Value assigned is not used in any execution path
+      tests\gc.Tests\ValidatorTests.cs:360 Redundant type specification
+      tests\gc.Tests\ValidatorTests.cs:549 Redundant type specification
+      tests\gc.Tests\ValidatorTests.cs:570 Redundant type specification
+      tests\gc.Tests\ValidatorTests.cs:591 Redundant type specification
+    
+  

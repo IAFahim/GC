@@ -1,22 +1,22 @@
 using System.Text;
-using gc.Domain.Interfaces;
 using gc.Application.Services;
+using gc.Domain.Interfaces;
 
 namespace gc.Application.Adapters;
 
 /// <summary>
-/// Adapter that wraps BrainCrusher to implement IOutputTransform.
+///     Adapter that wraps BrainCrusher to implement IOutputTransform.
 /// </summary>
 public sealed class BrainCrusherAdapter : IOutputTransform
 {
     private readonly BrainCrusher _inner;
 
-    public string Name => "BrainCrusher";
-
     public BrainCrusherAdapter(BrainCrusher? inner = null)
     {
         _inner = inner ?? new BrainCrusher();
     }
+
+    public string Name => "BrainCrusher";
 
     public TransformResult Transform(string input)
     {
@@ -26,18 +26,18 @@ public sealed class BrainCrusherAdapter : IOutputTransform
 }
 
 /// <summary>
-/// Adapter that wraps DynamicCompressor to implement IOutputTransform.
+///     Adapter that wraps DynamicCompressor to implement IOutputTransform.
 /// </summary>
 public sealed class DynamicCompressorAdapter : IOutputTransform
 {
     private readonly DynamicCompressor _inner;
 
-    public string Name => "DynamicCompressor";
-
     public DynamicCompressorAdapter(DynamicCompressor? inner = null)
     {
         _inner = inner ?? new DynamicCompressor();
     }
+
+    public string Name => "DynamicCompressor";
 
     public TransformResult Transform(string input)
     {
@@ -47,21 +47,21 @@ public sealed class DynamicCompressorAdapter : IOutputTransform
 }
 
 /// <summary>
-/// Adapter that wraps SqzCompressionService to implement ICompressTransform.
-/// Must run last in the pipeline since sqz is an external compression tool.
+///     Adapter that wraps SqzCompressionService to implement ICompressTransform.
+///     Must run last in the pipeline since sqz is an external compression tool.
 /// </summary>
 public sealed class SqzCompressionAdapter : ICompressTransform
 {
     private readonly SqzCompressionService _inner;
     private readonly bool _noCache;
 
-    public string Name => "SqzCompression";
-
     public SqzCompressionAdapter(SqzCompressionService inner, bool noCache = false)
     {
         _inner = inner;
         _noCache = noCache;
     }
+
+    public string Name => "SqzCompression";
 
     public TransformResult Transform(string input)
     {
@@ -80,8 +80,8 @@ public sealed class SqzCompressionAdapter : ICompressTransform
 }
 
 /// <summary>
-/// Runs a sequence of transforms as a pipeline, accumulating output and legend.
-/// Each transform is total and referentially transparent.
+///     Runs a sequence of transforms as a pipeline, accumulating output and legend.
+///     Each transform is total and referentially transparent.
 /// </summary>
 public sealed class OutputPipeline
 {
@@ -93,13 +93,13 @@ public sealed class OutputPipeline
     }
 
     /// <summary>
-    /// Applies all transforms sequentially, accumulating legend text.
+    ///     Applies all transforms sequentially, accumulating legend text.
     /// </summary>
     public PipelineResult Apply(string input)
     {
         var current = input;
         var legendBuilder = new StringBuilder();
-        int totalTokensSaved = 0;
+        var totalTokensSaved = 0;
 
         foreach (var transform in _transforms)
         {
@@ -114,16 +114,15 @@ public sealed class OutputPipeline
     }
 
     /// <summary>
-    /// Applies all transforms sequentially with async support for the final sqz transform.
+    ///     Applies all transforms sequentially with async support for the final sqz transform.
     /// </summary>
     public async Task<PipelineResult> ApplyAsync(string input, CancellationToken ct = default)
     {
         var current = input;
         var legendBuilder = new StringBuilder();
-        int totalTokensSaved = 0;
+        var totalTokensSaved = 0;
 
         foreach (var transform in _transforms)
-        {
             if (transform is SqzCompressionAdapter sqzAdapter)
             {
                 var result = await sqzAdapter.TransformAsync(current, ct);
@@ -140,14 +139,13 @@ public sealed class OutputPipeline
                 totalTokensSaved += result.TokensSaved;
                 current = result.Output;
             }
-        }
 
         return new PipelineResult(current, legendBuilder.ToString(), totalTokensSaved);
     }
 }
 
 /// <summary>
-/// Result of running the full output pipeline.
+///     Result of running the full output pipeline.
 /// </summary>
 /// <param name="Output">The final transformed output.</param>
 /// <param name="Legend">Accumulated legend/dictionary text from all transforms.</param>

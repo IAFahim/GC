@@ -1,12 +1,10 @@
 using gc.Application.Services;
-using gc.Domain.Interfaces;
-using Xunit;
 
 namespace gc.Tests;
 
 /// <summary>
-/// Tests for BrainCrusher v2 — pure minifier (comment stripping + whitespace collapse).
-/// Static keyword dictionary removed in v2 (was token-pessimal).
+///     Tests for BrainCrusher v2 — pure minifier (comment stripping + whitespace collapse).
+///     Static keyword dictionary removed in v2 (was token-pessimal).
 /// </summary>
 public class BrainCrusherTests
 {

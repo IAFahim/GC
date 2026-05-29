@@ -357,7 +357,7 @@ public class ValidatorTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         var presets = new Dictionary<string, PresetConfiguration>(config.Presets, StringComparer.OrdinalIgnoreCase)
         {
-            ["dupe"] = new PresetConfiguration
+            ["dupe"] = new()
             {
                 Extensions = ["cs", "CS", "cs"],
                 Description = "Duplicate test"
@@ -532,7 +532,10 @@ public class ValidatorTests
     [Fact]
     public void Validate_EmptyPresetsDictionary_ReturnsWarning()
     {
-        var config = BuiltInPresets.GetDefaultConfiguration() with { Presets = new Dictionary<string, PresetConfiguration>() };
+        var config = BuiltInPresets.GetDefaultConfiguration() with
+        {
+            Presets = new Dictionary<string, PresetConfiguration>()
+        };
 
         var result = new ConfigurationValidator().Validate(config).Value;
 
@@ -546,7 +549,7 @@ public class ValidatorTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         var presets = new Dictionary<string, PresetConfiguration>(config.Presets, StringComparer.OrdinalIgnoreCase)
         {
-            ["empty-ext"] = new PresetConfiguration
+            ["empty-ext"] = new()
             {
                 Extensions = Array.Empty<string>(),
                 Description = "No extensions"
@@ -567,7 +570,7 @@ public class ValidatorTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         var presets = new Dictionary<string, PresetConfiguration>(config.Presets, StringComparer.OrdinalIgnoreCase)
         {
-            ["null-ext"] = new PresetConfiguration
+            ["null-ext"] = new()
             {
                 Extensions = null!,
                 Description = "Null extensions"
@@ -588,7 +591,7 @@ public class ValidatorTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         var presets = new Dictionary<string, PresetConfiguration>(config.Presets, StringComparer.OrdinalIgnoreCase)
         {
-            ["ws"] = new PresetConfiguration
+            ["ws"] = new()
             {
                 Extensions = ["cs", ""],
                 Description = "Has whitespace ext"

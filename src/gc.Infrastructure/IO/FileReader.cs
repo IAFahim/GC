@@ -1,5 +1,5 @@
-using System.Text;
 using System.Buffers;
+using System.Text;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
@@ -9,6 +9,7 @@ namespace gc.Infrastructure.IO;
 
 public sealed class FileReader : IFileReader
 {
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
     private readonly ILogger _logger;
 
     public FileReader(ILogger logger)
@@ -20,12 +21,9 @@ public sealed class FileReader : IFileReader
     {
         try
         {
-            if (!File.Exists(path))
-            {
-                return Result<Stream>.Failure($"File not found: {path}");
-            }
+            if (!File.Exists(path)) return Result<Stream>.Failure($"File not found: {path}");
 
-            var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
+            var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, true);
             return Result<Stream>.Success(stream);
         }
         catch (IOException ex)
@@ -39,56 +37,19 @@ public sealed class FileReader : IFileReader
             return Result<Stream>.Failure(ex.Message);
         }
     }
-
-    public async Task<Result<Stream>> ReadStreamingAsync(string path, LimitsConfiguration limits, CancellationToken ct = default)
-    {
-        try
-        {
-            if (!File.Exists(path))
-            {
-                return Result<Stream>.Failure($"File not found: {path}");
-            }
-
-            var fileInfo = new FileInfo(path);
-            var maxFileSize = limits.GetMaxFileSizeBytes();
-            if (fileInfo.Length > maxFileSize)
-            {
-                return Result<Stream>.Failure($"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes): {path}");
-            }
-
-            var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
-            return Result<Stream>.Success(stream);
-        }
-        catch (IOException ex)
-        {
-            _logger.Error($"Failed to open stream for {path} (file may be locked)", ex);
-            return Result<Stream>.Failure(ex.Message);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _logger.Error($"Access denied to {path}", ex);
-            return Result<Stream>.Failure(ex.Message);
-        }
-    }
-
-    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
     public async Task<Result<FileContent>> ReadAsync(FileEntry entry, CancellationToken ct = default)
     {
         try
         {
-            if (!File.Exists(entry.Path))
-            {
-                return Result<FileContent>.Failure($"File not found: {entry.Path}");
-            }
+            if (!File.Exists(entry.Path)) return Result<FileContent>.Failure($"File not found: {entry.Path}");
 
-            using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
+            using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
+                true);
 
             // Check if binary using the opened stream
             if (await IsBinaryStreamAsync(stream, ct))
-            {
                 return Result<FileContent>.Failure($"Skipping binary file: {entry.Path}");
-            }
 
             stream.Position = 0;
             using var reader = new StreamReader(stream, Utf8NoBom);
@@ -108,29 +69,105 @@ public sealed class FileReader : IFileReader
         }
     }
 
-    public async Task<Result<FileContent>> ReadAsync(FileEntry entry, LimitsConfiguration limits, CancellationToken ct = default)
+    public async Task<bool> IsBinaryFileAsync(string path, CancellationToken ct)
     {
         try
         {
-            if (!File.Exists(entry.Path))
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, true);
+            var length = (int)Math.Min(4096, stream.Length);
+            if (length == 0) return false;
+
+            var buffer = new byte[length];
+            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, length), ct);
+
+            var consecutiveNulls = 0;
+            var nonPrintableCount = 0;
+
+            for (var i = 0; i < bytesRead; i++)
             {
-                return Result<FileContent>.Failure($"File not found: {entry.Path}");
+                var b = buffer[i];
+
+                if (b == 0x00)
+                {
+                    consecutiveNulls++;
+                    if (consecutiveNulls >= 3) return true;
+                }
+                else
+                {
+                    consecutiveNulls = 0;
+                }
+
+                if (b < 32 && b != 9 && b != 10 && b != 13 && b != 0x00) nonPrintableCount++;
             }
+
+            if (bytesRead > 0 && (double)nonPrintableCount / bytesRead > 0.1) return true;
+
+            return false;
+        }
+        catch (IOException ex)
+        {
+            _logger.Error($"Failed to check if {path} is binary (file may be locked)", ex);
+            return false;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.Error($"Access denied when checking if {path} is binary", ex);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"Unexpected error checking if {path} is binary", ex);
+            return false;
+        }
+    }
+
+    public async Task<Result<Stream>> ReadStreamingAsync(string path, LimitsConfiguration limits,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            if (!File.Exists(path)) return Result<Stream>.Failure($"File not found: {path}");
+
+            var fileInfo = new FileInfo(path);
+            var maxFileSize = limits.GetMaxFileSizeBytes();
+            if (fileInfo.Length > maxFileSize)
+                return Result<Stream>.Failure(
+                    $"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes): {path}");
+
+            var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, true);
+            return Result<Stream>.Success(stream);
+        }
+        catch (IOException ex)
+        {
+            _logger.Error($"Failed to open stream for {path} (file may be locked)", ex);
+            return Result<Stream>.Failure(ex.Message);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.Error($"Access denied to {path}", ex);
+            return Result<Stream>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<Result<FileContent>> ReadAsync(FileEntry entry, LimitsConfiguration limits,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            if (!File.Exists(entry.Path)) return Result<FileContent>.Failure($"File not found: {entry.Path}");
 
             var fileInfo = new FileInfo(entry.Path);
             var maxFileSize = limits.GetMaxFileSizeBytes();
             if (fileInfo.Length > maxFileSize)
-            {
-                return Result<FileContent>.Failure($"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes): {entry.Path}");
-            }
+                return Result<FileContent>.Failure(
+                    $"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes): {entry.Path}");
 
-            using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
+            using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
+                true);
 
             // Check if binary using the opened stream
             if (await IsBinaryStreamAsync(stream, ct))
-            {
                 return Result<FileContent>.Failure($"Skipping binary file: {entry.Path}");
-            }
 
             stream.Position = 0;
             using var reader = new StreamReader(stream, Utf8NoBom);
@@ -193,58 +230,6 @@ public sealed class FileReader : IFileReader
         }
         catch
         {
-            return false;
-        }
-    }
-
-    public async Task<bool> IsBinaryFileAsync(string path, CancellationToken ct)
-    {
-        try
-        {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, useAsync: true);
-            var length = (int)Math.Min(4096, stream.Length);
-            if (length == 0) return false;
-
-            var buffer = new byte[length];
-            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, length), ct);
-
-            var consecutiveNulls = 0;
-            var nonPrintableCount = 0;
-
-            for (var i = 0; i < bytesRead; i++)
-            {
-                var b = buffer[i];
-
-                if (b == 0x00)
-                {
-                    consecutiveNulls++;
-                    if (consecutiveNulls >= 3) return true;
-                }
-                else
-                {
-                    consecutiveNulls = 0;
-                }
-
-                if (b < 32 && b != 9 && b != 10 && b != 13 && b != 0x00) nonPrintableCount++;
-            }
-
-            if (bytesRead > 0 && (double)nonPrintableCount / bytesRead > 0.1) return true;
-
-            return false;
-        }
-        catch (IOException ex)
-        {
-            _logger.Error($"Failed to check if {path} is binary (file may be locked)", ex);
-            return false;
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _logger.Error($"Access denied when checking if {path} is binary", ex);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _logger.Error($"Unexpected error checking if {path} is binary", ex);
             return false;
         }
     }

@@ -2,14 +2,13 @@ using gc.Application.Services;
 using gc.Domain.Interfaces;
 using gc.Domain.Models.Configuration;
 using gc.Infrastructure.Logging;
-using Xunit;
 
 namespace gc.Tests.FeatureTests;
 
 public class FileFilterTests
 {
-    private readonly ILogger _logger;
     private readonly FileFilter _filter;
+    private readonly ILogger _logger;
 
     public FileFilterTests()
     {
@@ -24,7 +23,8 @@ public class FileFilterTests
         var config = new GcConfiguration();
 
         // Exact extensions matching (case insensitive)
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), new[] { "cs", "Dockerfile" });
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            new[] { "cs", "Dockerfile" });
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -40,7 +40,8 @@ public class FileFilterTests
     [Fact]
     public void FilterFiles_WithExcludePatterns_UsesAhoCorasickCorrectly()
     {
-        var rawFiles = new[] {
+        var rawFiles = new[]
+        {
             "src/main.cs",
             "src/node_modules/lodash/index.js",
             "build/output.dll",
@@ -57,7 +58,8 @@ public class FileFilterTests
             }
         };
 
-        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), new[] { ".bin", "build/" }, Array.Empty<string>());
+        var result = _filter.FilterFiles(rawFiles, config, Array.Empty<string>(), new[] { ".bin", "build/" },
+            Array.Empty<string>());
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();
@@ -78,7 +80,8 @@ public class FileFilterTests
         var rawFiles = new[] { "src/main.cs", "test/test.cs", "docs/readme.md", "src/utils/math.cs" };
         var config = new GcConfiguration();
 
-        var result = _filter.FilterFiles(rawFiles, config, new[] { "src" }, Array.Empty<string>(), Array.Empty<string>());
+        var result = _filter.FilterFiles(rawFiles, config, new[] { "src" }, Array.Empty<string>(),
+            Array.Empty<string>());
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();

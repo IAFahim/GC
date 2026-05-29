@@ -1,14 +1,17 @@
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.InteropServices;
 using Xunit.Abstractions;
 
 namespace gc.Tests;
 
 public class PerformanceTests : IDisposable
 {
-    private readonly ITestOutputHelper _output;
-    private readonly string _testDir;
-    private readonly string _repoDir;
     private readonly string _binaryPath;
+    private readonly ITestOutputHelper _output;
+    private readonly string _repoDir;
+    private readonly string _testDir;
 
     public PerformanceTests(ITestOutputHelper output)
     {
@@ -17,25 +20,26 @@ public class PerformanceTests : IDisposable
         // Find the project root by looking for the .sln file starting from the base directory
         var current = AppContext.BaseDirectory;
         while (current != null && !File.Exists(Path.Combine(current, "gc.sln")))
-        {
             current = Directory.GetParent(current)?.FullName;
-        }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
 
-        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
         _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
 
         if (!File.Exists(_binaryPath))
-        {
             throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
-        }
 
         _testDir = Path.Combine(Path.GetTempPath(), $"gc_perf_test_{Guid.NewGuid()}");
         _repoDir = Path.Combine(_testDir, "repo");
         Directory.CreateDirectory(_testDir);
         InitializeTestRepo();
+    }
+
+    public void Dispose()
+    {
+        TryDeleteDirectory(_testDir);
     }
 
     [Fact]
@@ -44,10 +48,7 @@ public class PerformanceTests : IDisposable
         _output.WriteLine("Testing performance with small repository...");
 
         // Create 10 small files
-        for (int i = 0; i < 10; i++)
-        {
-            AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
-        }
+        for (var i = 0; i < 10; i++) AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
 
         var outputFile = Path.Combine(_testDir, "perf_small.md");
         var stopwatch = Stopwatch.StartNew();
@@ -56,7 +57,8 @@ public class PerformanceTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        Assert.True(stopwatch.ElapsedMilliseconds < 5000, $"Small repository took {stopwatch.ElapsedMilliseconds}ms (expected < 5000ms)");
+        Assert.True(stopwatch.ElapsedMilliseconds < 5000,
+            $"Small repository took {stopwatch.ElapsedMilliseconds}ms (expected < 5000ms)");
 
         _output.WriteLine($"✅ Small repository processed in {stopwatch.ElapsedMilliseconds}ms");
     }
@@ -67,10 +69,8 @@ public class PerformanceTests : IDisposable
         _output.WriteLine("Testing performance with medium repository...");
 
         // Create 50 files
-        for (int i = 0; i < 50; i++)
-        {
+        for (var i = 0; i < 50; i++)
             AddTestFile($"test{i}.cs", $"public class Test{i} {{ public void Method{i}() {{ }} }}");
-        }
 
         var outputFile = Path.Combine(_testDir, "perf_medium.md");
         var stopwatch = Stopwatch.StartNew();
@@ -79,10 +79,12 @@ public class PerformanceTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        Assert.True(stopwatch.ElapsedMilliseconds < 5000, $"Medium repository took {stopwatch.ElapsedMilliseconds}ms (expected < 5000ms)");
+        Assert.True(stopwatch.ElapsedMilliseconds < 5000,
+            $"Medium repository took {stopwatch.ElapsedMilliseconds}ms (expected < 5000ms)");
 
         var throughput = 50.0 / stopwatch.ElapsedMilliseconds * 1000;
-        _output.WriteLine($"✅ Medium repository processed at {throughput.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)} files/sec");
+        _output.WriteLine(
+            $"✅ Medium repository processed at {throughput.ToString("F0", CultureInfo.InvariantCulture)} files/sec");
     }
 
     [Fact]
@@ -91,10 +93,8 @@ public class PerformanceTests : IDisposable
         _output.WriteLine("Testing performance with large repository...");
 
         // Create 100 files
-        for (int i = 0; i < 100; i++)
-        {
+        for (var i = 0; i < 100; i++)
             AddTestFile($"test{i}.cs", $"public class Test{i} {{ public void Method{i}() {{ }} }}");
-        }
 
         var outputFile = Path.Combine(_testDir, "perf_large.md");
         var stopwatch = Stopwatch.StartNew();
@@ -103,7 +103,8 @@ public class PerformanceTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
-        Assert.True(stopwatch.ElapsedMilliseconds < 10000, $"Large repository took {stopwatch.ElapsedMilliseconds}ms (expected < 10000ms)");
+        Assert.True(stopwatch.ElapsedMilliseconds < 10000,
+            $"Large repository took {stopwatch.ElapsedMilliseconds}ms (expected < 10000ms)");
 
         _output.WriteLine($"✅ Large repository processed in {stopwatch.ElapsedMilliseconds}ms");
     }
@@ -114,7 +115,7 @@ public class PerformanceTests : IDisposable
         _output.WriteLine("Comparing memory usage: streaming vs non-streaming...");
 
         // Create 50 files with moderate content
-        for (int i = 0; i < 50; i++)
+        for (var i = 0; i < 50; i++)
         {
             var content = string.Join("\n", Enumerable.Range(0, 100).Select(j => $"// Line {j} in file {i}"));
             AddTestFile($"test{i}.cs", content);
@@ -136,7 +137,7 @@ public class PerformanceTests : IDisposable
         Assert.True(File.Exists(outputFile));
 
         _output.WriteLine($"Streaming: {stopwatch1.ElapsedMilliseconds}ms, {streamingMemory}MB memory");
-        _output.WriteLine($"✅ Memory usage is reasonable for streaming approach");
+        _output.WriteLine("✅ Memory usage is reasonable for streaming approach");
     }
 
     [Fact]
@@ -145,10 +146,7 @@ public class PerformanceTests : IDisposable
         _output.WriteLine("Testing parallel processing performance...");
 
         // Create 30 files
-        for (int i = 0; i < 30; i++)
-        {
-            AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
-        }
+        for (var i = 0; i < 30; i++) AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
 
         var outputFile = Path.Combine(_testDir, "perf_parallel.md");
         var stopwatch = Stopwatch.StartNew();
@@ -159,11 +157,12 @@ public class PerformanceTests : IDisposable
         Assert.Contains("✔ Exported", result.StandardOutput);
 
         var avgTimePerFile = stopwatch.ElapsedMilliseconds / 30.0;
-        _output.WriteLine($"Average time per file: {avgTimePerFile.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}ms");
+        _output.WriteLine($"Average time per file: {avgTimePerFile.ToString("F2", CultureInfo.InvariantCulture)}ms");
 
-        Assert.True(avgTimePerFile < 500, $"Average time per file too high: {avgTimePerFile.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)}ms");
+        Assert.True(avgTimePerFile < 500,
+            $"Average time per file too high: {avgTimePerFile.ToString("F2", CultureInfo.InvariantCulture)}ms");
 
-        _output.WriteLine($"✅ Parallel processing provides good performance");
+        _output.WriteLine("✅ Parallel processing provides good performance");
     }
 
     [Fact]
@@ -172,10 +171,7 @@ public class PerformanceTests : IDisposable
         _output.WriteLine("Testing cold start vs warm start performance...");
 
         // Create test files
-        for (int i = 0; i < 10; i++)
-        {
-            AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
-        }
+        for (var i = 0; i < 10; i++) AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
 
         var outputFile1 = Path.Combine(_testDir, "perf_cold.md");
         var outputFile2 = Path.Combine(_testDir, "perf_warm.md");
@@ -199,7 +195,7 @@ public class PerformanceTests : IDisposable
         _output.WriteLine($"Warm start: {warmStopwatch.ElapsedMilliseconds}ms");
         _output.WriteLine($"Difference: {coldStopwatch.ElapsedMilliseconds - warmStopwatch.ElapsedMilliseconds}ms");
 
-        _output.WriteLine($"✅ Performance consistent across runs");
+        _output.WriteLine("✅ Performance consistent across runs");
     }
 
     [Fact]
@@ -208,10 +204,7 @@ public class PerformanceTests : IDisposable
         _output.WriteLine("Testing file discovery efficiency...");
 
         // Create 20 files
-        for (int i = 0; i < 20; i++)
-        {
-            AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
-        }
+        for (var i = 0; i < 20; i++) AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
 
         // Test with debug to see discovery time
         var result = RunGC("--debug --output out.md");
@@ -223,15 +216,11 @@ public class PerformanceTests : IDisposable
         var discoveryLine = lines.FirstOrDefault(l => l.Contains("File discovery"));
 
         if (discoveryLine != null)
-        {
             _output.WriteLine($"Discovery performance: {discoveryLine.Trim()}");
-        }
         else
-        {
             _output.WriteLine("Could not find File discovery timing in debug output.");
-        }
 
-        _output.WriteLine($"✅ File discovery is efficient");
+        _output.WriteLine("✅ File discovery is efficient");
     }
 
     [Fact]
@@ -240,10 +229,8 @@ public class PerformanceTests : IDisposable
         _output.WriteLine("Testing markdown generation performance...");
 
         // Create 20 files with content
-        for (int i = 0; i < 20; i++)
-        {
+        for (var i = 0; i < 20; i++)
             AddTestFile($"test{i}.cs", $"public class Test{i} {{ public void Method{i}() {{ }} }}");
-        }
 
         var outputFile = Path.Combine(_testDir, "output.md");
         var stopwatch = Stopwatch.StartNew();
@@ -257,9 +244,9 @@ public class PerformanceTests : IDisposable
         var mbPerSec = fileSize / 1024.0 / 1024.0 / (stopwatch.ElapsedMilliseconds / 1000.0);
 
         _output.WriteLine($"Generated {fileSize} bytes in {stopwatch.ElapsedMilliseconds}ms");
-        _output.WriteLine($"Speed: {mbPerSec.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} MB/sec");
+        _output.WriteLine($"Speed: {mbPerSec.ToString("F2", CultureInfo.InvariantCulture)} MB/sec");
 
-        _output.WriteLine($"✅ Markdown generation is fast");
+        _output.WriteLine("✅ Markdown generation is fast");
     }
 
     private void InitializeTestRepo()
@@ -275,10 +262,7 @@ public class PerformanceTests : IDisposable
         var fullPath = Path.Combine(_repoDir, name);
         var directory = Path.GetDirectoryName(fullPath);
 
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
         File.WriteAllText(fullPath, content);
         RunGitCommand("add", name);
@@ -298,10 +282,7 @@ public class PerformanceTests : IDisposable
         };
 
         using var process = Process.Start(processInfo);
-        if (process == null)
-        {
-            return new ProcessResult(-1, "", "Failed to start process");
-        }
+        if (process == null) return new ProcessResult(-1, "", "Failed to start process");
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
@@ -325,26 +306,16 @@ public class PerformanceTests : IDisposable
 
         using var process = Process.Start(processInfo);
         if (process != null)
-        {
             try
             {
-                if (!process.HasExited)
-                {
-                    process.WaitForExit();
-                }
+                if (!process.HasExited) process.WaitForExit();
             }
             catch (InvalidOperationException)
             {
             }
-            catch (System.ComponentModel.Win32Exception)
+            catch (Win32Exception)
             {
             }
-        }
-    }
-
-    public void Dispose()
-    {
-        TryDeleteDirectory(_testDir);
     }
 
     private void TryDeleteDirectory(string path, int retryCount = 0)
@@ -355,20 +326,20 @@ public class PerformanceTests : IDisposable
         {
             // Reset file attributes to Normal to ensure deletable
             foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
-            {
                 try
                 {
                     File.SetAttributes(file, FileAttributes.Normal);
                 }
-                catch { }
-            }
+                catch
+                {
+                }
 
             Directory.Delete(path, true);
         }
         catch when (retryCount < 3)
         {
             // Retry with exponential backoff
-            System.Threading.Thread.Sleep(100 * (retryCount + 1));
+            Thread.Sleep(100 * (retryCount + 1));
             TryDeleteDirectory(path, retryCount + 1);
         }
         catch

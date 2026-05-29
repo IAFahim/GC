@@ -1,31 +1,27 @@
-using System.Buffers;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using gc.Application.Services;
-using gc.Domain.Common;
 using gc.Domain.Constants;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
-using gc.Infrastructure.Configuration;
 using gc.Infrastructure.Discovery;
-using gc.Infrastructure.IO;
 using gc.Infrastructure.Logging;
 using Xunit.Abstractions;
 
 namespace gc.Tests;
 
 /// <summary>
-/// Phase 0 performance optimization tests — validates every optimization
-/// from TODOS_PERFORMANCE.md Phase 0 is correctly implemented and functional.
+///     Phase 0 performance optimization tests — validates every optimization
+///     from TODOS_PERFORMANCE.md Phase 0 is correctly implemented and functional.
 /// </summary>
 public class Phase0PerformanceTests : IDisposable
 {
-    private readonly ITestOutputHelper _output;
-    private readonly ILogger _logger;
-    private readonly string _tempDir;
     private readonly GcConfiguration _config;
+    private readonly ILogger _logger;
+    private readonly ITestOutputHelper _output;
+    private readonly string _tempDir;
 
     public Phase0PerformanceTests(ITestOutputHelper output)
     {
@@ -34,6 +30,29 @@ public class Phase0PerformanceTests : IDisposable
         _tempDir = Path.Combine(Path.GetTempPath(), $"gc_phase0_test_{Guid.NewGuid()}");
         Directory.CreateDirectory(_tempDir);
         _config = BuiltInPresets.GetDefaultConfiguration();
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (Directory.Exists(_tempDir))
+            {
+                foreach (var file in Directory.GetFiles(_tempDir, "*", SearchOption.AllDirectories))
+                    try
+                    {
+                        File.SetAttributes(file, FileAttributes.Normal);
+                    }
+                    catch
+                    {
+                    }
+
+                Directory.Delete(_tempDir, true);
+            }
+        }
+        catch
+        {
+        }
     }
 
     // ========================================================================
@@ -45,12 +64,12 @@ public class Phase0PerformanceTests : IDisposable
     {
         // Verify that StreamWriter does NOT flush on every write.
         // We do this by writing to a CountingStream that tracks Write calls.
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = Enumerable.Range(0, 50).Select(i =>
         {
             var content = $"public class Test{i} {{ }}";
             return new FileContent(
-                new FileEntry(Root: "", Relative: $"test{i}.cs", Extension: "cs", Language: "cs", Size: content.Length),
+                new FileEntry("", $"test{i}.cs", "cs", "cs", content.Length),
                 content,
                 content.Length);
         }).ToList();
@@ -76,11 +95,11 @@ public class Phase0PerformanceTests : IDisposable
     public async Task Optimization01_LargerBuffer_ProducesIdenticalOutput()
     {
         // Verify output correctness is identical with larger buffer
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var content = "Console.WriteLine(\"hello\");";
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: content.Length), content, content.Length)
+            new(new FileEntry("", "test.cs", "cs", "cs", content.Length), content, content.Length)
         };
 
         using var ms = new MemoryStream();
@@ -100,12 +119,12 @@ public class Phase0PerformanceTests : IDisposable
     public async Task Optimization01_BufferedWriter_FasterThanAutoFlush()
     {
         // Performance comparison: buffered vs many writes
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = Enumerable.Range(0, 200).Select(i =>
         {
             var c = $"public class Test{i} {{ public void Method() {{ }} }}";
             return new FileContent(
-                new FileEntry(Root: "", Relative: $"dir/subdir/test{i}.cs", Extension: "cs", Language: "cs", Size: c.Length), c, c.Length);
+                new FileEntry("", $"dir/subdir/test{i}.cs", "cs", "cs", c.Length), c, c.Length);
         }).ToList();
 
         // Warm up
@@ -259,10 +278,7 @@ public class Phase0PerformanceTests : IDisposable
     {
         // Create many files and verify filtering is fast (no stat() per file)
         var files = new List<string>();
-        for (int i = 0; i < 1000; i++)
-        {
-            files.Add($"src/module{i}/component{i}.cs");
-        }
+        for (var i = 0; i < 1000; i++) files.Add($"src/module{i}/component{i}.cs");
 
         var filter = new FileFilter(_logger);
         var sw = Stopwatch.StartNew();
@@ -323,8 +339,8 @@ public class Phase0PerformanceTests : IDisposable
     {
         // End-to-end: filter creates entry with Size=-1, generator handles missing file.
         // The streaming path now checks FileInfo.Exists first and writes an error message.
-        var generator = new MarkdownGenerator();
-        var missingEntry = new FileEntry(Root: "", Relative: "/tmp/nonexistent_phase0_test_" + Guid.NewGuid() + ".cs", Extension: "cs", Language: "cs", Size: -1);
+        var generator = new MarkdownGenerator(_logger);
+        var missingEntry = new FileEntry("", "/tmp/nonexistent_phase0_test_" + Guid.NewGuid() + ".cs", "cs", "cs", -1);
         var contents = new List<FileContent>
         {
             new(missingEntry, null, -1)
@@ -348,11 +364,11 @@ public class Phase0PerformanceTests : IDisposable
     public async Task Optimization04_CachedByteCounts_ProduceCorrectTotals()
     {
         // Verify that cached byte counts produce the same result as runtime calculation
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var content = "line1\nline2\nline3";
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: "test.txt", Extension: "txt", Language: "text", Size: content.Length), content, content.Length)
+            new(new FileEntry("", "test.txt", "txt", "text", content.Length), content, content.Length)
         };
 
         using var ms = new MemoryStream();
@@ -369,14 +385,14 @@ public class Phase0PerformanceTests : IDisposable
     public async Task Optimization04_ByteCountAccuracy_MultipleFiles()
     {
         // Test byte count accuracy across multiple files of different sizes
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>();
 
-        for (int i = 0; i < 20; i++)
+        for (var i = 0; i < 20; i++)
         {
             var content = string.Join("\n", Enumerable.Range(0, i + 1).Select(j => $"// line {j}"));
             entries.Add(new FileContent(
-                new FileEntry(Root: "", Relative: $"file{i}.cs", Extension: "cs", Language: "cs", Size: content.Length),
+                new FileEntry("", $"file{i}.cs", "cs", "cs", content.Length),
                 content, content.Length));
         }
 
@@ -392,11 +408,12 @@ public class Phase0PerformanceTests : IDisposable
     public async Task Optimization04_ByteCountAccuracy_WithUnicode()
     {
         // Multibyte characters must be counted correctly
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var content = "Hello 世界 🌍 — «quotes»";
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: "unicode.txt", Extension: "txt", Language: "text", Size: Encoding.UTF8.GetByteCount(content)), content, Encoding.UTF8.GetByteCount(content))
+            new(new FileEntry("", "unicode.txt", "txt", "text", Encoding.UTF8.GetByteCount(content)), content,
+                Encoding.UTF8.GetByteCount(content))
         };
 
         using var ms = new MemoryStream();
@@ -414,8 +431,8 @@ public class Phase0PerformanceTests : IDisposable
         var tempFile = Path.Combine(_tempDir, "stream_test.cs");
         File.WriteAllText(tempFile, "public class StreamTest { }");
 
-        var generator = new MarkdownGenerator();
-        var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "cs", Language: "cs", Size: -1);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry("", tempFile, "cs", "cs", -1);
         var contents = new List<FileContent> { new(entry, null, -1) };
 
         using var ms = new MemoryStream();
@@ -487,7 +504,7 @@ public class Phase0PerformanceTests : IDisposable
 
         // Run 3 times and take the best
         var times = new List<long>();
-        for (int i = 0; i < 3; i++)
+        for (var i = 0; i < 3; i++)
         {
             var sw = Stopwatch.StartNew();
             var result = await discovery.DiscoverFilesAsync(projectRoot, config);
@@ -515,8 +532,8 @@ public class Phase0PerformanceTests : IDisposable
         var content = string.Join("\n", Enumerable.Range(0, 100).Select(i => $"Line {i}: {new string('x', 80)}"));
         await File.WriteAllTextAsync(tempFile, content);
 
-        var generator = new MarkdownGenerator();
-        var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "txt", Language: "text", Size: -1);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry("", tempFile, "txt", "text", -1);
         var contents = new List<FileContent> { new(entry, null, -1) };
 
         using var ms = new MemoryStream();
@@ -536,14 +553,15 @@ public class Phase0PerformanceTests : IDisposable
     [Fact]
     public async Task EndToEnd_InMemoryGeneration_200Files_Under500ms()
     {
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>();
 
-        for (int i = 0; i < 200; i++)
+        for (var i = 0; i < 200; i++)
         {
-            var c = $"using System;\nnamespace Test{i}\n{{\n    public class Class{i}\n    {{\n        public void Method() {{ }}\n    }}\n}}";
+            var c =
+                $"using System;\nnamespace Test{i}\n{{\n    public class Class{i}\n    {{\n        public void Method() {{ }}\n    }}\n}}";
             entries.Add(new FileContent(
-                new FileEntry(Root: "", Relative: $"src/module{i}/Class{i}.cs", Extension: "cs", Language: "cs", Size: c.Length),
+                new FileEntry("", $"src/module{i}/Class{i}.cs", "cs", "cs", c.Length),
                 c, c.Length));
         }
 
@@ -567,13 +585,14 @@ public class Phase0PerformanceTests : IDisposable
         Directory.CreateDirectory(filesDir);
 
         var entries = new List<FileContent>();
-        for (int i = 0; i < 50; i++)
+        for (var i = 0; i < 50; i++)
         {
             var filePath = Path.Combine(filesDir, $"file{i}.cs");
-            var content = $"namespace Perf{i}\n{{\n    public class Test{i}\n    {{\n        public string Value => \"test\";\n    }}\n}}";
+            var content =
+                $"namespace Perf{i}\n{{\n    public class Test{i}\n    {{\n        public string Value => \"test\";\n    }}\n}}";
             await File.WriteAllTextAsync(filePath, content);
             entries.Add(new FileContent(
-                new FileEntry(Root: "", Relative: filePath, Extension: "cs", Language: "cs", Size: -1), null, -1));
+                new FileEntry("", filePath, "cs", "cs", -1), null, -1));
         }
 
         using var ms = new MemoryStream();
@@ -625,17 +644,18 @@ public class Phase0PerformanceTests : IDisposable
         // 3. With line exclusion
         // 4. With backtick escalation
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
 
         // Path 1: In-memory
         {
             var c = "normal content here";
             var entries = new List<FileContent>
             {
-                new(new FileEntry(Root: "", Relative: "inmem.cs", Extension: "cs", Language: "cs", Size: c.Length), c, c.Length)
+                new(new FileEntry("", "inmem.cs", "cs", "cs", c.Length), c, c.Length)
             };
             using var ms = new MemoryStream();
-            var r = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, null, CancellationToken.None);
+            var r = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, null,
+                CancellationToken.None);
             Assert.True(r.IsSuccess);
             Assert.True(r.Value > 0, $"Byte count reported: {r.Value}");
         }
@@ -646,10 +666,11 @@ public class Phase0PerformanceTests : IDisposable
             File.WriteAllText(tmpFile, "streaming content");
             var entries = new List<FileContent>
             {
-                new(new FileEntry(Root: "", Relative: tmpFile, Extension: "cs", Language: "cs", Size: -1), null, -1)
+                new(new FileEntry("", tmpFile, "cs", "cs", -1), null, -1)
             };
             using var ms = new MemoryStream();
-            var r = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, null, CancellationToken.None);
+            var r = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, null,
+                CancellationToken.None);
             Assert.True(r.IsSuccess);
             Assert.True(r.Value > 0, $"Byte count reported: {r.Value}");
         }
@@ -659,7 +680,7 @@ public class Phase0PerformanceTests : IDisposable
             var c = "// comment\ncode\n// another comment\nmore code";
             var entries = new List<FileContent>
             {
-                new(new FileEntry(Root: "", Relative: "exclude.cs", Extension: "cs", Language: "cs", Size: c.Length), c, c.Length)
+                new(new FileEntry("", "exclude.cs", "cs", "cs", c.Length), c, c.Length)
             };
             using var ms = new MemoryStream();
             var r = await generator.GenerateMarkdownStreamingAsync(
@@ -673,10 +694,11 @@ public class Phase0PerformanceTests : IDisposable
             var c = "has ```` quadruple backticks";
             var entries = new List<FileContent>
             {
-                new(new FileEntry(Root: "", Relative: "backtick.md", Extension: "md", Language: "markdown", Size: c.Length), c, c.Length)
+                new(new FileEntry("", "backtick.md", "md", "markdown", c.Length), c, c.Length)
             };
             using var ms = new MemoryStream();
-            var r = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, null, CancellationToken.None);
+            var r = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, null,
+                CancellationToken.None);
             Assert.True(r.IsSuccess);
             Assert.True(r.Value > 0, $"Byte count reported: {r.Value}");
             var output = Encoding.UTF8.GetString(ms.ToArray());
@@ -691,16 +713,13 @@ public class Phase0PerformanceTests : IDisposable
         // Large file (500KB) — verify streaming byte count accuracy
         var tmpFile = Path.Combine(_tempDir, "large_stream.txt");
         var sb = new StringBuilder();
-        for (int i = 0; i < 10000; i++)
-        {
-            sb.AppendLine($"Line {i}: {new string('A', 40)}");
-        }
+        for (var i = 0; i < 10000; i++) sb.AppendLine($"Line {i}: {new string('A', 40)}");
         await File.WriteAllTextAsync(tmpFile, sb.ToString());
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "txt", Language: "text", Size: -1), null, -1)
+            new(new FileEntry("", tmpFile, "txt", "text", -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -720,10 +739,10 @@ public class Phase0PerformanceTests : IDisposable
         var tmpFile = Path.Combine(_tempDir, "exclude_stream.cs");
         File.WriteAllText(tmpFile, "// comment 1\nusing System;\n// comment 2\nclass X {}\n");
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "cs", Language: "cs", Size: -1), null, -1)
+            new(new FileEntry("", tmpFile, "cs", "cs", -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -745,10 +764,10 @@ public class Phase0PerformanceTests : IDisposable
         var binaryData = new byte[] { 0x00, 0x01, 0x02, 0x00, 0x03 };
         await File.WriteAllBytesAsync(tmpFile, binaryData);
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "dat", Language: "dat", Size: -1), null, -1)
+            new(new FileEntry("", tmpFile, "dat", "dat", -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -769,10 +788,10 @@ public class Phase0PerformanceTests : IDisposable
         var content = new string('x', 2 * 1024 * 1024);
         await File.WriteAllTextAsync(tmpFile, content);
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "txt", Language: "text", Size: -1), null, -1)
+            new(new FileEntry("", tmpFile, "txt", "text", -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -787,7 +806,7 @@ public class Phase0PerformanceTests : IDisposable
     [Fact]
     public async Task EndToEnd_EmptyContentList_ProducesProjectStructureOnly()
     {
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(
             Array.Empty<FileContent>(), ms, _config, null, null, CancellationToken.None);
@@ -801,11 +820,11 @@ public class Phase0PerformanceTests : IDisposable
     [Fact]
     public async Task EndToEnd_Cancellation_ThrowsGracefully()
     {
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = Enumerable.Range(0, 100).Select(i =>
         {
             var c = new string('x', 10000);
-            return new FileContent(new FileEntry(Root: "", Relative: $"f{i}.txt", Extension: "txt", Language: "text", Size: c.Length), c, c.Length);
+            return new FileContent(new FileEntry("", $"f{i}.txt", "txt", "text", c.Length), c, c.Length);
         }).ToList();
 
         using var cts = new CancellationTokenSource();
@@ -828,11 +847,11 @@ public class Phase0PerformanceTests : IDisposable
             Limits = _config.Limits with { MaxMemoryBytes = "1KB" }
         };
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var content = new string('x', 2000);
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: "big.txt", Extension: "txt", Language: "text", Size: content.Length), content, content.Length)
+            new(new FileEntry("", "big.txt", "txt", "text", content.Length), content, content.Length)
         };
 
         using var ms = new MemoryStream();
@@ -850,10 +869,10 @@ public class Phase0PerformanceTests : IDisposable
         var tmpFile = Path.Combine(_tempDir, "backtick_stream.md");
         File.WriteAllText(tmpFile, "```\ncode block\n```\nmore ```` stuff");
 
-        var generator = new MarkdownGenerator();
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>
         {
-            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "md", Language: "markdown", Size: -1), null, -1)
+            new(new FileEntry("", tmpFile, "md", "markdown", -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -872,38 +891,22 @@ public class Phase0PerformanceTests : IDisposable
     // Helper methods
     // ========================================================================
 
-    private MarkdownGenerator generator_Create() =>
-        new MarkdownGenerator();
+    private MarkdownGenerator generator_Create()
+    {
+        return new MarkdownGenerator(_logger);
+    }
 
     private string? FindProjectRoot()
     {
         var current = AppContext.BaseDirectory;
         while (current != null && !File.Exists(Path.Combine(current, "gc.sln")))
-        {
             current = Directory.GetParent(current)?.FullName;
-        }
         return current;
     }
 
-    public void Dispose()
-    {
-        try
-        {
-            if (Directory.Exists(_tempDir))
-            {
-                foreach (var file in Directory.GetFiles(_tempDir, "*", SearchOption.AllDirectories))
-                {
-                    try { File.SetAttributes(file, FileAttributes.Normal); } catch { }
-                }
-                Directory.Delete(_tempDir, true);
-            }
-        }
-        catch { }
-    }
-
     /// <summary>
-    /// Stream that counts how many times Write is called.
-    /// Used to verify AutoFlush is disabled.
+    ///     Stream that counts how many times Write is called.
+    ///     Used to verify AutoFlush is disabled.
     /// </summary>
     private sealed class WriteCountingStream : MemoryStream
     {

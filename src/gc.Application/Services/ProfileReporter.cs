@@ -5,12 +5,12 @@ using System.Text.Json;
 namespace gc.Application.Services;
 
 /// <summary>
-/// Collects stage timings and metrics for profiling output.
+///     Collects stage timings and metrics for profiling output.
 /// </summary>
 public sealed class ProfileReporter
 {
-    private readonly Dictionary<string, long> _stageTicks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _metrics = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _stageTicks = new(StringComparer.OrdinalIgnoreCase);
     private readonly Stopwatch _totalSw = Stopwatch.StartNew();
 
     public void RecordStage(string name, long elapsedTicks)
@@ -23,15 +23,18 @@ public sealed class ProfileReporter
         _metrics[name] = value;
     }
 
-    public void Stop() => _totalSw.Stop();
+    public void Stop()
+    {
+        _totalSw.Stop();
+    }
 
     public string ToMarkdown()
     {
         var sb = new StringBuilder();
         sb.AppendLine("## Profile");
         sb.AppendLine();
-        sb.AppendLine($"| Stage | Time |");
-        sb.AppendLine($"|---|---|");
+        sb.AppendLine("| Stage | Time |");
+        sb.AppendLine("|---|---|");
 
         foreach (var kvp in _stageTicks)
         {
@@ -46,10 +49,7 @@ public sealed class ProfileReporter
         {
             sb.AppendLine("| Metric | Value |");
             sb.AppendLine("|---|---|");
-            foreach (var kvp in _metrics)
-            {
-                sb.AppendLine($"| {kvp.Key} | {kvp.Value} |");
-            }
+            foreach (var kvp in _metrics) sb.AppendLine($"| {kvp.Key} | {kvp.Value} |");
         }
 
         return sb.ToString();

@@ -1,10 +1,11 @@
+using System.Buffers;
 using System.Collections.Frozen;
 using System.Runtime.CompilerServices;
 using gc.Domain.Common;
-using gc.Domain.Models;
-using gc.Domain.Models.Configuration;
 using gc.Domain.Constants;
 using gc.Domain.Interfaces;
+using gc.Domain.Models;
+using gc.Domain.Models.Configuration;
 
 namespace gc.Application.Services;
 
@@ -35,7 +36,7 @@ public sealed class FileFilter
         foreach (var p in systemIgnored) allExcludes.Add(p.Replace('\\', '/'));
         foreach (var p in excludePatterns) allExcludes.Add(p.Replace('\\', '/'));
 
-        var excludeSearchValues = System.Buffers.SearchValues.Create(allExcludes.ToArray(), StringComparison.OrdinalIgnoreCase);
+        var excludeSearchValues = SearchValues.Create(allExcludes.ToArray(), StringComparison.OrdinalIgnoreCase);
 
         var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToArray();
 
@@ -44,7 +45,8 @@ public sealed class FileFilter
         var mergedIncludePath = MergePatterns(includePathPatterns, config.Filters?.IncludePathPatterns);
 
         var filtered = rawFiles
-            .Where(path => IsValidPath(path, normalizedSearchPaths, excludeSearchValues, activeExtensions, mergedExcludePath, mergedIncludePath))
+            .Where(path => IsValidPath(path, normalizedSearchPaths, excludeSearchValues, activeExtensions,
+                mergedExcludePath, mergedIncludePath))
             .Select(path => CreateFileEntry(path, config, rootPath, absoluteRootPath))
             .Where(entry => entry != null)
             .Cast<FileEntry>()
@@ -52,9 +54,7 @@ public sealed class FileFilter
 
         var maxFiles = config.Limits.MaxFiles;
         if (maxFiles > 0 && filtered.Count > maxFiles)
-        {
             return Result<IEnumerable<FileEntry>>.Success(filtered.Take(maxFiles));
-        }
 
         return Result<IEnumerable<FileEntry>>.Success(filtered);
     }
@@ -76,7 +76,7 @@ public sealed class FileFilter
         {
             var fileNameSpan = GetFileNameSpan(pathNormalized.AsSpan());
             var dotIdx = fileNameSpan.LastIndexOf('.');
-            bool matchesExtension = false;
+            var matchesExtension = false;
 
             var lookup = activeExtensions.GetAlternateLookup<ReadOnlySpan<char>>();
 
@@ -87,85 +87,79 @@ public sealed class FileFilter
             else if (dotIdx >= 0 && dotIdx < fileNameSpan.Length - 1)
             {
                 var extSpan = fileNameSpan[(dotIdx + 1)..];
-                if (lookup.Contains(extSpan))
-                {
-                    matchesExtension = true;
-                }
+                if (lookup.Contains(extSpan)) matchesExtension = true;
             }
 
             if (!matchesExtension)
             {
-                _logger.Warning($"[EXCLUDED] Failed extension filter. Target: '{GetFileNameSpan(pathNormalized.AsSpan()).ToString()}', Required: {string.Join(", ", activeExtensions)}");
+                _logger.Warning(
+                    $"[EXCLUDED] Failed extension filter. Target: '{GetFileNameSpan(pathNormalized.AsSpan()).ToString()}', Required: {string.Join(", ", activeExtensions)}");
                 return;
             }
-            _logger.Success($"[PASSED] Extension filter.");
+
+            _logger.Success("[PASSED] Extension filter.");
         }
         else
         {
-            _logger.Success($"[PASSED] Extension filter (none specified).");
+            _logger.Success("[PASSED] Extension filter (none specified).");
         }
 
         var systemIgnored = config.Filters?.SystemIgnoredPatterns ?? Array.Empty<string>();
         foreach (var p in systemIgnored)
-        {
             if (pathNormalized.Contains(p.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
             {
                 _logger.Warning($"[EXCLUDED] Matched system ignored pattern: {p}");
                 return;
             }
-        }
+
         foreach (var p in excludePatterns)
-        {
             if (pathNormalized.Contains(p.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
             {
                 _logger.Warning($"[EXCLUDED] Matched exact exclude pattern: {p}");
                 return;
             }
-        }
-        _logger.Success($"[PASSED] Exact exclude checks.");
+
+        _logger.Success("[PASSED] Exact exclude checks.");
 
         var mergedExcludePath = MergePatterns(excludePathPatterns, config.Filters?.ExcludePathPatterns);
         if (mergedExcludePath.Length > 0)
-        {
             foreach (var p in mergedExcludePath)
-            {
                 if (GlobMatcher.IsMatch(pathNormalized.AsSpan(), p.AsSpan()))
                 {
                     _logger.Warning($"[EXCLUDED] Matched glob exclude pattern: {p}");
                     return;
                 }
-            }
-        }
-        _logger.Success($"[PASSED] Glob exclude checks.");
+
+        _logger.Success("[PASSED] Glob exclude checks.");
 
         var mergedIncludePath = MergePatterns(includePathPatterns, config.Filters?.IncludePathPatterns);
         if (mergedIncludePath.Length > 0)
         {
-            bool matched = false;
+            var matched = false;
             foreach (var p in mergedIncludePath)
-            {
                 if (GlobMatcher.IsMatch(pathNormalized.AsSpan(), p.AsSpan()))
                 {
                     matched = true;
                     _logger.Success($"[PASSED] Matched glob include pattern: {p}");
                     break;
                 }
-            }
+
             if (!matched)
             {
-                _logger.Warning($"[EXCLUDED] Failed glob include patterns (did not match any): {string.Join(", ", mergedIncludePath)}");
+                _logger.Warning(
+                    $"[EXCLUDED] Failed glob include patterns (did not match any): {string.Join(", ", mergedIncludePath)}");
                 return;
             }
         }
         else
         {
-            _logger.Success($"[PASSED] Glob include checks (none specified).");
+            _logger.Success("[PASSED] Glob include checks (none specified).");
         }
 
         var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToArray();
         if (normalizedSearchPaths.Length > 0)
         {
-            bool matchesSearchPath = false;
+            var matchesSearchPath = false;
             foreach (var searchPath in normalizedSearchPaths)
             {
                 var searchSpan = searchPath.AsSpan();
@@ -179,15 +173,17 @@ public sealed class FileFilter
                     break;
                 }
             }
+
             if (!matchesSearchPath)
             {
-                _logger.Warning($"[EXCLUDED] Failed search path checks. Active paths: {string.Join(", ", normalizedSearchPaths)}");
+                _logger.Warning(
+                    $"[EXCLUDED] Failed search path checks. Active paths: {string.Join(", ", normalizedSearchPaths)}");
                 return;
             }
         }
         else
         {
-            _logger.Success($"[PASSED] Search path checks (none specified).");
+            _logger.Success("[PASSED] Search path checks (none specified).");
         }
 
         _logger.Success($"[INCLUDED] File '{targetPath}' passes all path filters.");
@@ -205,7 +201,8 @@ public sealed class FileFilter
         return list.ToArray();
     }
 
-    private FileEntry? CreateFileEntry(string path, GcConfiguration config, string? rootPath = null, string? absoluteRootPath = null)
+    private FileEntry? CreateFileEntry(string path, GcConfiguration config, string? rootPath = null,
+        string? absoluteRootPath = null)
     {
         try
         {
@@ -218,20 +215,20 @@ public sealed class FileFilter
             // - rootPath is the repo root
             // - absoluteRootPath is the absolute version of rootPath
             // - path may be absolute or relative
-            string root = string.Empty;
-            string relative = path;
+            var root = string.Empty;
+            var relative = path;
 
             if (!string.IsNullOrEmpty(rootPath))
             {
-                var absRoot = !string.IsNullOrEmpty(absoluteRootPath) 
-                    ? absoluteRootPath 
-                    : System.IO.Path.GetFullPath(rootPath);
+                var absRoot = !string.IsNullOrEmpty(absoluteRootPath)
+                    ? absoluteRootPath
+                    : Path.GetFullPath(rootPath);
 
-                if (System.IO.Path.IsPathFullyQualified(path))
+                if (Path.IsPathFullyQualified(path))
                 {
                     // path is absolute - compute relative from root
                     root = absRoot;
-                    relative = System.IO.Path.GetRelativePath(absRoot, path).Replace('\\', '/');
+                    relative = Path.GetRelativePath(absRoot, path).Replace('\\', '/');
                 }
                 else
                 {
@@ -244,21 +241,23 @@ public sealed class FileFilter
             // Populate file size during filtering to avoid redundant stat calls downstream.
             // Use the absolute path to stat correctly.
             long size = -1;
-            try 
-            { 
-                var absPath = string.IsNullOrEmpty(root) 
-                    ? System.IO.Path.GetFullPath(path) 
-                    : System.IO.Path.Combine(root, relative);
-                size = new System.IO.FileInfo(absPath).Length; 
-            } 
-            catch { }
+            try
+            {
+                var absPath = string.IsNullOrEmpty(root)
+                    ? Path.GetFullPath(path)
+                    : Path.Combine(root, relative);
+                size = new FileInfo(absPath).Length;
+            }
+            catch
+            {
+            }
 
             return new FileEntry(
-                Root: root,
-                Relative: relative,
-                Extension: extension,
-                Language: language,
-                Size: size);
+                root,
+                relative,
+                extension,
+                language,
+                size);
         }
         catch (Exception ex)
         {
@@ -282,11 +281,9 @@ public sealed class FileFilter
         {
             var src = state.path.AsSpan(state.Item2);
             src.CopyTo(dest);
-            for (int i = 0; i < dest.Length; i++)
-            {
+            for (var i = 0; i < dest.Length; i++)
                 if (dest[i] >= 'A' && dest[i] <= 'Z')
                     dest[i] = (char)(dest[i] | 0x20);
-            }
         });
     }
 
@@ -310,7 +307,9 @@ public sealed class FileFilter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsValidPath(string path, string[] normalizedSearchPaths, System.Buffers.SearchValues<string> excludeSearchValues, FrozenSet<string> extensions, string[] excludePathPatterns, string[] includePathPatterns)
+    private static bool IsValidPath(string path, string[] normalizedSearchPaths,
+        SearchValues<string> excludeSearchValues, FrozenSet<string> extensions, string[] excludePathPatterns,
+        string[] includePathPatterns)
     {
         var pathSpan = path.AsSpan();
 
@@ -318,7 +317,7 @@ public sealed class FileFilter
         {
             var fileNameSpan = GetFileNameSpan(pathSpan);
             var dotIdx = fileNameSpan.LastIndexOf('.');
-            bool matchesExtension = false;
+            var matchesExtension = false;
 
             var lookup = extensions.GetAlternateLookup<ReadOnlySpan<char>>();
 
@@ -329,10 +328,7 @@ public sealed class FileFilter
             else if (dotIdx >= 0 && dotIdx < fileNameSpan.Length - 1)
             {
                 var extSpan = fileNameSpan[(dotIdx + 1)..];
-                if (lookup.Contains(extSpan))
-                {
-                    matchesExtension = true;
-                }
+                if (lookup.Contains(extSpan)) matchesExtension = true;
             }
 
             if (!matchesExtension) return false;
@@ -340,35 +336,23 @@ public sealed class FileFilter
 
         string pathNormalized;
         if (path.Contains('\\'))
-        {
             pathNormalized = path.Replace('\\', '/');
-        }
         else
-        {
             pathNormalized = path;
-        }
         var normalizedSpan = pathNormalized.AsSpan();
 
-        if (normalizedSpan.ContainsAny(excludeSearchValues))
-        {
-            return false;
-        }
+        if (normalizedSpan.ContainsAny(excludeSearchValues)) return false;
 
         // Glob-based path exclude patterns (e.g., "*/test/*", "*.bench.*", "**/benchmark/**")
-        if (excludePathPatterns.Length > 0 && GlobMatcher.MatchesAny(pathNormalized, excludePathPatterns))
-        {
-            return false;
-        }
+        if (excludePathPatterns.Length > 0 && GlobMatcher.MatchesAny(pathNormalized, excludePathPatterns)) return false;
 
         // Glob-based path include patterns — whitelist (e.g., "src/**", "lib/core/**")
         if (includePathPatterns.Length > 0 && !GlobMatcher.MatchesAny(pathNormalized, includePathPatterns))
-        {
             return false;
-        }
 
         if (normalizedSearchPaths.Length > 0)
         {
-            bool matchesSearchPath = false;
+            var matchesSearchPath = false;
             foreach (var searchPath in normalizedSearchPaths)
             {
                 var searchSpan = searchPath.AsSpan();
@@ -380,6 +364,7 @@ public sealed class FileFilter
                     break;
                 }
             }
+
             if (!matchesSearchPath) return false;
         }
 

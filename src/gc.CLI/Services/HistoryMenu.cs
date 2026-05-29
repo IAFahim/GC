@@ -1,6 +1,12 @@
+using gc.Application.Services;
+using gc.Application.UseCases;
+using gc.Application.Validators;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models.Configuration;
+using gc.Infrastructure.Discovery;
+using gc.Infrastructure.Logging;
+using gc.Infrastructure.System;
 
 namespace gc.CLI.Services;
 
@@ -50,9 +56,7 @@ public static class HistoryMenu
 
         if (string.IsNullOrEmpty(input) || !int.TryParse(input, out var selectedIndex) ||
             selectedIndex < 1 || selectedIndex > history.Count)
-        {
             return 0;
-        }
 
         return await ExecuteFromHistoryAsync(
             historyService, parser, config,
@@ -110,22 +114,19 @@ public static class HistoryMenu
 
         var cliArgs = parseResult.Value!;
 
-        var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, console);
-        var discovery = new gc.Infrastructure.Discovery.FileDiscovery(logger);
-        var filter = new gc.Application.Services.FileFilter(logger);
-        var contentFilter = new gc.Application.Services.ContentFilter(logger);
-        var generator = new gc.Application.Services.MarkdownGenerator(logger);
-        var clipboard = new gc.Infrastructure.System.ClipboardService(logger);
-        var useCase = new gc.Application.UseCases.GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
-        var validator = new gc.Application.Validators.ConfigurationValidator();
-        var configService = new gc.Application.Services.ConfigurationService(logger, validator);
+        var logger = new ConsoleLogger(null, console);
+        var discovery = new FileDiscovery(logger);
+        var filter = new FileFilter(logger);
+        var contentFilter = new ContentFilter(logger);
+        var generator = new MarkdownGenerator(logger);
+        var clipboard = new ClipboardService(logger);
+        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
+        var validator = new ConfigurationValidator();
+        var configService = new ConfigurationService(logger, validator);
 
         var exitCode = await Program.ExecuteAsync(entry.Directory, cliArgs, config, useCase, configService, logger, ct);
 
-        if (exitCode == 0)
-        {
-            await historyService.AddEntryAsync(entry.Directory, entry.Arguments, ct);
-        }
+        if (exitCode == 0) await historyService.AddEntryAsync(entry.Directory, entry.Arguments, ct);
 
         return exitCode;
     }

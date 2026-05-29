@@ -9,9 +9,9 @@ namespace gc.Infrastructure.Configuration;
 
 public sealed class ConfigurationLoader
 {
+    private readonly object _cacheLock = new();
     private readonly ILogger _logger;
     private GcConfiguration? _cachedConfiguration;
-    private readonly object _cacheLock = new();
 
     public ConfigurationLoader(ILogger logger)
     {
@@ -21,11 +21,9 @@ public sealed class ConfigurationLoader
     public string GetConfigDirectory()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "gc");
-        }
 
         var configDir = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
         if (!string.IsNullOrEmpty(configDir)) return Path.Combine(configDir, "gc");
@@ -39,21 +37,16 @@ public sealed class ConfigurationLoader
     public string GetSystemConfigDirectory()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
             return Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
                 "gc");
-        }
 
         return "/etc/gc";
     }
 
     public async Task<Result<GcConfiguration>> LoadConfigAsync(bool useCache = true)
     {
-        if (useCache && _cachedConfiguration != null)
-        {
-            return Result<GcConfiguration>.Success(_cachedConfiguration);
-        }
+        if (useCache && _cachedConfiguration != null) return Result<GcConfiguration>.Success(_cachedConfiguration);
 
         _logger.Debug("Loading configuration...");
 
@@ -65,9 +58,7 @@ public sealed class ConfigurationLoader
         {
             var systemResult = await LoadConfigFromFileAsync(systemConfigPath);
             if (systemResult.IsSuccess && systemResult.Value != null)
-            {
                 config = MergeConfiguration(config, systemResult.Value, "System");
-            }
         }
 
         var userConfigPath = Path.Combine(GetConfigDirectory(), "config.json");
@@ -75,9 +66,7 @@ public sealed class ConfigurationLoader
         {
             var userResult = await LoadConfigFromFileAsync(userConfigPath);
             if (userResult.IsSuccess && userResult.Value != null)
-            {
                 config = MergeConfiguration(config, userResult.Value, "User");
-            }
         }
 
         var projectConfigPath = FindProjectConfig();
@@ -85,18 +74,14 @@ public sealed class ConfigurationLoader
         {
             var projectResult = await LoadConfigFromFileAsync(projectConfigPath);
             if (projectResult.IsSuccess && projectResult.Value != null)
-            {
                 config = MergeConfiguration(config, projectResult.Value, "Project");
-            }
         }
 
         if (useCache)
-        {
             lock (_cacheLock)
             {
                 _cachedConfiguration = config;
             }
-        }
 
         return Result<GcConfiguration>.Success(config);
     }
@@ -180,7 +165,8 @@ public sealed class ConfigurationLoader
             Discovery = ConfigurationMerger.MergeDiscovery(target.Discovery, source.Discovery),
             Filters = MergeFilters(target.Filters, source.Filters),
             Presets = ConfigurationMerger.MergePresets(target.Presets, source.Presets),
-            LanguageMappings = ConfigurationMerger.MergeLanguageMappings(target.LanguageMappings, source.LanguageMappings),
+            LanguageMappings =
+            ConfigurationMerger.MergeLanguageMappings(target.LanguageMappings, source.LanguageMappings),
             Markdown = ConfigurationMerger.MergeMarkdown(target.Markdown, source.Markdown),
             Output = ConfigurationMerger.MergeOutput(target.Output, source.Output),
             Logging = ConfigurationMerger.MergeLogging(target.Logging, source.Logging),
@@ -229,14 +215,12 @@ public sealed class ConfigurationLoader
         var result = new Dictionary<string, PresetConfiguration>(StringComparer.OrdinalIgnoreCase);
         foreach (var kvp in target) result[kvp.Key] = kvp.Value;
         foreach (var kvp in source)
-        {
             if (result.TryGetValue(kvp.Key, out var existing))
             {
                 var mergedExtensions = new HashSet<string>(existing.Extensions, StringComparer.OrdinalIgnoreCase);
                 if (kvp.Value.Extensions != null)
-                {
-                    foreach (var ext in kvp.Value.Extensions) mergedExtensions.Add(ext);
-                }
+                    foreach (var ext in kvp.Value.Extensions)
+                        mergedExtensions.Add(ext);
 
                 result[kvp.Key] = existing with
                 {
@@ -250,7 +234,7 @@ public sealed class ConfigurationLoader
             {
                 result[kvp.Key] = kvp.Value;
             }
-        }
+
         return result;
     }
 
@@ -301,6 +285,7 @@ public sealed class ConfigurationLoader
         {
             _cachedConfiguration = null;
         }
+
         _logger.Debug("Configuration cache cleared");
     }
 }

@@ -1,10 +1,11 @@
+using System.Diagnostics;
+using System.Text;
+using gc.Application.Adapters;
+using gc.Application.Services;
 using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
-using gc.Application.Adapters;
-using gc.Application.Services;
-using System.Text;
 
 namespace gc.Application.UseCases;
 
@@ -16,11 +17,12 @@ public sealed class GenerateContextUseCase
         "IMPORTANT: When writing code or answering, use the ORIGINAL full identifiers and patterns shown here. " +
         "Do NOT use abbreviated symbols or short-form in your output. Respond as if you received uncompressed source.]\n\n";
 
+    private readonly IClipboardService _clipboard;
+    private readonly ContentFilter _contentFilter;
+
     private readonly IFileDiscovery _discovery;
     private readonly FileFilter _filter;
-    private readonly ContentFilter _contentFilter;
     private readonly IMarkdownGenerator _generator;
-    private readonly IClipboardService _clipboard;
     private readonly ILogger _logger;
     private readonly ShardSplitter _shardSplitter;
 
@@ -61,9 +63,9 @@ public sealed class GenerateContextUseCase
         ProfileReporter? profileReporter = null,
         bool unsafeDirectWrite = false,
         string? changedSince = null,
-        gc.Domain.Models.ShardInfo? shardInfo = null)
+        ShardInfo? shardInfo = null)
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         Result<IEnumerable<string>> discoveryResult;
 
         if (!string.IsNullOrEmpty(changedSince))
@@ -103,7 +105,8 @@ public sealed class GenerateContextUseCase
             var shardEntries = shardLists.Count >= shardInfo.Slice ? shardLists[shardInfo.Slice - 1] : entries;
             var shardContents = shardEntries.Select(e => new FileContent(e, null, e.Size));
             return await WriteOutputAsync(shardContents, shardEntries.Count, rootPath, config, outputFile, appendMode,
-                excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct, profileReporter, unsafeDirectWrite);
+                excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
+                profileReporter, unsafeDirectWrite);
         }
 
         _logger.Success("Processing...");
@@ -111,7 +114,8 @@ public sealed class GenerateContextUseCase
         var contents = entries.Select(e => new FileContent(e, null, e.Size));
 
         return await WriteOutputAsync(contents, entries.Count, rootPath, config, outputFile, appendMode,
-            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct, profileReporter, unsafeDirectWrite);
+            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
+            profileReporter, unsafeDirectWrite);
     }
 
     public async Task<Result> ExecuteClusterAsync(
@@ -134,12 +138,12 @@ public sealed class GenerateContextUseCase
         ProfileReporter? profileReporter = null,
         bool unsafeDirectWrite = false,
         string? changedSince = null,
-        gc.Domain.Models.ShardInfo? shardInfo = null)
+        ShardInfo? shardInfo = null)
     {
         var clusterConfig = config.Discovery?.Cluster ?? new ClusterConfiguration();
         if (clusterConfig.MaxDepth <= 0) clusterConfig = clusterConfig with { MaxDepth = 2 };
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         var reposResult = await _discovery.DiscoverGitReposAsync(clusterRoot, clusterConfig, ct);
         profileReporter?.RecordStage("ClusterDiscovery", sw.ElapsedTicks);
         if (!reposResult.IsSuccess) return Result.Failure(reposResult.Error!);
@@ -176,12 +180,14 @@ public sealed class GenerateContextUseCase
                 if (!discoveryResult.IsSuccess)
                 {
                     if (clusterConfig.FailFast == true)
-                        throw new InvalidOperationException($"Discovery failed for {repo.RelativePath}: {discoveryResult.Error}");
+                        throw new InvalidOperationException(
+                            $"Discovery failed for {repo.RelativePath}: {discoveryResult.Error}");
 
                     lock (lockObj)
                     {
                         errors.Add($"{repo.RelativePath}: {discoveryResult.Error}");
                     }
+
                     return;
                 }
 
@@ -194,6 +200,7 @@ public sealed class GenerateContextUseCase
                     {
                         errors.Add($"{repo.RelativePath}: {filterResult.Error}");
                     }
+
                     return;
                 }
 
@@ -214,7 +221,10 @@ public sealed class GenerateContextUseCase
                     }
                 }
             }
-            catch (OperationCanceledException) { throw; }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 if (clusterConfig.FailFast == true) throw;
@@ -227,10 +237,7 @@ public sealed class GenerateContextUseCase
         });
         profileReporter?.RecordStage("ClusterProcessing", sw.ElapsedTicks);
 
-        foreach (var error in errors)
-        {
-            _logger.Warning($"Repo error: {error}");
-        }
+        foreach (var error in errors) _logger.Warning($"Repo error: {error}");
 
         if (repoEntries.Count == 0)
         {
@@ -257,12 +264,15 @@ public sealed class GenerateContextUseCase
             var shardLists = _shardSplitter.SplitIntoShards(flatEntries, shardInfo.Of, shardInfo.Slice, _logger);
             var shardEntries = shardLists.Count >= shardInfo.Slice ? shardLists[shardInfo.Slice - 1] : flatEntries;
             var shardContents = shardEntries.Select(e => new FileContent(e, null, e.Size));
-            return await WriteOutputAsync(shardContents, shardEntries.Count, clusterRoot, config, outputFile, appendMode,
-                excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct, profileReporter, unsafeDirectWrite);
+            return await WriteOutputAsync(shardContents, shardEntries.Count, clusterRoot, config, outputFile,
+                appendMode,
+                excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
+                profileReporter, unsafeDirectWrite);
         }
 
         return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode,
-            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct, profileReporter, unsafeDirectWrite);
+            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
+            profileReporter, unsafeDirectWrite);
     }
 
     private IEnumerable<FileContent> BuildClusterContents(
@@ -270,7 +280,7 @@ public sealed class GenerateContextUseCase
         ClusterConfiguration clusterConfig,
         string clusterRoot)
     {
-        for (int i = 0; i < sorted.Count; i++)
+        for (var i = 0; i < sorted.Count; i++)
         {
             var (repo, entries) = sorted[i];
 
@@ -280,31 +290,28 @@ public sealed class GenerateContextUseCase
                 // Use repo root as the "file" location, with a sentinel-like display path.
                 // This keeps FileEntry honest - no fake absolute paths.
                 var separatorEntry = new FileEntry(
-                    Root: repo.RootPath,
-                    Relative: $"[{clusterConfig.RepoSeparator}]",
-                    Extension: "",
-                    Language: "markdown",
-                    Size: separatorContent.Length,
-                    Display: $"[{clusterConfig.RepoSeparator}] {repo.RelativePath}");
+                    repo.RootPath,
+                    $"[{clusterConfig.RepoSeparator}]",
+                    "",
+                    "markdown",
+                    separatorContent.Length,
+                    $"[{clusterConfig.RepoSeparator}] {repo.RelativePath}");
                 yield return new FileContent(separatorEntry, separatorContent, separatorContent.Length);
             }
             else if (clusterConfig.IncludeRepoHeader == true && i == 0)
             {
                 var headerContent = $"# {repo.Name}";
                 var headerEntry = new FileEntry(
-                    Root: repo.RootPath,
-                    Relative: "[header]",
-                    Extension: "",
-                    Language: "markdown",
-                    Size: headerContent.Length,
-                    Display: $"[header] {repo.RelativePath}");
+                    repo.RootPath,
+                    "[header]",
+                    "",
+                    "markdown",
+                    headerContent.Length,
+                    $"[header] {repo.RelativePath}");
                 yield return new FileContent(headerEntry, headerContent, headerContent.Length);
             }
 
-            foreach (var entry in entries)
-            {
-                yield return new FileContent(entry, null, entry.Size);
-            }
+            foreach (var entry in entries) yield return new FileContent(entry, null, entry.Size);
         }
     }
 
@@ -340,7 +347,7 @@ public sealed class GenerateContextUseCase
         ProfileReporter? profileReporter = null,
         bool unsafeDirectWrite = false)
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
 
         // ── 1. Compile content filter & filter entries ──
         var compiled = _contentFilter.CompilePatterns(
@@ -355,12 +362,13 @@ public sealed class GenerateContextUseCase
                 filteredList.Add(content);
                 continue;
             }
+
             if (content.Content != null && !compiled.ShouldInclude(content.Content))
                 continue;
             filteredList.Add(content);
         }
 
-        int actualFileCount = filteredList.Count(c => !c.Entry.Path.StartsWith('['));
+        var actualFileCount = filteredList.Count(c => !c.Entry.Path.StartsWith('['));
 
         // ── 2. Build the transform pipeline ──
         var transforms = new List<IOutputTransform>();
@@ -388,7 +396,7 @@ public sealed class GenerateContextUseCase
         }
 
         var pipeline = new OutputPipeline(transforms);
-        bool hasPipeline = transforms.Count > 0;
+        var hasPipeline = transforms.Count > 0;
 
         profileReporter?.RecordStage("Preprocessing", sw.ElapsedTicks);
 
@@ -396,13 +404,14 @@ public sealed class GenerateContextUseCase
         // If pipeline exists, materialize to memory for transforms; otherwise stream directly.
         sw.Restart();
 
-        string rawOutput = "";
+        var rawOutput = "";
         long generatedBytes = 0;
 
         if (hasPipeline)
         {
             using var ms = new MemoryStream();
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled,
+                excludeLineIfStart, null, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
@@ -415,7 +424,7 @@ public sealed class GenerateContextUseCase
         // ── 4. Apply pipeline ──
         sw.Restart();
         string finalOutput;
-        string transformInfo = "";
+        var transformInfo = "";
 
         if (hasPipeline)
         {
@@ -437,6 +446,7 @@ public sealed class GenerateContextUseCase
                 parts.Add($"Dynamic: ~{pipelineResult.TokensSaved} tokens saved");
                 profileReporter?.RecordMetric("BrainReplacements", pipelineResult.TokensSaved.ToString());
             }
+
             transformInfo = parts.Count > 0 ? $" | {string.Join(" | ", parts)}" : "";
 
             profileReporter?.RecordStage("Transformation", sw.ElapsedTicks);
@@ -450,17 +460,13 @@ public sealed class GenerateContextUseCase
         sw.Restart();
 
         if (!string.IsNullOrEmpty(outputFile))
-        {
             return await EmitToFile(filteredList, actualFileCount, outputFile, appendMode,
                 hasPipeline, finalOutput, compiled, excludeLineIfStart, transformInfo,
                 unsafeDirectWrite, config, ct, sw, profileReporter);
-        }
-        else
-        {
-            return await EmitToClipboard(filteredList, actualFileCount,
-                hasPipeline, finalOutput, compiled, excludeLineIfStart, transformInfo,
-                config, appendMode, ct, sw, profileReporter);
-        }
+
+        return await EmitToClipboard(filteredList, actualFileCount,
+            hasPipeline, finalOutput, compiled, excludeLineIfStart, transformInfo,
+            config, appendMode, ct, sw, profileReporter);
     }
 
     private async Task<Result> EmitToFile(
@@ -476,14 +482,14 @@ public sealed class GenerateContextUseCase
         bool unsafeDirectWrite,
         GcConfiguration config,
         CancellationToken ct,
-        System.Diagnostics.Stopwatch sw,
+        Stopwatch sw,
         ProfileReporter? profileReporter)
     {
         var outputDir = Path.GetDirectoryName(outputFile);
         if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        bool shouldAppend = appendMode && File.Exists(outputFile);
+        var shouldAppend = appendMode && File.Exists(outputFile);
 
         if (hasPipeline)
         {
@@ -492,7 +498,7 @@ public sealed class GenerateContextUseCase
             if (unsafeDirectWrite || shouldAppend)
             {
                 var fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
-                using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, true);
                 await fs.WriteAsync(finalBytes, ct);
             }
             else
@@ -500,8 +506,9 @@ public sealed class GenerateContextUseCase
                 await SafeFileWriter.WriteAllBytesAsync(outputFile, finalBytes, ct);
             }
 
-            string action = shouldAppend ? "Appended to" : "Exported to";
-            _logger.Success($"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{finalBytes.Length / 4}");
+            var action = shouldAppend ? "Appended to" : "Exported to";
+            _logger.Success(
+                $"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{finalBytes.Length / 4}");
             profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
             return Result.Success();
         }
@@ -510,25 +517,29 @@ public sealed class GenerateContextUseCase
         if (unsafeDirectWrite || shouldAppend)
         {
             var fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
-            using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs, config, compiled, excludeLineIfStart, null, ct);
+            using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, true);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs, config, compiled,
+                excludeLineIfStart, null, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-            string action = shouldAppend ? "Appended to" : "Exported to";
-            _logger.Success($"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            var action = shouldAppend ? "Appended to" : "Exported to";
+            _logger.Success(
+                $"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
             profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         }
         else
         {
             using var ms = new MemoryStream();
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled,
+                excludeLineIfStart, null, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
             await SafeFileWriter.WriteAllBytesAsync(outputFile, ms.ToArray(), ct);
 
-            _logger.Success($"✔ Exported to {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            _logger.Success(
+                $"✔ Exported to {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
             profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         }
 
@@ -546,7 +557,7 @@ public sealed class GenerateContextUseCase
         GcConfiguration config,
         bool appendMode,
         CancellationToken ct,
-        System.Diagnostics.Stopwatch sw,
+        Stopwatch sw,
         ProfileReporter? profileReporter)
     {
         if (hasPipeline)
@@ -558,14 +569,17 @@ public sealed class GenerateContextUseCase
             profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
             if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
-            _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{finalBytes.Length / 4}");
+            _logger.Success(
+                $"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{finalBytes.Length / 4}");
             profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
             return Result.Success();
         }
 
         // No pipeline — stream directly to clipboard
         using var ms = new MemoryStream();
-        var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
+        var genResult =
+            await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart,
+                null, ct);
         profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
         if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
@@ -574,7 +588,8 @@ public sealed class GenerateContextUseCase
         profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
         if (!clipResult2.IsSuccess) return Result.Failure(clipResult2.Error!);
 
-        _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+        _logger.Success(
+            $"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
         profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         return Result.Success();
     }

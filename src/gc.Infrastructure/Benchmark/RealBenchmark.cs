@@ -1,12 +1,10 @@
 using System.Diagnostics;
-using System.Globalization;
+using gc.Application.Services;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
-using gc.Domain.Models.Configuration;
 using gc.Infrastructure.Configuration;
 using gc.Infrastructure.Discovery;
 using gc.Infrastructure.IO;
-using gc.Application.Services;
 
 namespace gc.Infrastructure.Benchmark;
 
@@ -68,7 +66,8 @@ public sealed class RealBenchmark
         Console.WriteLine($"  • Files discovered: {rawFiles.Count:N0}");
         Console.WriteLine($"  • Discovery time:   {discoveryWatch.ElapsedMilliseconds} ms");
 
-        var filterResult = filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+        var filterResult = filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+            Array.Empty<string>());
         var entries = filterResult.Value!.ToList();
 
         Console.WriteLine($"  • Files after filter: {entries.Count:N0}");
@@ -85,7 +84,8 @@ public sealed class RealBenchmark
             Console.WriteLine($"  • Total bytes:      {genResult.Value:N0}");
             var speed = genResult.Value / (streamWatch.ElapsedMilliseconds / 1000.0);
             Console.WriteLine($"  • Throughput:       {speed / 1024 / 1024:F2} MB/s");
-            Console.WriteLine($"  • Total time:       {discoveryWatch.ElapsedMilliseconds + streamWatch.ElapsedMilliseconds} ms");
+            Console.WriteLine(
+                $"  • Total time:       {discoveryWatch.ElapsedMilliseconds + streamWatch.ElapsedMilliseconds} ms");
         }
     }
 }

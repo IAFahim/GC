@@ -1,4 +1,3 @@
-using gc.Domain.Common;
 using gc.Domain.Models.Configuration;
 using gc.Infrastructure.Discovery;
 using gc.Infrastructure.Logging;
@@ -7,8 +6,8 @@ namespace gc.Tests;
 
 public class FileDiscoveryTests : IDisposable
 {
-    private readonly string _testDir;
     private readonly ConsoleLogger _logger;
+    private readonly string _testDir;
 
     public FileDiscoveryTests()
     {
@@ -102,7 +101,9 @@ public class FileDiscoveryTests : IDisposable
         Assert.True(result.IsSuccess);
         var files = result.Value!.ToList();
         Assert.Contains(files, f => f.EndsWith("root.txt", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(files, f => f.EndsWith("a/level1.txt", StringComparison.OrdinalIgnoreCase) || f.EndsWith("a\\level1.txt", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(files,
+            f => f.EndsWith("a/level1.txt", StringComparison.OrdinalIgnoreCase) ||
+                 f.EndsWith("a\\level1.txt", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(files, f => f.Contains("level2"));
         Assert.DoesNotContain(files, f => f.Contains("level3"));
     }
@@ -234,8 +235,10 @@ public class FileDiscoveryTests : IDisposable
         var files = result.Value!.ToList();
         Assert.Equal(3, files.Count);
         // All paths should use forward slashes (normalized)
-        Assert.Contains(files, f => f.Replace('\\', '/').EndsWith("src/utils/helper.cs", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(files, f => f.Replace('\\', '/').EndsWith("tests/unit/test.cs", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(files,
+            f => f.Replace('\\', '/').EndsWith("src/utils/helper.cs", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(files,
+            f => f.Replace('\\', '/').EndsWith("tests/unit/test.cs", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(files, f => f.Replace('\\', '/').EndsWith("root.md", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -375,10 +378,7 @@ public class FileDiscoveryTests : IDisposable
     public async Task Discover_LargeDirectory_FindsAllFiles()
     {
         // Create 150 files to test performance/robustness
-        for (int i = 0; i < 150; i++)
-        {
-            File.WriteAllText(Path.Combine(_testDir, $"file_{i:D3}.txt"), $"content {i}");
-        }
+        for (var i = 0; i < 150; i++) File.WriteAllText(Path.Combine(_testDir, $"file_{i:D3}.txt"), $"content {i}");
 
         var discovery = new FileDiscovery(_logger);
         var config = new GcConfiguration
@@ -443,10 +443,14 @@ public class FileDiscoveryTests : IDisposable
         try
         {
             foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
-            {
-                try { File.SetAttributes(file, FileAttributes.Normal); }
-                catch { }
-            }
+                try
+                {
+                    File.SetAttributes(file, FileAttributes.Normal);
+                }
+                catch
+                {
+                }
+
             Directory.Delete(path, true);
         }
         catch when (retryCount < 3)
@@ -454,6 +458,8 @@ public class FileDiscoveryTests : IDisposable
             Thread.Sleep(100 * (retryCount + 1));
             TryDeleteDirectory(path, retryCount + 1);
         }
-        catch { }
+        catch
+        {
+        }
     }
 }

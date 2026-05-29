@@ -1,27 +1,12 @@
-using gc.Infrastructure.Logging;
+using System.Text;
 using gc.Domain.Interfaces;
 using gc.Domain.Models.Configuration;
-using System.Text;
+using gc.Infrastructure.Logging;
 
 namespace gc.Tests;
 
 public class ConsoleLoggerTests
 {
-    private class MockConsole : IConsole
-    {
-        public StringBuilder StdOut { get; } = new StringBuilder();
-        public StringBuilder StdErr { get; } = new StringBuilder();
-
-        public void WriteLine(string? value = null)
-        {
-            if (value == null) StdOut.AppendLine();
-            else StdOut.AppendLine(value);
-        }
-        public void Write(string? value) => StdOut.Append(value);
-        public void WriteErrorLine(string? value) => StdErr.AppendLine(value);
-        public string? ReadLine() => null;
-    }
-
     // ─── Constructor ─────────────────────────────────────────────────────
 
     [Fact]
@@ -139,8 +124,14 @@ public class ConsoleLoggerTests
 
         // Create an exception with a real stack trace
         Exception capturedEx;
-        try { throw new InvalidOperationException("stack test"); }
-        catch (Exception ex) { capturedEx = ex; }
+        try
+        {
+            throw new InvalidOperationException("stack test");
+        }
+        catch (Exception ex)
+        {
+            capturedEx = ex;
+        }
 
         logger.Log(LogLevel.Error, "debug error", capturedEx);
 
@@ -231,5 +222,32 @@ public class ConsoleLoggerTests
         var output = console.StdOut.ToString();
         // Should have [DEBUG] prefix but NOT a timestamp like [HH:mm:ss.fff]
         Assert.DoesNotMatch(@"^\[\d{2}:\d{2}:\d{2}", output);
+    }
+
+    private class MockConsole : IConsole
+    {
+        public StringBuilder StdOut { get; } = new();
+        public StringBuilder StdErr { get; } = new();
+
+        public void WriteLine(string? value = null)
+        {
+            if (value == null) StdOut.AppendLine();
+            else StdOut.AppendLine(value);
+        }
+
+        public void Write(string? value)
+        {
+            StdOut.Append(value);
+        }
+
+        public void WriteErrorLine(string? value)
+        {
+            StdErr.AppendLine(value);
+        }
+
+        public string? ReadLine()
+        {
+            return null;
+        }
     }
 }

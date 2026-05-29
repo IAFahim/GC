@@ -39,7 +39,8 @@ public sealed class TestRunner
             var psi = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"test {_testProjectPath} --filter FullyQualifiedName!~ReleaseBinaryTests --verbosity normal",
+                Arguments =
+                    $"test {_testProjectPath} --filter FullyQualifiedName!~ReleaseBinaryTests --verbosity normal",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -48,8 +49,14 @@ public sealed class TestRunner
 
             using var process = new Process { StartInfo = psi };
 
-            process.OutputDataReceived += (s, e) => { if (e.Data != null) Console.WriteLine(e.Data); };
-            process.ErrorDataReceived += (s, e) => { if (e.Data != null) Console.Error.WriteLine(e.Data); };
+            process.OutputDataReceived += (s, e) =>
+            {
+                if (e.Data != null) Console.WriteLine(e.Data);
+            };
+            process.ErrorDataReceived += (s, e) =>
+            {
+                if (e.Data != null) Console.Error.WriteLine(e.Data);
+            };
 
             process.Start();
             process.BeginOutputReadLine();

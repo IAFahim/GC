@@ -1,6 +1,6 @@
-using System.Globalization;
 using gc.CLI.Models;
 using gc.Domain.Common;
+using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
 
 namespace gc.CLI.Services;
@@ -14,7 +14,7 @@ namespace gc.CLI.Services;
 // ========================================================================
 
 /// <summary>
-/// Describes one CLI option: its token(s), kind, and how to apply it.
+///     Describes one CLI option: its token(s), kind, and how to apply it.
 /// </summary>
 internal readonly record struct OptionSpec(
     string[] Tokens,
@@ -25,10 +25,12 @@ internal enum OptionKind
 {
     /// A bare flag with no value (--verbose, --help).
     Flag,
+
     /// Expects exactly one following value (--output FILE).
     SingleValue,
+
     /// Accumulates multiple following values (--paths a b c).
-    MultiValue,
+    MultiValue
 }
 
 public sealed class CliParser
@@ -37,56 +39,85 @@ public sealed class CliParser
     private readonly OptionSpec[] _options =
     [
         // ── Flags ──
-        new(["-h", "--help"],             OptionKind.Flag, (a, _) => a.ShowHelp = true),
-        new(["--version"],                OptionKind.Flag, (a, _) => a.ShowVersion = true),
-        new(["--test"],                   OptionKind.Flag, (a, _) => a.RunTests = true),
-        new(["--benchmark"],              OptionKind.Flag, (a, _) => a.RunRealBenchmark = true),
-        new(["-v", "--verbose"],          OptionKind.Flag, (a, _) => a.Verbose = true),
-        new(["--debug"],                  OptionKind.Flag, (a, _) => a.Debug = true),
-        new(["--init-config"],            OptionKind.Flag, (a, _) => a.InitConfig = true),
-        new(["--validate-config"],        OptionKind.Flag, (a, _) => a.ValidateConfig = true),
-        new(["--dump-config"],            OptionKind.Flag, (a, _) => a.DumpConfig = true),
-        new(["--append"],                 OptionKind.Flag, (a, _) => a.Append = true),
-        new(["--no-append"],              OptionKind.Flag, (a, _) => a.Append = false),
-        new(["--no-sort"],                OptionKind.Flag, (a, _) => a.NoSort = true),
-        new(["-f", "--force"],            OptionKind.Flag, (a, _) => a.Force = true),
-        new(["--history"],                OptionKind.Flag, (a, _) => a.ShowHistory = true),
-        new(["-b", "--brain", "brain"],   OptionKind.Flag, (a, _) => a.BrainMode = true),
+        new(["-h", "--help"], OptionKind.Flag, (a, _) => a.ShowHelp = true),
+        new(["--version"], OptionKind.Flag, (a, _) => a.ShowVersion = true),
+        new(["--test"], OptionKind.Flag, (a, _) => a.RunTests = true),
+        new(["--benchmark"], OptionKind.Flag, (a, _) => a.RunRealBenchmark = true),
+        new(["-v", "--verbose"], OptionKind.Flag, (a, _) => a.Verbose = true),
+        new(["--debug"], OptionKind.Flag, (a, _) => a.Debug = true),
+        new(["--init-config"], OptionKind.Flag, (a, _) => a.InitConfig = true),
+        new(["--validate-config"], OptionKind.Flag, (a, _) => a.ValidateConfig = true),
+        new(["--dump-config"], OptionKind.Flag, (a, _) => a.DumpConfig = true),
+        new(["--append"], OptionKind.Flag, (a, _) => a.Append = true),
+        new(["--no-append"], OptionKind.Flag, (a, _) => a.Append = false),
+        new(["--no-sort"], OptionKind.Flag, (a, _) => a.NoSort = true),
+        new(["-f", "--force"], OptionKind.Flag, (a, _) => a.Force = true),
+        new(["--history"], OptionKind.Flag, (a, _) => a.ShowHistory = true),
+        new(["-b", "--brain", "brain"], OptionKind.Flag, (a, _) => a.BrainMode = true),
         new(["-c", "--compress", "compress"], OptionKind.Flag, (a, _) => a.Compress = true),
-        new(["--no-cache"],               OptionKind.Flag, (a, _) => a.NoCache = true),
-        new(["--cluster"],                OptionKind.Flag, (a, _) => a.Cluster = true),
-        new(["--dry-run", "--list"],      OptionKind.Flag, (a, _) => a.DryRun = true),
+        new(["--no-cache"], OptionKind.Flag, (a, _) => a.NoCache = true),
+        new(["--cluster"], OptionKind.Flag, (a, _) => a.Cluster = true),
+        new(["--dry-run", "--list"], OptionKind.Flag, (a, _) => a.DryRun = true),
         new(["--count", "--tokens-only"], OptionKind.Flag, (a, _) => a.CountTokens = true),
-        new(["--profile"],                OptionKind.Flag, (a, _) => a.Profile = true),
-        new(["--profile-json"],           OptionKind.SingleValue, (a, v) => { a.Profile = true; a.ProfileOutput = v; }),
-        new(["--unsafe-direct-write"],    OptionKind.Flag, (a, _) => a.UnsafeDirectWrite = true),
-        new(["--stats"],                  OptionKind.Flag, (a, _) => a.ShowStats = true),
-        new(["--json-stats"],             OptionKind.SingleValue, (a, v) => { a.ShowStats = true; a.StatsOutput = v; }),
+        new(["--profile"], OptionKind.Flag, (a, _) => a.Profile = true),
+        new(["--profile-json"], OptionKind.SingleValue, (a, v) =>
+        {
+            a.Profile = true;
+            a.ProfileOutput = v;
+        }),
+        new(["--unsafe-direct-write"], OptionKind.Flag, (a, _) => a.UnsafeDirectWrite = true),
+        new(["--stats"], OptionKind.Flag, (a, _) => a.ShowStats = true),
+        new(["--json-stats"], OptionKind.SingleValue, (a, v) =>
+        {
+            a.ShowStats = true;
+            a.StatsOutput = v;
+        }),
 
         // ── Single-value options ──
-        new(["-s", "-o", "--output", "spit"],          OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
-        new(["--max-memory"],                           OptionKind.SingleValue, (a, v) => a.MaxMemoryBytes = MemorySizeParser.Parse(v ?? "")),
-        new(["-d", "--depth"],                          OptionKind.SingleValue, (a, v) => { if (int.TryParse(v, out var d)) a.Depth = d; }),
-        new(["--cluster-dir"],                          OptionKind.SingleValue, (a, v) => a.ClusterDir = (v ?? "").Replace('\\', '/')),
-        new(["--cluster-depth"],                        OptionKind.SingleValue, (a, v) => { if (int.TryParse(v, out var cd) && cd > 0) a.ClusterDepth = cd; }),
-        new(["--changed-since"],                        OptionKind.SingleValue, (a, v) => a.ChangedSince = v),
-        new(["--export-schema"],                        OptionKind.SingleValue, (a, v) => a.ExportSchema = v),
-        new(["--explain-filter"],                       OptionKind.SingleValue, (a, v) => a.ExplainFilter = v),
-        new(["--shard"],                                OptionKind.SingleValue, (a, v) => { if (v != null) a.ShardInfo = gc.Domain.Models.ShardInfo.TryParse(v); }),
+        new(["-s", "-o", "--output", "spit"], OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
+        new(["--max-memory"], OptionKind.SingleValue, (a, v) => a.MaxMemoryBytes = MemorySizeParser.Parse(v ?? "")),
+        new(["-d", "--depth"], OptionKind.SingleValue, (a, v) =>
+        {
+            if (int.TryParse(v, out var d)) a.Depth = d;
+        }),
+        new(["--cluster-dir"], OptionKind.SingleValue, (a, v) => a.ClusterDir = (v ?? "").Replace('\\', '/')),
+        new(["--cluster-depth"], OptionKind.SingleValue, (a, v) =>
+        {
+            if (int.TryParse(v, out var cd) && cd > 0) a.ClusterDepth = cd;
+        }),
+        new(["--changed-since"], OptionKind.SingleValue, (a, v) => a.ChangedSince = v),
+        new(["--export-schema"], OptionKind.SingleValue, (a, v) => a.ExportSchema = v),
+        new(["--explain-filter"], OptionKind.SingleValue, (a, v) => a.ExplainFilter = v),
+        new(["--shard"], OptionKind.SingleValue, (a, v) =>
+        {
+            if (v != null) a.ShardInfo = ShardInfo.TryParse(v);
+        }),
 
         // ── Multi-value options (accumulate) ──
-        new(["-g", "-p", "--paths", "grab"],            OptionKind.MultiValue, (a, v) => a.Paths = [..a.Paths, (v ?? "").Replace('\\', '/')]),
-        new(["-t", "-e", "--extension", "--extensions", "type"], OptionKind.MultiValue, (a, v) => ProcessExtensions(v ?? "", a)),
-        new(["-y", "-x", "--exclude", "--excludes", "yeet"],    OptionKind.MultiValue, (a, v) => a.Excludes = [..a.Excludes, (v ?? "").Replace('\\', '/')]),
-        new(["--preset", "--presets"],                           OptionKind.MultiValue, (a, v) => a.Presets = [..a.Presets, (v ?? "").ToLowerInvariant()]),
-        new(["-z", "--exclude-line-if-start", "zap"],            OptionKind.MultiValue, (a, v) => { var val = v == "\\n" ? "\n" : v; a.ExcludeLineIfStart = [..a.ExcludeLineIfStart, val ?? ""]; }),
-        new(["--exclude-path"],                                  OptionKind.MultiValue, (a, v) => a.ExcludePathPatterns = [..a.ExcludePathPatterns, (v ?? "").Replace('\\', '/')]),
-        new(["--include-path"],                                  OptionKind.MultiValue, (a, v) => a.IncludePathPatterns = [..a.IncludePathPatterns, (v ?? "").Replace('\\', '/')]),
-        new(["--exclude-content"],                               OptionKind.MultiValue, (a, v) => a.ExcludeContentPatterns = [..a.ExcludeContentPatterns, v ?? ""]),
-        new(["--include-content"],                               OptionKind.MultiValue, (a, v) => a.IncludeContentPatterns = [..a.IncludeContentPatterns, v ?? ""]),
+        new(["-g", "-p", "--paths", "grab"], OptionKind.MultiValue,
+            (a, v) => a.Paths = [..a.Paths, (v ?? "").Replace('\\', '/')]),
+        new(["-t", "-e", "--extension", "--extensions", "type"], OptionKind.MultiValue,
+            (a, v) => ProcessExtensions(v ?? "", a)),
+        new(["-y", "-x", "--exclude", "--excludes", "yeet"], OptionKind.MultiValue,
+            (a, v) => a.Excludes = [..a.Excludes, (v ?? "").Replace('\\', '/')]),
+        new(["--preset", "--presets"], OptionKind.MultiValue,
+            (a, v) => a.Presets = [..a.Presets, (v ?? "").ToLowerInvariant()]),
+        new(["-z", "--exclude-line-if-start", "zap"], OptionKind.MultiValue, (a, v) =>
+        {
+            var val = v == "\\n" ? "\n" : v;
+            a.ExcludeLineIfStart = [..a.ExcludeLineIfStart, val ?? ""];
+        }),
+        new(["--exclude-path"], OptionKind.MultiValue,
+            (a, v) => a.ExcludePathPatterns = [..a.ExcludePathPatterns, (v ?? "").Replace('\\', '/')]),
+        new(["--include-path"], OptionKind.MultiValue,
+            (a, v) => a.IncludePathPatterns = [..a.IncludePathPatterns, (v ?? "").Replace('\\', '/')]),
+        new(["--exclude-content"], OptionKind.MultiValue,
+            (a, v) => a.ExcludeContentPatterns = [..a.ExcludeContentPatterns, v ?? ""]),
+        new(["--include-content"], OptionKind.MultiValue,
+            (a, v) => a.IncludeContentPatterns = [..a.IncludeContentPatterns, v ?? ""]),
 
         // ── Bare-word verbs ──
-        new(["horde"], OptionKind.Flag, (a, _) => a.Cluster = true),
+        new(["horde"], OptionKind.Flag, (a, _) => a.Cluster = true)
     ];
 
     private readonly Dictionary<string, OptionSpec> _tokenMap;
@@ -95,12 +126,8 @@ public sealed class CliParser
     {
         _tokenMap = new Dictionary<string, OptionSpec>(StringComparer.OrdinalIgnoreCase);
         foreach (var spec in _options)
-        {
-            foreach (var token in spec.Tokens)
-            {
-                _tokenMap[token] = spec;
-            }
-        }
+        foreach (var token in spec.Tokens)
+            _tokenMap[token] = spec;
     }
 
     public Result<CliArguments> Parse(string[] args, GcConfiguration configuration)
@@ -109,10 +136,10 @@ public sealed class CliParser
         {
             Configuration = configuration,
             MaxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes),
-            Depth = configuration.Discovery.MaxDepth,
+            Depth = configuration.Discovery.MaxDepth
         };
 
-        bool onlyPaths = false;
+        var onlyPaths = false;
         OptionSpec? pendingSingleValue = null;
         OptionSpec? activeMultiValue = null;
         var unknownFlags = new List<string>();
@@ -137,7 +164,8 @@ public sealed class CliParser
             {
                 // If the next arg looks like a known flag but we expected a value,
                 // that's an error.
-                if (arg.StartsWith('-') && _tokenMap.TryGetValue(arg, out var flagSpec) && flagSpec.Kind == OptionKind.Flag)
+                if (arg.StartsWith('-') && _tokenMap.TryGetValue(arg, out var flagSpec) &&
+                    flagSpec.Kind == OptionKind.Flag)
                 {
                     var flagName = pendingSingleValue.Value.Tokens.First();
                     return Result<CliArguments>.Failure($"Missing value for {flagName} before {arg}");
@@ -166,6 +194,7 @@ public sealed class CliParser
                         activeMultiValue = spec;
                         break;
                 }
+
                 continue;
             }
 
@@ -200,10 +229,7 @@ public sealed class CliParser
             return Result<CliArguments>.Failure($"Missing value for argument: {flagName}");
         }
 
-        if (unknownFlags.Count > 0)
-        {
-            result.ShowHelp = true;
-        }
+        if (unknownFlags.Count > 0) result.ShowHelp = true;
 
         return Result<CliArguments>.Success(result);
     }
@@ -214,9 +240,7 @@ public sealed class CliParser
         {
             var split = arg.Split(',', StringSplitOptions.RemoveEmptyEntries);
             foreach (var ext in split)
-            {
                 result.Extensions = [..result.Extensions, ext.Trim().TrimStart('.').ToLowerInvariant()];
-            }
         }
         else
         {

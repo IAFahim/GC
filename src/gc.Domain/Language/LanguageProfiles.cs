@@ -1,22 +1,12 @@
 namespace gc.Domain.Language;
 
 /// <summary>
-/// Single source of truth for language syntax: line comments, block comments,
-/// string/char delimiters, and hash-comment semantics. Shared by lexer and
-/// brain-crusher — one definition, no duplication.
+///     Single source of truth for language syntax: line comments, block comments,
+///     string/char delimiters, and hash-comment semantics. Shared by lexer and
+///     brain-crusher — one definition, no duplication.
 /// </summary>
 public static class LanguageProfiles
 {
-    // Each profile declares which comment styles are active for a language.
-    // String/char handling is universal (strip contents verbatim).
-
-    public static LanguageProfile For(string? languageOrExt)
-    {
-        if (string.IsNullOrEmpty(languageOrExt)) return Default;
-        var key = languageOrExt.ToLowerInvariant().TrimStart('.');
-        return Map.GetValueOrDefault(key, Default);
-    }
-
     private static readonly LanguageProfile Default = new()
     {
         LineComment = ["//"],
@@ -159,12 +149,21 @@ public static class LanguageProfiles
         ["makefile"] = Shell,
         ["gemfile"] = Shell,
         ["rakefile"] = Shell,
-        ["bagfile"] = Shell,
+        ["bagfile"] = Shell
     };
+    // Each profile declares which comment styles are active for a language.
+    // String/char handling is universal (strip contents verbatim).
+
+    public static LanguageProfile For(string? languageOrExt)
+    {
+        if (string.IsNullOrEmpty(languageOrExt)) return Default;
+        var key = languageOrExt.ToLowerInvariant().TrimStart('.');
+        return Map.GetValueOrDefault(key, Default);
+    }
 }
 
 /// <summary>
-/// Language-specific comment and preprocessor syntax.
+///     Language-specific comment and preprocessor syntax.
 /// </summary>
 /// <param name="LineComment">Line-comment start sequences (e.g. "//", "#", "--")</param>
 /// <param name="BlockComment">Block-comment delimiters as [open, close] pairs</param>

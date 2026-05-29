@@ -1,21 +1,19 @@
+using System.Text;
 using gc.Application.Services;
-using gc.Application.UseCases;
 using gc.Domain.Common;
 using gc.Domain.Constants;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
-using gc.Infrastructure.Configuration;
 using gc.Infrastructure.Discovery;
 using gc.Infrastructure.IO;
 using gc.Infrastructure.Logging;
 using gc.Infrastructure.System;
-using System.Text;
 
 namespace gc.Tests;
 
 /// <summary>
-/// Comprehensive tests for all 7 bug fixes implemented
+///     Comprehensive tests for all 7 bug fixes implemented
 /// </summary>
 public class BugFixTests
 {
@@ -100,7 +98,8 @@ public class BugFixTests
             using var stream = new FileStream(tempFile, FileMode.Open, FileAccess.Read);
 
             // Act
-            var result = await clipboardService.CopyToClipboardAsync(stream, config.Limits, false, CancellationToken.None);
+            var result =
+                await clipboardService.CopyToClipboardAsync(stream, config.Limits, false, CancellationToken.None);
 
             // Assert
             Assert.False(result.IsSuccess);
@@ -120,7 +119,7 @@ public class BugFixTests
         config = config with { Limits = config.Limits with { MaxMemoryBytes = "1KB" } }; // Very small limit
 
         var generator = new MarkdownGenerator(new ConsoleLogger());
-        var fileEntry = new FileEntry(Root: "", Relative: "large.txt", Extension: "txt", Language: "text", Size: 2000);
+        var fileEntry = new FileEntry("", "large.txt", "txt", "text", 2000);
         var fileContents = new List<FileContent>
         {
             new(fileEntry, new string('x', 2000), 2000)
@@ -142,8 +141,10 @@ public class BugFixTests
     public void LimitsConfiguration_ParsesMemorySizes_WithDifferentConfigurations()
     {
         // Arrange
-        var config1 = new LimitsConfiguration { MaxFileSize = "500KB", MaxClipboardSize = "2MB", MaxMemoryBytes = "100MB" };
-        var config2 = new LimitsConfiguration { MaxFileSize = "1GB", MaxClipboardSize = "500MB", MaxMemoryBytes = "10GB" };
+        var config1 = new LimitsConfiguration
+            { MaxFileSize = "500KB", MaxClipboardSize = "2MB", MaxMemoryBytes = "100MB" };
+        var config2 = new LimitsConfiguration
+            { MaxFileSize = "1GB", MaxClipboardSize = "500MB", MaxMemoryBytes = "10GB" };
 
         // Act & Assert
         Assert.Equal(500 * 1024, config1.GetMaxFileSizeBytes());
@@ -173,10 +174,7 @@ public class BugFixTests
 
             // Act - Create parent directories
             var outputDir = Path.GetDirectoryName(nestedPath);
-            if (!string.IsNullOrEmpty(outputDir))
-            {
-                Directory.CreateDirectory(outputDir);
-            }
+            if (!string.IsNullOrEmpty(outputDir)) Directory.CreateDirectory(outputDir);
 
             // Write file
             await File.WriteAllTextAsync(nestedPath, "test content");
@@ -204,10 +202,7 @@ public class BugFixTests
         {
             // Act
             var outputDir = Path.GetDirectoryName(deepPath);
-            if (!string.IsNullOrEmpty(outputDir))
-            {
-                Directory.CreateDirectory(outputDir);
-            }
+            if (!string.IsNullOrEmpty(outputDir)) Directory.CreateDirectory(outputDir);
 
             await File.WriteAllTextAsync(deepPath, "deep content");
 
@@ -235,10 +230,7 @@ public class BugFixTests
         {
             // Act - Directory already exists
             var outputDir = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(outputDir))
-            {
-                Directory.CreateDirectory(outputDir); // Should not throw
-            }
+            if (!string.IsNullOrEmpty(outputDir)) Directory.CreateDirectory(outputDir); // Should not throw
 
             await File.WriteAllTextAsync(outputPath, "content");
 
@@ -262,7 +254,7 @@ public class BugFixTests
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(new ConsoleLogger());
-        var fileEntry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: 20);
+        var fileEntry = new FileEntry("", "test.cs", "cs", "cs", 20);
         var fileContents = new List<FileContent>
         {
             new(fileEntry, "Console.WriteLine();", 20)
@@ -292,7 +284,7 @@ public class BugFixTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(new ConsoleLogger());
         var content = "line1\nline2";
-        var fileEntry = new FileEntry(Root: "", Relative: "test.txt", Extension: "txt", Language: "text", Size: content.Length);
+        var fileEntry = new FileEntry("", "test.txt", "txt", "text", content.Length);
         var fileContents = new List<FileContent>
         {
             new(fileEntry, content, content.Length)
@@ -325,8 +317,8 @@ public class BugFixTests
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(new ConsoleLogger());
-        var entry1 = new FileEntry(Root: "", Relative: "file1.cs", Extension: "cs", Language: "cs", Size: 15);
-        var entry2 = new FileEntry(Root: "", Relative: "file2.js", Extension: "js", Language: "javascript", Size: 20);
+        var entry1 = new FileEntry("", "file1.cs", "cs", "cs", 15);
+        var entry2 = new FileEntry("", "file2.js", "js", "javascript", 20);
         var fileContents = new List<FileContent>
         {
             new(entry1, "class Test { }", 15),
@@ -354,7 +346,7 @@ public class BugFixTests
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(new ConsoleLogger());
-        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: 8);
+        var entry = new FileEntry("", "test.cs", "cs", "cs", 8);
         var fileContents = new List<FileContent>
         {
             new(entry, "// test", 8)
@@ -382,7 +374,7 @@ public class BugFixTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         var generator = new MarkdownGenerator(new ConsoleLogger());
         var multibyteContent = "Hello 世界 🌍"; // Mix of ASCII, Chinese, emoji
-        var entry = new FileEntry(Root: "", Relative: "unicode.txt", Extension: "txt", Language: "text", Size: Encoding.UTF8.GetByteCount(multibyteContent));
+        var entry = new FileEntry("", "unicode.txt", "txt", "text", Encoding.UTF8.GetByteCount(multibyteContent));
         var fileContents = new List<FileContent>
         {
             new(entry, multibyteContent, Encoding.UTF8.GetByteCount(multibyteContent))
@@ -452,10 +444,7 @@ public class BugFixTests
         var backendExtensions = BuiltInPresets.PresetBackend;
 
         // Act & Assert - Backend should be a superset of C++
-        foreach (var ext in cppExtensions)
-        {
-            Assert.Contains(ext, backendExtensions);
-        }
+        foreach (var ext in cppExtensions) Assert.Contains(ext, backendExtensions);
     }
 
     [Fact]
@@ -757,10 +746,7 @@ public class BugFixTests
 
             // Assert - Should handle gracefully (may succeed with FileShare.ReadWrite or fail gracefully)
             // The FileReader uses FileShare.ReadWrite so it might actually succeed
-            if (!result.IsSuccess)
-            {
-                Assert.NotNull(result.Error);
-            }
+            if (!result.IsSuccess) Assert.NotNull(result.Error);
         }
         finally
         {
@@ -772,7 +758,7 @@ public class BugFixTests
     public async Task FileReader_HandlesMissingFiles()
     {
         // Arrange
-        var nonExistentFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + ".txt");
+        var nonExistentFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".txt");
         var fileReader = new FileReader(_logger);
 
         // Act
@@ -794,16 +780,14 @@ public class BugFixTests
         var files = new[] { Path.Combine(Path.GetTempPath(), "nonexistent.txt") };
 
         // Act
-        var result = fileFilter.FilterFiles(files, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+        var result = fileFilter.FilterFiles(files, config, Array.Empty<string>(), Array.Empty<string>(),
+            Array.Empty<string>());
 
         // Assert - Should not throw. Phase 0.3: FileFilter no longer stat()s during filtering,
         // so non-existent files pass through to the generator which handles them gracefully.
         Assert.NotNull(result.Value);
         // The entry is created with Size=-1 (deferred stat), which is correct
-        foreach (var entry in result.Value!)
-        {
-            Assert.Equal(-1, entry.Size);
-        }
+        foreach (var entry in result.Value!) Assert.Equal(-1, entry.Size);
     }
 
     [Fact]
@@ -841,7 +825,7 @@ public class BugFixTests
     {
         // Arrange
         var fileReader = new FileReader(_logger);
-        var nonExistentFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + ".bin");
+        var nonExistentFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".bin");
 
         // Act
         var result = await fileReader.ReadStreamingAsync(nonExistentFile);
@@ -895,7 +879,8 @@ public class BugFixTests
         var readResult = await fileReader.ReadStreamingAsync("/invalid/path/file.txt");
         Assert.False(readResult.IsSuccess);
 
-        var filterResult = fileFilter.FilterFiles(new[] { "/invalid/file.txt" }, config, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+        var filterResult = fileFilter.FilterFiles(new[] { "/invalid/file.txt" }, config, Array.Empty<string>(),
+            Array.Empty<string>(), Array.Empty<string>());
         Assert.NotNull(filterResult.Value);
 
         var discoveryResult = await discovery.DiscoverFilesAsync("/invalid/path", config, CancellationToken.None);

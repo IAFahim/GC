@@ -1,15 +1,13 @@
-using gc.CLI.Models;
 using gc.CLI.Services;
 using gc.Domain.Constants;
 using gc.Domain.Models.Configuration;
-using Xunit;
 
 namespace gc.Tests;
 
 public class CliParserExtendedTests
 {
-    private readonly CliParser _parser = new();
     private readonly GcConfiguration _config = BuiltInPresets.GetDefaultConfiguration();
+    private readonly CliParser _parser = new();
 
     // =========================================================================
     // 1. Missing value errors (single-value flags without values)

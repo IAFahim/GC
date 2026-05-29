@@ -6,12 +6,12 @@ namespace gc.Tests;
 
 public class SecurityTests : IDisposable
 {
-    private bool _gitChecked;
-    private bool _gitAvailable;
-    private readonly ITestOutputHelper _output;
-    private readonly string _testDir;
-    private readonly string _repoDir;
     private readonly string _binaryPath;
+    private readonly ITestOutputHelper _output;
+    private readonly string _repoDir;
+    private readonly string _testDir;
+    private bool _gitAvailable;
+    private bool _gitChecked;
 
     public SecurityTests(ITestOutputHelper output)
     {
@@ -20,26 +20,27 @@ public class SecurityTests : IDisposable
         // Find the project root by looking for the .sln file starting from the base directory
         var current = AppContext.BaseDirectory;
         while (current != null && !File.Exists(Path.Combine(current, "gc.sln")))
-        {
             current = Directory.GetParent(current)?.FullName;
-        }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
 
-        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
         _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
 
         if (!File.Exists(_binaryPath))
-        {
             throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
-        }
 
         _testDir = Path.Combine(Path.GetTempPath(), $"gc_security_test_{Guid.NewGuid()}");
         _repoDir = Path.Combine(_testDir, "repo");
         Directory.CreateDirectory(_testDir);
 
         InitializeTestRepo();
+    }
+
+    public void Dispose()
+    {
+        TryDeleteDirectory(_testDir);
     }
 
     [Fact]
@@ -64,7 +65,7 @@ public class SecurityTests : IDisposable
             // Should either handle gracefully or skip the file
             Assert.True(result.ExitCode == 0 || result.ExitCode == 1);
 
-            _output.WriteLine($"✅ Single quote path injection handled");
+            _output.WriteLine("✅ Single quote path injection handled");
         }
         else
         {
@@ -105,7 +106,7 @@ public class Test
             var markdown = File.ReadAllText(outputFile);
             Assert.Contains("injection.cs", markdown);
 
-            _output.WriteLine($"✅ Markdown injection properly escaped");
+            _output.WriteLine("✅ Markdown injection properly escaped");
         }
     }
 
@@ -136,7 +137,7 @@ public class Test
         Assert.Contains("normal.cs", content);
         Assert.DoesNotContain("test.bin", content);
 
-        _output.WriteLine($"✅ Binary files with null bytes are detected and skipped");
+        _output.WriteLine("✅ Binary files with null bytes are detected and skipped");
     }
 
     [Fact]
@@ -166,7 +167,7 @@ public class Test
         Assert.Contains("normal.cs", content);
         Assert.DoesNotContain("test.exe", content);
 
-        _output.WriteLine($"✅ Executable formats are properly skipped");
+        _output.WriteLine("✅ Executable formats are properly skipped");
     }
 
     [Fact]
@@ -182,9 +183,12 @@ public class Test
         var result = RunGC("--max-memory 100KB --output out.md");
 
         Assert.NotEqual(0, result.ExitCode);
-        Assert.True(result.StandardError.Contains("output limit", StringComparison.OrdinalIgnoreCase) || result.StandardOutput.Contains("output limit", StringComparison.OrdinalIgnoreCase), "Output should contain limit error");
+        Assert.True(
+            result.StandardError.Contains("output limit", StringComparison.OrdinalIgnoreCase) ||
+            result.StandardOutput.Contains("output limit", StringComparison.OrdinalIgnoreCase),
+            "Output should contain limit error");
 
-        _output.WriteLine($"✅ Memory limits are properly enforced");
+        _output.WriteLine("✅ Memory limits are properly enforced");
     }
 
     [Fact]
@@ -198,7 +202,7 @@ public class Test
         // Should either handle gracefully or show error
         Assert.True(result.ExitCode != 0 || result.StandardOutput.Contains("help") || result.StandardError.Length > 0);
 
-        _output.WriteLine($"✅ Dangling arguments are handled appropriately");
+        _output.WriteLine("✅ Dangling arguments are handled appropriately");
     }
 
     [Fact]
@@ -214,7 +218,7 @@ public class Test
         // Should use default or show error, but not crash
         Assert.True(result.ExitCode == 0 || result.ExitCode != 0);
 
-        _output.WriteLine($"✅ Invalid memory format handled gracefully");
+        _output.WriteLine("✅ Invalid memory format handled gracefully");
     }
 
     [Fact]
@@ -252,12 +256,18 @@ public class Test
             Assert.Contains("Error reading file", content);
             Assert.Contains("unreadable.cs", content);
 
-            _output.WriteLine($"✅ Permission errors are handled gracefully");
+            _output.WriteLine("✅ Permission errors are handled gracefully");
         }
         finally
         {
             // Restore permissions for cleanup
-            try { chmod(filePath, "644"); } catch { }
+            try
+            {
+                chmod(filePath, "644");
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -267,10 +277,7 @@ public class Test
         _output.WriteLine("Testing thread safety of concurrent operations...");
 
         // Create multiple files
-        for (int i = 0; i < 10; i++)
-        {
-            AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
-        }
+        for (var i = 0; i < 10; i++) AddTestFile($"test{i}.cs", $"public class Test{i} {{ }}");
 
         // Run multiple GC instances concurrently
         var tasks = Enumerable.Range(0, 5).Select(i => Task.Run(() =>
@@ -283,12 +290,9 @@ public class Test
         await Task.WhenAll(tasks);
 
         // All should complete without errors
-        foreach (var task in tasks)
-        {
-            Assert.Equal(0, await task);
-        }
+        foreach (var task in tasks) Assert.Equal(0, await task);
 
-        _output.WriteLine($"✅ Concurrent operations are thread-safe");
+        _output.WriteLine("✅ Concurrent operations are thread-safe");
     }
 
     [Fact]
@@ -300,7 +304,6 @@ public class Test
         string[] specialNames = { "test..cs", "test...cs", " test.cs", "test .cs" };
 
         foreach (var name in specialNames)
-        {
             try
             {
                 AddTestFile(name, "public class Test { }");
@@ -309,19 +312,15 @@ public class Test
             {
                 _output.WriteLine($"⚠️  Could not create file '{name}': {ex.Message}");
             }
-        }
 
         var outputFile = Path.Combine(_testDir, "output_special_paths.md");
         var result = RunGC($"--output {outputFile}");
 
         // Should handle gracefully
         Assert.True(result.ExitCode == 0 || result.ExitCode != 0);
-        if (result.ExitCode == 0)
-        {
-            Assert.Contains("✔ Exported", result.StandardOutput);
-        }
+        if (result.ExitCode == 0) Assert.Contains("✔ Exported", result.StandardOutput);
 
-        _output.WriteLine($"✅ Special path characters handled appropriately");
+        _output.WriteLine("✅ Special path characters handled appropriately");
     }
 
     private void InitializeTestRepo()
@@ -331,29 +330,26 @@ public class Test
             _gitChecked = true;
             try
             {
-                var psi = new ProcessStartInfo { FileName = "git", Arguments = "--version", UseShellExecute = false, CreateNoWindow = true };
+                var psi = new ProcessStartInfo
+                    { FileName = "git", Arguments = "--version", UseShellExecute = false, CreateNoWindow = true };
                 using var p = Process.Start(psi);
                 if (p != null)
-                {
                     try
                     {
-                        if (!p.HasExited)
-                        {
-                            p.WaitForExit();
-                        }
-                        _gitAvailable = (p.ExitCode == 0);
+                        if (!p.HasExited) p.WaitForExit();
+                        _gitAvailable = p.ExitCode == 0;
                     }
                     catch
                     {
                         _gitAvailable = false;
                     }
-                }
                 else
-                {
                     _gitAvailable = false;
-                }
             }
-            catch { _gitAvailable = false; }
+            catch
+            {
+                _gitAvailable = false;
+            }
         }
 
         if (!_gitAvailable) return;
@@ -369,10 +365,7 @@ public class Test
         var fullPath = Path.Combine(_repoDir, name);
         var directory = Path.GetDirectoryName(fullPath);
 
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
         File.WriteAllText(fullPath, content);
         RunGitCommand("add", name);
@@ -392,10 +385,7 @@ public class Test
         };
 
         using var process = Process.Start(processInfo);
-        if (process == null)
-        {
-            return new ProcessResult(-1, "", "Failed to start process");
-        }
+        if (process == null) return new ProcessResult(-1, "", "Failed to start process");
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
@@ -419,19 +409,14 @@ public class Test
 
         using var process = Process.Start(processInfo);
         if (process != null)
-        {
             try
             {
-                if (!process.HasExited)
-                {
-                    process.WaitForExit();
-                }
+                if (!process.HasExited) process.WaitForExit();
             }
             catch
             {
                 // Process already terminated or invalid state
             }
-        }
     }
 
     private void chmod(string path, string permissions)
@@ -447,24 +432,14 @@ public class Test
 
         using var process = Process.Start(processInfo);
         if (process != null)
-        {
             try
             {
-                if (!process.HasExited)
-                {
-                    process.WaitForExit();
-                }
+                if (!process.HasExited) process.WaitForExit();
             }
             catch
             {
                 // Process already terminated or invalid state
             }
-        }
-    }
-
-    public void Dispose()
-    {
-        TryDeleteDirectory(_testDir);
     }
 
     private void TryDeleteDirectory(string path, int retryCount = 0)
@@ -475,7 +450,6 @@ public class Test
         {
             // Reset permissions to ensure delete works
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
                 try
                 {
                     var psi = new ProcessStartInfo
@@ -487,39 +461,35 @@ public class Test
                     };
                     using var p = Process.Start(psi);
                     if (p != null)
-                    {
                         try
                         {
-                            if (!p.HasExited)
-                            {
-                                p.WaitForExit();
-                            }
+                            if (!p.HasExited) p.WaitForExit();
                         }
                         catch
                         {
                             // Process already terminated or invalid state
                         }
-                    }
                 }
-                catch { }
-            }
+                catch
+                {
+                }
 
             // Reset file attributes to Normal to ensure deletable
             foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
-            {
                 try
                 {
                     File.SetAttributes(file, FileAttributes.Normal);
                 }
-                catch { }
-            }
+                catch
+                {
+                }
 
             Directory.Delete(path, true);
         }
         catch when (retryCount < 3)
         {
             // Retry with exponential backoff
-            System.Threading.Thread.Sleep(100 * (retryCount + 1));
+            Thread.Sleep(100 * (retryCount + 1));
             TryDeleteDirectory(path, retryCount + 1);
         }
         catch

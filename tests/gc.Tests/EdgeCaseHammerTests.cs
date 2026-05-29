@@ -5,7 +5,6 @@ using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
-using Xunit;
 
 namespace gc.Tests;
 
@@ -152,7 +151,7 @@ namespace MyApp
             "configurationService = new ConfigurationService();",
             "var configurationService2 = configurationService;",
             "return configurationService;",
-            "configurationService.Dispose();",
+            "configurationService.Dispose();"
         });
         var result = compressor.Compress(input);
         Assert.NotNull(result.Output);
@@ -194,7 +193,6 @@ namespace MyApp
     // =========================================================================
     // AhoCorasick edge cases
     // =========================================================================
-
 
 
     // =========================================================================
@@ -240,7 +238,7 @@ namespace MyApp
         var contents = new[]
         {
             new FileContent(
-                new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "csharp", Size: 5),
+                new FileEntry("", "test.cs", "cs", "csharp", 5),
                 "\n\n\n\n\n",
                 5)
         };
@@ -313,7 +311,8 @@ namespace MyApp
         {
             "/home/user/../secret/key.pem"
         };
-        var result = filter.FilterFiles(rawFiles, new GcConfiguration(), Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>());
+        var result = filter.FilterFiles(rawFiles, new GcConfiguration(), Array.Empty<string>(), Array.Empty<string>(),
+            Array.Empty<string>());
         Assert.True(result.IsSuccess);
     }
 
@@ -480,11 +479,11 @@ namespace MyApp
     {
         var crusher = new BrainCrusher();
         var random = new Random(42);
-        for (int i = 0; i < 100; i++)
+        for (var i = 0; i < 100; i++)
         {
             var len = random.Next(0, 1000);
             var chars = new char[len];
-            for (int j = 0; j < len; j++)
+            for (var j = 0; j < len; j++)
                 chars[j] = (char)random.Next(32, 126);
             var input = new string(chars);
             var crushed = crusher.Crush(input);
@@ -497,11 +496,11 @@ namespace MyApp
     {
         var compressor = new DynamicCompressor();
         var random = new Random(42);
-        for (int i = 0; i < 50; i++)
+        for (var i = 0; i < 50; i++)
         {
             var len = random.Next(0, 500);
             var chars = new char[len];
-            for (int j = 0; j < len; j++)
+            for (var j = 0; j < len; j++)
                 chars[j] = (char)random.Next(32, 126);
             var input = new string(chars);
             var result = compressor.Compress(input);
@@ -513,11 +512,11 @@ namespace MyApp
     public void SuffixArray_Stress_RandomInput_DoesNotCrash()
     {
         var random = new Random(42);
-        for (int i = 0; i < 20; i++)
+        for (var i = 0; i < 20; i++)
         {
             var len = random.Next(0, 200);
             var chars = new char[len];
-            for (int j = 0; j < len; j++)
+            for (var j = 0; j < len; j++)
                 chars[j] = (char)random.Next('a', 'z' + 1);
             var input = new string(chars);
             var sa = SuffixArray.Build(input);
@@ -533,30 +532,81 @@ namespace MyApp
     {
         public List<(string Level, string Message)> Messages { get; } = new();
         public LogLevel MinimumLevel { get; set; } = LogLevel.Debug;
-        public void Log(LogLevel level, string message, Exception? ex = null) => Messages.Add((level.ToString(), message));
+
+        public void Log(LogLevel level, string message, Exception? ex = null)
+        {
+            Messages.Add((level.ToString(), message));
+        }
     }
 
     private class TestFileReader : IFileReader
     {
-        public Task<Result<FileContent>> ReadAsync(FileEntry entry, CancellationToken ct = default) => Task.FromResult(Result<FileContent>.Success(default));
-        public Task<Result<Stream>> ReadStreamingAsync(string path, CancellationToken ct = default) => Task.FromResult(Result<Stream>.Success(Stream.Null));
-        public Task<bool> IsBinaryFileAsync(string path, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<Result<FileContent>> ReadAsync(FileEntry entry, CancellationToken ct = default)
+        {
+            return Task.FromResult(Result<FileContent>.Success(default));
+        }
+
+        public Task<Result<Stream>> ReadStreamingAsync(string path, CancellationToken ct = default)
+        {
+            return Task.FromResult(Result<Stream>.Success(Stream.Null));
+        }
+
+        public Task<bool> IsBinaryFileAsync(string path, CancellationToken ct = default)
+        {
+            return Task.FromResult(false);
+        }
     }
 
     private class MockDiscovery : IFileDiscovery
     {
         private readonly FileEntry[] _entries;
-        public MockDiscovery(FileEntry[] entries) => _entries = entries;
-        public Task<Result<IEnumerable<string>>> DiscoverFilesAsync(string rootPath, GcConfiguration config, CancellationToken ct = default) => Task.FromResult(Result<IEnumerable<string>>.Success(_entries.Select(e => e.Path)));
-        public Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(string rootPath, string reference, GcConfiguration config, CancellationToken ct = default) => Task.FromResult(Result<IEnumerable<string>>.Success(_entries.Select(e => e.Path)));
-        public Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(string clusterRoot, ClusterConfiguration clusterConfig, CancellationToken ct = default) => Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Success(Array.Empty<RepoInfo>()));
+
+        public MockDiscovery(FileEntry[] entries)
+        {
+            _entries = entries;
+        }
+
+        public Task<Result<IEnumerable<string>>> DiscoverFilesAsync(string rootPath, GcConfiguration config,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult(Result<IEnumerable<string>>.Success(_entries.Select(e => e.Path)));
+        }
+
+        public Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(string rootPath, string reference,
+            GcConfiguration config, CancellationToken ct = default)
+        {
+            return Task.FromResult(Result<IEnumerable<string>>.Success(_entries.Select(e => e.Path)));
+        }
+
+        public Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(string clusterRoot,
+            ClusterConfiguration clusterConfig, CancellationToken ct = default)
+        {
+            return Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Success(Array.Empty<RepoInfo>()));
+        }
     }
 
     private class MockClipboard : IClipboardService
     {
-        public Task<Result> CopyToClipboardAsync(Stream stream, CancellationToken ct = default) => Task.FromResult(Result.Success());
-        public Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append = false, CancellationToken ct = default) => Task.FromResult(Result.Success());
-        public Task<Result> CopyToClipboardAsync(string content, CancellationToken ct = default) => Task.FromResult(Result.Success());
-        public Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append = false, CancellationToken ct = default) => Task.FromResult(Result.Success());
+        public Task<Result> CopyToClipboardAsync(Stream stream, CancellationToken ct = default)
+        {
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append = false,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> CopyToClipboardAsync(string content, CancellationToken ct = default)
+        {
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append = false,
+            CancellationToken ct = default)
+        {
+            return Task.FromResult(Result.Success());
+        }
     }
 }

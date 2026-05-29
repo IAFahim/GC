@@ -1,13 +1,14 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Xunit.Abstractions;
 
 namespace gc.Tests;
 
 public class NonGitDiscoveryTests : IDisposable
 {
+    private readonly string _binaryPath;
     private readonly ITestOutputHelper _output;
     private readonly string _testDir;
-    private readonly string _binaryPath;
 
     public NonGitDiscoveryTests(ITestOutputHelper output)
     {
@@ -22,20 +23,21 @@ public class NonGitDiscoveryTests : IDisposable
         var searchStart = AppContext.BaseDirectory;
         var current = searchStart;
         while (current != null && !File.Exists(Path.Combine(current, "gc.sln")))
-        {
             current = Directory.GetParent(current)?.FullName;
-        }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
 
-        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
         _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
 
         if (!File.Exists(_binaryPath))
-        {
             throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
-        }
+    }
+
+    public void Dispose()
+    {
+        TryDeleteDirectory(_testDir);
     }
 
     [Fact]
@@ -59,7 +61,7 @@ public class NonGitDiscoveryTests : IDisposable
         Assert.Contains("test.js", content);
         Assert.Contains("test.cs", content);
 
-        _output.WriteLine($"✅ Non-git discovery works with multiple files");
+        _output.WriteLine("✅ Non-git discovery works with multiple files");
     }
 
     [Fact]
@@ -82,7 +84,7 @@ public class NonGitDiscoveryTests : IDisposable
         Assert.Contains("test.js", content);
         Assert.DoesNotContain("test.cs", content);
 
-        _output.WriteLine($"✅ Extension filtering works in non-git mode");
+        _output.WriteLine("✅ Extension filtering works in non-git mode");
     }
 
     [Fact]
@@ -104,7 +106,7 @@ public class NonGitDiscoveryTests : IDisposable
         var content = File.ReadAllText(outputFile);
         Assert.Contains("test.js", content);
 
-        _output.WriteLine($"✅ Preset filtering works in non-git mode");
+        _output.WriteLine("✅ Preset filtering works in non-git mode");
     }
 
     [Fact]
@@ -129,7 +131,7 @@ public class NonGitDiscoveryTests : IDisposable
         Assert.Contains("test.js", content);
         Assert.DoesNotContain("node_modules", content);
 
-        _output.WriteLine($"✅ System directories are properly ignored");
+        _output.WriteLine("✅ System directories are properly ignored");
     }
 
     [Fact]
@@ -156,7 +158,7 @@ public class NonGitDiscoveryTests : IDisposable
         Assert.Contains("helper.ts", content);
         Assert.Contains("parser.js", content);
 
-        _output.WriteLine($"✅ Nested directories are handled correctly");
+        _output.WriteLine("✅ Nested directories are handled correctly");
     }
 
     [Fact]
@@ -184,7 +186,7 @@ public class NonGitDiscoveryTests : IDisposable
         Assert.DoesNotContain("lib/file2.cs", content);
         Assert.DoesNotContain("root.cs", content);
 
-        _output.WriteLine($"✅ Paths filtering works in non-git mode");
+        _output.WriteLine("✅ Paths filtering works in non-git mode");
     }
 
     [Fact]
@@ -203,7 +205,7 @@ public class NonGitDiscoveryTests : IDisposable
         var content = File.ReadAllText(outputFile);
         Assert.Contains("test.cs", content);
 
-        _output.WriteLine($"✅ Explicit force mode works");
+        _output.WriteLine("✅ Explicit force mode works");
     }
 
     [Fact]
@@ -237,7 +239,7 @@ public class NonGitDiscoveryTests : IDisposable
         // Should include source files, not dist files
         Assert.DoesNotContain("dist/bundle.js", content);
 
-        _output.WriteLine($"✅ Non-git mode is useful for analyzing third-party libraries");
+        _output.WriteLine("✅ Non-git mode is useful for analyzing third-party libraries");
     }
 
     private ProcessResult RunGC(string workingDir, string args)
@@ -253,10 +255,7 @@ public class NonGitDiscoveryTests : IDisposable
         };
 
         using var process = Process.Start(processInfo);
-        if (process == null)
-        {
-            return new ProcessResult(-1, "", "Failed to start process");
-        }
+        if (process == null) return new ProcessResult(-1, "", "Failed to start process");
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
@@ -264,11 +263,6 @@ public class NonGitDiscoveryTests : IDisposable
         Task.WaitAll(stdoutTask, stderrTask);
 
         return new ProcessResult(process.ExitCode, stdoutTask.Result, stderrTask.Result);
-    }
-
-    public void Dispose()
-    {
-        TryDeleteDirectory(_testDir);
     }
 
     private void TryDeleteDirectory(string path, int retryCount = 0)
@@ -279,20 +273,20 @@ public class NonGitDiscoveryTests : IDisposable
         {
             // Reset file attributes to Normal to ensure deletable
             foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
-            {
                 try
                 {
                     File.SetAttributes(file, FileAttributes.Normal);
                 }
-                catch { }
-            }
+                catch
+                {
+                }
 
             Directory.Delete(path, true);
         }
         catch when (retryCount < 3)
         {
             // Retry with exponential backoff
-            System.Threading.Thread.Sleep(100 * (retryCount + 1));
+            Thread.Sleep(100 * (retryCount + 1));
             TryDeleteDirectory(path, retryCount + 1);
         }
         catch

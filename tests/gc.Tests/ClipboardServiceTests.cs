@@ -1,5 +1,4 @@
 using System.Text;
-using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models.Configuration;
 using gc.Infrastructure.System;
@@ -128,7 +127,7 @@ public class ClipboardServiceTests
         var service = new ClipboardService(_logger);
         var limits = new LimitsConfiguration { MaxClipboardSize = "5B" };
         var content = "ABCDEFGHIJ"; // 10 bytes
-        var result = await service.CopyToClipboardAsync(content, limits, append: true);
+        var result = await service.CopyToClipboardAsync(content, limits, true);
         Assert.False(result.IsSuccess);
         Assert.Contains("exceeds maximum clipboard size", result.Error);
     }

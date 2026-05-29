@@ -9,7 +9,10 @@ public static class BuiltInPresets
         ["html", "htm", "css", "scss", "sass", "less", "js", "jsx", "ts", "tsx", "json", "svg", "vue", "svelte"];
 
     public static readonly string[] PresetBackend =
-        ["py", "rb", "php", "pl", "go", "rs", "java", "cs", "cpp", "cc", "cxx", "h", "c", "hpp", "hxx", "swift", "kt", "ex", "exs", "sh"];
+    [
+        "py", "rb", "php", "pl", "go", "rs", "java", "cs", "cpp", "cc", "cxx", "h", "c", "hpp", "hxx", "swift", "kt",
+        "ex", "exs", "sh"
+    ];
 
     public static readonly string[] PresetDotnet = ["cs", "razor", "csproj", "json", "http", "xaml"];
 
@@ -38,29 +41,30 @@ public static class BuiltInPresets
         ".env", "secrets", "credentials"
     ];
 
-    public static readonly FrozenDictionary<string, string> LanguageMappings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["js"] = "javascript",
-        ["ts"] = "typescript",
-        ["py"] = "python",
-        ["cs"] = "cs",
-        ["sh"] = "bash",
-        ["md"] = "markdown",
-        ["h"] = "c",
-        ["hpp"] = "cpp",
-        ["razor"] = "html",
-        ["vue"] = "html",
-        ["shader"] = "glsl",
-        ["cginc"] = "glsl",
-        ["hlsl"] = "glsl",
-        ["uss"] = "css",
-        ["uxml"] = "xml",
-        ["ps1"] = "powershell",
-        ["dockerfile"] = "dockerfile",
-        ["makefile"] = "makefile",
-        ["gemfile"] = "ruby",
-        ["rakefile"] = "ruby"
-    }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+    public static readonly FrozenDictionary<string, string> LanguageMappings =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["js"] = "javascript",
+            ["ts"] = "typescript",
+            ["py"] = "python",
+            ["cs"] = "cs",
+            ["sh"] = "bash",
+            ["md"] = "markdown",
+            ["h"] = "c",
+            ["hpp"] = "cpp",
+            ["razor"] = "html",
+            ["vue"] = "html",
+            ["shader"] = "glsl",
+            ["cginc"] = "glsl",
+            ["hlsl"] = "glsl",
+            ["uss"] = "css",
+            ["uxml"] = "xml",
+            ["ps1"] = "powershell",
+            ["dockerfile"] = "dockerfile",
+            ["makefile"] = "makefile",
+            ["gemfile"] = "ruby",
+            ["rakefile"] = "ruby"
+        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     public static Dictionary<string, PresetConfiguration> GetAllPresets()
     {

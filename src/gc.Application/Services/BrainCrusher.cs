@@ -4,10 +4,10 @@ using gc.Domain.Interfaces;
 namespace gc.Application.Services;
 
 /// <summary>
-/// Phase 1 minifier: strips comments and collapses whitespace.
-/// No static keyword dictionary — that was token-pessimal (replacing 1-token
-/// keywords like "public" with 2-token "!1"). Dynamic compression is handled
-/// by DynamicCompressor using BPE-style SA/LCP analysis.
+///     Phase 1 minifier: strips comments and collapses whitespace.
+///     No static keyword dictionary — that was token-pessimal (replacing 1-token
+///     keywords like "public" with 2-token "!1"). Dynamic compression is handled
+///     by DynamicCompressor using BPE-style SA/LCP analysis.
 /// </summary>
 public sealed class BrainCrusher : IBrainCrusher
 {
@@ -44,11 +44,7 @@ public sealed class BrainCrusher : IBrainCrusher
         "c", "javascript", "typescript", "csharp", "cpp", "objectivec", "swift"
     };
 
-    // Shell shebang patterns - #! at start of file should be preserved
-    private static bool IsShebangLine(ReadOnlySpan<char> line) =>
-        line.Length >= 2 && line[0] == '#' && line[1] == '!';
-
-    private string? _fileExtension;
+    private readonly string? _fileExtension;
 
     public BrainCrusher(string? fileExtension = null)
     {
@@ -62,16 +58,28 @@ public sealed class BrainCrusher : IBrainCrusher
         return CollapseWhitespace(stripped);
     }
 
+    public string Uncrush(string crushed)
+    {
+        return crushed;
+    }
+
+    public string GetDictionaryHeader()
+    {
+        return string.Empty;
+    }
+
+    // Shell shebang patterns - #! at start of file should be preserved
+    private static bool IsShebangLine(ReadOnlySpan<char> line)
+    {
+        return line.Length >= 2 && line[0] == '#' && line[1] == '!';
+    }
+
     public string Crush(string content)
     {
         if (string.IsNullOrEmpty(content)) return content;
         var stripped = StripComments(content, _fileExtension);
         return CollapseWhitespace(stripped);
     }
-
-    public string Uncrush(string crushed) => crushed;
-
-    public string GetDictionaryHeader() => string.Empty;
 
     // =========================================================================
     // Universal Syntax Minifier
@@ -82,19 +90,17 @@ public sealed class BrainCrusher : IBrainCrusher
     {
         var sb = new StringBuilder(content.Length);
         var span = content.AsSpan();
-        int i = 0;
-        int len = span.Length;
+        var i = 0;
+        var len = span.Length;
 
         // Normalize extension (strip leading dot)
         string? normalizedExt = null;
         if (!string.IsNullOrEmpty(fileExtension))
-        {
-            normalizedExt = fileExtension.StartsWith('.') 
-                ? fileExtension.Substring(1) 
+            normalizedExt = fileExtension.StartsWith('.')
+                ? fileExtension.Substring(1)
                 : fileExtension;
-        }
 
-        bool shouldStripSql = normalizedExt != null && SqlLikeExtensions.Contains(normalizedExt);
+        var shouldStripSql = normalizedExt != null && SqlLikeExtensions.Contains(normalizedExt);
         bool shouldTreatHashAsComment;
         bool shouldStripDoubleSlash;
 
@@ -111,18 +117,18 @@ public sealed class BrainCrusher : IBrainCrusher
             shouldStripDoubleSlash = DoubleSlashCommentExtensions.Contains(normalizedExt);
         }
 
-        bool inString = false;
-        bool inChar = false;
-        bool inSingleLineComment = false;
-        bool inMultiLineComment = false;
-        bool inHashComment = false;
-        bool inHtmlComment = false;
-        bool inTripleQuote = false;
-        bool inSqlComment = false;
+        var inString = false;
+        var inChar = false;
+        var inSingleLineComment = false;
+        var inMultiLineComment = false;
+        var inHashComment = false;
+        var inHtmlComment = false;
+        var inTripleQuote = false;
+        var inSqlComment = false;
 
         while (i < len)
         {
-            char ch = span[i];
+            var ch = span[i];
 
             if (inTripleQuote)
             {
@@ -133,6 +139,7 @@ public sealed class BrainCrusher : IBrainCrusher
                     inTripleQuote = false;
                     continue;
                 }
+
                 if (ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
                 {
                     sb.Append("'''");
@@ -140,12 +147,14 @@ public sealed class BrainCrusher : IBrainCrusher
                     inTripleQuote = false;
                     continue;
                 }
+
                 sb.Append(ch);
                 if (ch == '\\' && i + 1 < len)
                 {
                     i++;
                     sb.Append(span[i]);
                 }
+
                 i++;
                 continue;
             }
@@ -157,6 +166,7 @@ public sealed class BrainCrusher : IBrainCrusher
                     inSqlComment = false;
                     sb.Append('\n');
                 }
+
                 i++;
                 continue;
             }
@@ -170,6 +180,7 @@ public sealed class BrainCrusher : IBrainCrusher
                     sb.Append(' ');
                     continue;
                 }
+
                 if (ch == '\n') sb.Append('\n');
                 i++;
                 continue;
@@ -182,6 +193,7 @@ public sealed class BrainCrusher : IBrainCrusher
                     inHashComment = false;
                     sb.Append('\n');
                 }
+
                 i++;
                 continue;
             }
@@ -195,6 +207,7 @@ public sealed class BrainCrusher : IBrainCrusher
                     sb.Append(' ');
                     continue;
                 }
+
                 if (ch == '\n') sb.Append('\n');
                 i++;
                 continue;
@@ -207,6 +220,7 @@ public sealed class BrainCrusher : IBrainCrusher
                     inSingleLineComment = false;
                     sb.Append('\n');
                 }
+
                 i++;
                 continue;
             }
@@ -223,6 +237,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 {
                     inString = false;
                 }
+
                 i++;
                 continue;
             }
@@ -239,6 +254,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 {
                     inChar = false;
                 }
+
                 i++;
                 continue;
             }
@@ -251,6 +267,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 i += 3;
                 continue;
             }
+
             if (ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
             {
                 inTripleQuote = true;
@@ -280,7 +297,7 @@ public sealed class BrainCrusher : IBrainCrusher
             if (shouldStripDoubleSlash && ch == '/' && i + 1 < len && span[i + 1] == '/')
             {
                 // Don't start // comment if preceded by : (URL protocol separator)
-                bool precededByColon = i > 0 && span[i - 1] == ':';
+                var precededByColon = i > 0 && span[i - 1] == ':';
                 if (!precededByColon)
                 {
                     inSingleLineComment = true;
@@ -335,16 +352,16 @@ public sealed class BrainCrusher : IBrainCrusher
     internal static string CollapseWhitespace(string stripped)
     {
         var result = new StringBuilder(stripped.Length);
-        int i = 0;
-        int len = stripped.Length;
-        bool lastWasSpace = false;
-        bool lineIsEmpty = true;
-        bool inString = false;
-        bool inChar = false;
+        var i = 0;
+        var len = stripped.Length;
+        var lastWasSpace = false;
+        var lineIsEmpty = true;
+        var inString = false;
+        var inChar = false;
 
         while (i < len)
         {
-            char ch = stripped[i];
+            var ch = stripped[i];
 
             // Handle string/char state - pass through verbatim
             if (inString)
@@ -359,6 +376,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 {
                     inString = false;
                 }
+
                 i++;
                 continue;
             }
@@ -375,6 +393,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 {
                     inChar = false;
                 }
+
                 i++;
                 continue;
             }
@@ -387,6 +406,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 i++;
                 continue;
             }
+
             if (ch == '\'')
             {
                 inChar = true;
@@ -407,6 +427,7 @@ public sealed class BrainCrusher : IBrainCrusher
                     lineIsEmpty = true;
                     lastWasSpace = false;
                 }
+
                 i++;
                 continue;
             }
@@ -415,14 +436,10 @@ public sealed class BrainCrusher : IBrainCrusher
             if (ch == ' ' || ch == '\t')
             {
                 if (lineIsEmpty)
-                {
                     // Preserve leading whitespace for indentation-sensitive languages
                     result.Append(ch);
-                }
                 else
-                {
                     lastWasSpace = true;
-                }
                 i++;
                 continue;
             }

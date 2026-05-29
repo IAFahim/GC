@@ -1,14 +1,16 @@
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Xunit.Abstractions;
 
 namespace gc.Tests;
 
 public class EdgeCaseTests : IDisposable
 {
-    private readonly ITestOutputHelper _output;
-    private readonly string _testDir;
-    private readonly string _repoDir;
     private readonly string _binaryPath;
+    private readonly ITestOutputHelper _output;
+    private readonly string _repoDir;
+    private readonly string _testDir;
 
     public EdgeCaseTests(ITestOutputHelper output)
     {
@@ -17,25 +19,26 @@ public class EdgeCaseTests : IDisposable
         // Find the project root by looking for the .sln file starting from the base directory
         var current = AppContext.BaseDirectory;
         while (current != null && !File.Exists(Path.Combine(current, "gc.sln")))
-        {
             current = Directory.GetParent(current)?.FullName;
-        }
 
         var projectRoot = current ?? throw new Exception("Could not find project root (gc.sln)");
 
-        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows);
+        var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
         _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
 
         if (!File.Exists(_binaryPath))
-        {
             throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
-        }
 
         _testDir = Path.Combine(Path.GetTempPath(), $"gc_edge_test_{Guid.NewGuid()}");
         _repoDir = Path.Combine(_testDir, "repo");
         Directory.CreateDirectory(_testDir);
         InitializeTestRepo();
+    }
+
+    public void Dispose()
+    {
+        TryDeleteDirectory(_testDir);
     }
 
     [Fact]
@@ -49,7 +52,7 @@ public class EdgeCaseTests : IDisposable
 
         Assert.Equal(0, result.ExitCode);
         // Empty files might be skipped or included - both are acceptable
-        _output.WriteLine($"✅ Empty files handled appropriately");
+        _output.WriteLine("✅ Empty files handled appropriately");
     }
 
     [Fact]
@@ -65,7 +68,7 @@ public class EdgeCaseTests : IDisposable
         // Should either work or fail gracefully
         Assert.True(result.ExitCode == 0 || result.ExitCode != 0);
 
-        _output.WriteLine($"✅ Long file names handled");
+        _output.WriteLine("✅ Long file names handled");
     }
 
     [Fact]
@@ -103,7 +106,7 @@ public class EdgeCaseTests : IDisposable
         var outputContent = File.ReadAllText(outputFile);
         Assert.Contains("test.cs", outputContent);
 
-        _output.WriteLine($"✅ Deeply nested files handled correctly");
+        _output.WriteLine("✅ Deeply nested files handled correctly");
     }
 
     [Fact]
@@ -112,7 +115,7 @@ public class EdgeCaseTests : IDisposable
         _output.WriteLine("Testing Unicode characters in files...");
 
         AddTestFile("тест.cs", "public class Тест { }"); // Russian
-        AddTestFile("测试.cs", "public class 测试 { }");   // Chinese
+        AddTestFile("测试.cs", "public class 测试 { }"); // Chinese
         AddTestFile("テスト.cs", "public class テスト { }"); // Japanese
 
         var outputFile = Path.Combine(_testDir, "output_unicode.md");
@@ -121,7 +124,7 @@ public class EdgeCaseTests : IDisposable
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
 
-        _output.WriteLine($"✅ Unicode characters handled correctly");
+        _output.WriteLine("✅ Unicode characters handled correctly");
     }
 
     [Fact]
@@ -148,7 +151,7 @@ public class Test
         var content = File.ReadAllText(outputFile);
         Assert.Contains("special.cs", content);
 
-        _output.WriteLine($"✅ Special characters in content handled correctly");
+        _output.WriteLine("✅ Special characters in content handled correctly");
     }
 
     [Fact]
@@ -168,7 +171,7 @@ public class Test
         var content = File.ReadAllText(outputFile);
         Assert.Contains("mixed.cs", content);
 
-        _output.WriteLine($"✅ Mixed line endings handled correctly");
+        _output.WriteLine("✅ Mixed line endings handled correctly");
     }
 
     [Fact]
@@ -184,7 +187,7 @@ public class Test
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("✔ Exported", result.StandardOutput);
 
-        _output.WriteLine($"✅ Whitespace-only files handled");
+        _output.WriteLine("✅ Whitespace-only files handled");
     }
 
     [Fact]
@@ -204,7 +207,7 @@ public class Test
         var content = File.ReadAllText(outputFile);
         Assert.Contains("longline.cs", content);
 
-        _output.WriteLine($"✅ Very long lines handled correctly");
+        _output.WriteLine("✅ Very long lines handled correctly");
     }
 
     [Fact]
@@ -219,7 +222,7 @@ public class Test
 
         Assert.Equal(0, result.ExitCode);
 
-        _output.WriteLine($"✅ Files with multiple extensions handled");
+        _output.WriteLine("✅ Files with multiple extensions handled");
     }
 
     [Fact]
@@ -235,7 +238,7 @@ public class Test
         Assert.Equal(0, result.ExitCode);
         // These should be handled based on their names or content
 
-        _output.WriteLine($"✅ Files without extensions handled");
+        _output.WriteLine("✅ Files without extensions handled");
     }
 
     [Fact]
@@ -252,7 +255,7 @@ public class Test
         Assert.Equal(0, result.ExitCode);
         // Should match regardless of case depending on OS
 
-        _output.WriteLine($"✅ Case-sensitive extensions handled appropriately");
+        _output.WriteLine("✅ Case-sensitive extensions handled appropriately");
     }
 
     [Fact]
@@ -268,7 +271,7 @@ public class Test
         Assert.Equal(0, result.ExitCode);
         // Hidden files should be handled based on git tracking
 
-        _output.WriteLine($"✅ Hidden files handled appropriately");
+        _output.WriteLine("✅ Hidden files handled appropriately");
     }
 
     [Fact]
@@ -295,7 +298,7 @@ public class Test
             var content = File.ReadAllText(outputFile);
             Assert.Contains("readonly.cs", content);
 
-            _output.WriteLine($"✅ Read-only files handled correctly");
+            _output.WriteLine("✅ Read-only files handled correctly");
         }
         finally
         {
@@ -304,7 +307,9 @@ public class Test
             {
                 File.SetAttributes(filePath, FileAttributes.Normal);
             }
-            catch { }
+            catch
+            {
+            }
         }
     }
 
@@ -322,7 +327,7 @@ public class Test
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("No files match the specified filters", result.StandardOutput);
 
-        _output.WriteLine($"✅ Zero-byte files handled");
+        _output.WriteLine("✅ Zero-byte files handled");
     }
 
     [Fact]
@@ -332,10 +337,7 @@ public class Test
 
         var maxFileSize = 1 * 1024 * 1024; // 1MB
         var content = new byte[maxFileSize];
-        for (int i = 0; i < content.Length; i++)
-        {
-            content[i] = (byte)('a' + (i % 26));
-        }
+        for (var i = 0; i < content.Length; i++) content[i] = (byte)('a' + i % 26);
 
         var filePath = Path.Combine(_repoDir, "maxsize.txt");
         File.WriteAllBytes(filePath, content);
@@ -353,7 +355,7 @@ public class Test
         var outputContent = File.ReadAllText(outputFile);
         Assert.Contains("maxsize.txt", outputContent);
 
-        _output.WriteLine($"✅ Files at max size are included");
+        _output.WriteLine("✅ Files at max size are included");
     }
 
     [Fact]
@@ -374,7 +376,7 @@ public class Test
         Assert.Contains("dir1/test.cs", content);
         Assert.Contains("dir2/test.cs", content);
 
-        _output.WriteLine($"✅ Duplicate file names in different directories handled");
+        _output.WriteLine("✅ Duplicate file names in different directories handled");
     }
 
     private void InitializeTestRepo()
@@ -390,10 +392,7 @@ public class Test
         var fullPath = Path.Combine(_repoDir, name);
         var directory = Path.GetDirectoryName(fullPath);
 
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
         File.WriteAllText(fullPath, content);
         RunGitCommand("add", name);
@@ -405,10 +404,7 @@ public class Test
         var fullPath = Path.Combine(_repoDir, name);
         var directory = Path.GetDirectoryName(fullPath);
 
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 
         File.WriteAllBytes(fullPath, content);
         RunGitCommand("add", name);
@@ -429,16 +425,14 @@ public class Test
         };
 
         using var process = Process.Start(processInfo);
-        if (process == null)
-        {
-            return new ProcessResult(-1, "", "Failed to start process");
-        }
+        if (process == null) return new ProcessResult(-1, "", "Failed to start process");
 
         var stdout = process.StandardOutput.ReadToEnd();
         var stderr = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        _output.WriteLine($"DEBUG: ExitCode={process.ExitCode}, StdoutLength={stdout.Length}, StderrLength={stderr.Length}");
+        _output.WriteLine(
+            $"DEBUG: ExitCode={process.ExitCode}, StdoutLength={stdout.Length}, StderrLength={stderr.Length}");
         _output.WriteLine($"DEBUG: Stdout='{stdout}'");
         _output.WriteLine($"DEBUG: Stderr='{stderr}'");
 
@@ -459,26 +453,16 @@ public class Test
 
         using var process = Process.Start(processInfo);
         if (process != null)
-        {
             try
             {
-                if (!process.HasExited)
-                {
-                    process.WaitForExit();
-                }
+                if (!process.HasExited) process.WaitForExit();
             }
             catch (InvalidOperationException)
             {
             }
-            catch (System.ComponentModel.Win32Exception)
+            catch (Win32Exception)
             {
             }
-        }
-    }
-
-    public void Dispose()
-    {
-        TryDeleteDirectory(_testDir);
     }
 
     private void TryDeleteDirectory(string path, int retryCount = 0)
@@ -489,20 +473,20 @@ public class Test
         {
             // Reset file attributes to Normal to ensure deletable
             foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
-            {
                 try
                 {
                     File.SetAttributes(file, FileAttributes.Normal);
                 }
-                catch { }
-            }
+                catch
+                {
+                }
 
             Directory.Delete(path, true);
         }
         catch when (retryCount < 3)
         {
             // Retry with exponential backoff
-            System.Threading.Thread.Sleep(100 * (retryCount + 1));
+            Thread.Sleep(100 * (retryCount + 1));
             TryDeleteDirectory(path, retryCount + 1);
         }
         catch

@@ -1,11 +1,10 @@
 using gc.Application.Services;
-using Xunit;
 
 namespace gc.Tests;
 
 /// <summary>
-/// Tests for DynamicCompressor — dynamic algorithmic compression with
-/// identifier-aware scanning and BPE-style replacement.
+///     Tests for DynamicCompressor — dynamic algorithmic compression with
+///     identifier-aware scanning and BPE-style replacement.
 /// </summary>
 public class DynamicCompressorTests
 {
@@ -39,7 +38,8 @@ public class DynamicCompressorTests
     [Fact]
     public void Compress_NoRepeatedTokens_NoReplacements()
     {
-        var input = "this is a very unique string with absolutely no repeated phrases of significant length anywhere in it";
+        var input =
+            "this is a very unique string with absolutely no repeated phrases of significant length anywhere in it";
         var result = _compressor.Compress(input);
         Assert.Equal(0, result.ReplacementCount);
     }

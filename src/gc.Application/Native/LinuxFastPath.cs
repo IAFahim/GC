@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace gc.Application.Native;
 
@@ -31,8 +27,8 @@ public static class LinuxFastPath
     public static extern IntPtr readahead(int fd, long offset, long count);
 
     /// <summary>
-    /// Prefetches file contents for faster subsequent reads.
-    /// Returns a Task so callers can observe faults.
+    ///     Prefetches file contents for faster subsequent reads.
+    ///     Returns a Task so callers can observe faults.
     /// </summary>
     public static Task PrewarmAsync(
         IEnumerable<string> filePaths,
@@ -47,7 +43,7 @@ public static class LinuxFastPath
         {
             try
             {
-                int count = 0;
+                var count = 0;
                 foreach (var path in filePaths)
                 {
                     if (ct.IsCancellationRequested) break;
@@ -55,7 +51,7 @@ public static class LinuxFastPath
 
                     try
                     {
-                        int fd = open(path, O_RDONLY | O_NOATIME);
+                        var fd = open(path, O_RDONLY | O_NOATIME);
                         if (fd >= 0)
                         {
                             readahead(fd, 0, bytesToRead);
@@ -77,8 +73,8 @@ public static class LinuxFastPath
     }
 
     /// <summary>
-    /// Synchronous prewarm for backwards compatibility.
-    /// Prefer PrewarmAsync for proper task observation.
+    ///     Synchronous prewarm for backwards compatibility.
+    ///     Prefer PrewarmAsync for proper task observation.
     /// </summary>
     [Obsolete("Use PrewarmAsync for proper fault observation")]
     public static void Prewarm(IEnumerable<string> filePaths, int maxFiles = DefaultPrewarmFileLimit)
@@ -92,7 +88,7 @@ public static class LinuxFastPath
 
             try
             {
-                int fd = open(path, O_RDONLY | O_NOATIME);
+                var fd = open(path, O_RDONLY | O_NOATIME);
                 if (fd >= 0)
                 {
                     readahead(fd, 0, DefaultPrewarmBytesPerFile);

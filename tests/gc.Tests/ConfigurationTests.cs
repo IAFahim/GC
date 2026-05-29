@@ -61,9 +61,7 @@ public class ConfigurationTests
 
             // Check for empty or null extensions
             foreach (var ext in preset.Value.Extensions)
-            {
                 Assert.False(string.IsNullOrWhiteSpace(ext), $"Preset '{preset.Key}' contains empty extension");
-            }
         }
     }
 
@@ -134,7 +132,7 @@ public class ConfigurationTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         var customPresets = new Dictionary<string, PresetConfiguration>(config.Presets)
         {
-            ["test"] = new PresetConfiguration
+            ["test"] = new()
             {
                 Extensions = Array.Empty<string>(),
                 Description = "Test preset"
@@ -355,7 +353,8 @@ public class ConfigurationTests
         // Assert - Verify defaults match old Constants values
         Assert.NotNull(config);
         Assert.Equal("```", config.Markdown.Fence); // Constants.MarkdownFence
-        Assert.Equal("_Project Structure:_", config.Markdown.ProjectStructureHeader); // Constants.ProjectStructureHeader
+        Assert.Equal("_Project Structure:_",
+            config.Markdown.ProjectStructureHeader); // Constants.ProjectStructureHeader
 
         // Verify all built-in presets are available
         Assert.True(config.Presets.ContainsKey("web"));

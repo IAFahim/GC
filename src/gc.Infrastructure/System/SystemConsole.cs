@@ -1,4 +1,3 @@
-using System;
 using gc.Domain.Interfaces;
 
 namespace gc.Infrastructure.System;
@@ -11,9 +10,18 @@ public sealed class SystemConsole : IConsole
         else Console.WriteLine(value);
     }
 
-    public void Write(string? value) => Console.Write(value);
+    public void Write(string? value)
+    {
+        Console.Write(value);
+    }
 
-    public void WriteErrorLine(string? value) => Console.Error.WriteLine(value);
+    public void WriteErrorLine(string? value)
+    {
+        Console.Error.WriteLine(value);
+    }
 
-    public string? ReadLine() => Console.ReadLine();
+    public string? ReadLine()
+    {
+        return Console.ReadLine();
+    }
 }

@@ -1,26 +1,24 @@
 namespace gc.Application.Services;
 
 /// <summary>
-/// Curated list of Unicode Private Use Area (PUA) characters used by the compression
-/// pipeline as replacement symbols. PUA codepoints U+E000–U+F8FF are guaranteed by the
-/// Unicode standard to never represent any real character, so they CANNOT collide with
-/// source code — unlike Greek/Cyrillic which are valid identifiers in C#, Rust, Python, etc.
-///
-/// Symbol categories (in order):
-///   0–19  : Basic PUA block (U+E000–U+E013)
-///  20–39  : Supplemental PUA (U+E014–U+E027)
-///  40–59  : Extended PUA-A (U+E028–U+E03B)
-///  60–79  : Supplementary PUA-A (U+E04C–U+E05B)
-///  80–99  : Ideographic Symbols (U+E080–U+E093)
-///  100–119 : Variation Selectors (U+E100–U+E113)
-///
-/// WARNING: Do NOT use Greek (Α-Ω), Cyrillic (А-Я), or other Unicode letters that are
-/// valid in programming language identifiers — compression will corrupt source code
-/// that contains those characters as identifiers.
+///     Curated list of Unicode Private Use Area (PUA) characters used by the compression
+///     pipeline as replacement symbols. PUA codepoints U+E000–U+F8FF are guaranteed by the
+///     Unicode standard to never represent any real character, so they CANNOT collide with
+///     source code — unlike Greek/Cyrillic which are valid identifiers in C#, Rust, Python, etc.
+///     Symbol categories (in order):
+///     0–19  : Basic PUA block (U+E000–U+E013)
+///     20–39  : Supplemental PUA (U+E014–U+E027)
+///     40–59  : Extended PUA-A (U+E028–U+E03B)
+///     60–79  : Supplementary PUA-A (U+E04C–U+E05B)
+///     80–99  : Ideographic Symbols (U+E080–U+E093)
+///     100–119 : Variation Selectors (U+E100–U+E113)
+///     WARNING: Do NOT use Greek (Α-Ω), Cyrillic (А-Я), or other Unicode letters that are
+///     valid in programming language identifiers — compression will corrupt source code
+///     that contains those characters as identifiers.
 /// </summary>
 public static class SingleTokenLexicon
 {
-    private static readonly string[] Symbols = new string[]
+    private static readonly string[] Symbols = new[]
     {
         // ── Basic PUA block (U+E000–U+E013) ───────────────────────────────
         "\uE000",
@@ -148,23 +146,23 @@ public static class SingleTokenLexicon
         "\uE110",
         "\uE111",
         "\uE112",
-        "\uE113",
+        "\uE113"
     };
 
     /// <summary>
-    /// Total number of single-token symbols available in the lexicon.
+    ///     Total number of single-token symbols available in the lexicon.
     /// </summary>
     public static int Count => Symbols.Length;
 
     /// <summary>
-    /// Returns the single-token symbol at the given <paramref name="index"/>.
-    /// Wraps around modulo <see cref="Count"/> if the index exceeds the array bounds.
+    ///     Returns the single-token symbol at the given <paramref name="index" />.
+    ///     Wraps around modulo <see cref="Count" /> if the index exceeds the array bounds.
     /// </summary>
     public static string GetSymbol(int index)
     {
         if (Count == 0)
             throw new InvalidOperationException("SingleTokenLexicon contains no symbols.");
 
-        return Symbols[((index % Count) + Count) % Count];
+        return Symbols[(index % Count + Count) % Count];
     }
 }

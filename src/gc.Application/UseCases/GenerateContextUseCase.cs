@@ -162,9 +162,6 @@ public sealed class GenerateContextUseCase
         sw.Restart();
         var repoEntries = new List<(RepoInfo Repo, List<FileEntry> Entries)>();
         var errors = new List<string>();
-        var maxParallel = clusterConfig.MaxParallelRepos > 0
-            ? clusterConfig.MaxParallelRepos
-            : Environment.ProcessorCount;
 
         var lockObj = new object();
         await Parallel.ForEachAsync(repos, new ParallelOptions
@@ -405,11 +402,10 @@ public sealed class GenerateContextUseCase
         sw.Restart();
 
         var rawOutput = "";
-        long generatedBytes = 0;
 
         if (hasPipeline)
         {
-            using var ms = new MemoryStream();
+            await using var ms = new MemoryStream();
             var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled,
                 excludeLineIfStart, null, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
@@ -418,7 +414,6 @@ public sealed class GenerateContextUseCase
             ms.Position = 0;
             using var reader = new StreamReader(ms, Encoding.UTF8);
             rawOutput = await reader.ReadToEndAsync(ct);
-            generatedBytes = ms.Length;
         }
 
         // ── 4. Apply pipeline ──
@@ -498,7 +493,7 @@ public sealed class GenerateContextUseCase
             if (unsafeDirectWrite || shouldAppend)
             {
                 var fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
-                using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, true);
+                await using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, true);
                 await fs.WriteAsync(finalBytes, ct);
             }
             else
@@ -517,7 +512,7 @@ public sealed class GenerateContextUseCase
         if (unsafeDirectWrite || shouldAppend)
         {
             var fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
-            using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, true);
+            await using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, true);
             var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs, config, compiled,
                 excludeLineIfStart, null, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
@@ -530,7 +525,7 @@ public sealed class GenerateContextUseCase
         }
         else
         {
-            using var ms = new MemoryStream();
+            await using var ms = new MemoryStream();
             var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled,
                 excludeLineIfStart, null, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
@@ -576,7 +571,7 @@ public sealed class GenerateContextUseCase
         }
 
         // No pipeline — stream directly to clipboard
-        using var ms = new MemoryStream();
+        await using var ms = new MemoryStream();
         var genResult =
             await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart,
                 null, ct);

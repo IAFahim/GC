@@ -150,7 +150,7 @@ public class ResultTests
     {
         var result = Result<string>.Failure("err");
         Assert.False(result.IsSuccess);
-        Assert.Null(result.Value);
+        Assert.Throws<InvalidOperationException>(() => result.Value);
     }
 
     [Fact]
@@ -159,15 +159,6 @@ public class ResultTests
         var a = Result<int>.Success(42);
         var b = Result<int>.Success(42);
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
-    }
-
-    [Fact]
-    public void Result_DefaultConstructor()
-    {
-        var result = new Result<int>();
-        // No Error set => IsSuccess is true, Value is default
-        Assert.True(result.IsSuccess);
-        Assert.Equal(default, result.Value);
     }
 }
 

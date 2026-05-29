@@ -9,9 +9,9 @@ public static class LanguageProfiles
 {
     private static readonly LanguageProfile Default = new()
     {
-        LineComment = ["//"],
+        LineComment = ["//", "#"],
         BlockComment = ["/*", "*/"],
-        HashComment = false,
+        HashComment = true,
         SqlComment = false
     };
 

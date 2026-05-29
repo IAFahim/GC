@@ -50,7 +50,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             var pipeOptions = new StreamPipeWriterOptions(leaveOpen: true, minimumBufferSize: 65536);
             var writer = PipeWriter.Create(outputStream, pipeOptions);
 
-            var sortedContents = config.Output.SortByPath
+            var sortedContents = config.Output.SortByPath.GetValueOrDefault()
                 ? contents.OrderBy(c => c.Entry.DisplayPath ?? c.Entry.Path, StringComparer.OrdinalIgnoreCase)
                 : contents;
 

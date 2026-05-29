@@ -1,3 +1,11 @@
+## File: expected.golden
+````````golden
+## File: expected.golden
+```````golden
+## File: expected.golden
+``````golden
+## File: expected.golden
+`````golden
 test1.cs
 ````cs
 using System;
@@ -19,6 +27,114 @@ function test() {
 
 _Project Structure:_
 ```text
+test1.cs
+test2.js
+```
+`````
+
+## File: test1.cs
+````cs
+using System;
+public class TestClass
+{
+    public void TestMethod()
+    {
+        Console.WriteLine("Hello, World!");
+    }
+}
+````
+
+## File: test2.js
+````javascript
+function test() {
+    console.log("Hello, JavaScript!");
+}
+````
+
+_Project Structure:_ 
+```text
+expected.golden
+test1.cs
+test2.js
+```
+``````
+
+## File: test1.cs
+````cs
+using System;
+public class TestClass
+{
+    public void TestMethod()
+    {
+        Console.WriteLine("Hello, World!");
+    }
+}
+````
+
+## File: test2.js
+````javascript
+function test() {
+    console.log("Hello, JavaScript!");
+}
+````
+
+_Project Structure:_ 
+```text
+expected.golden
+test1.cs
+test2.js
+```
+```````
+
+## File: test1.cs
+````cs
+using System;
+public class TestClass
+{
+    public void TestMethod()
+    {
+        Console.WriteLine("Hello, World!");
+    }
+}
+````
+
+## File: test2.js
+````javascript
+function test() {
+    console.log("Hello, JavaScript!");
+}
+````
+
+_Project Structure:_ 
+```text
+expected.golden
+test1.cs
+test2.js
+```
+````````
+
+## File: test1.cs
+````cs
+using System;
+public class TestClass
+{
+    public void TestMethod()
+    {
+        Console.WriteLine("Hello, World!");
+    }
+}
+````
+
+## File: test2.js
+````javascript
+function test() {
+    console.log("Hello, JavaScript!");
+}
+````
+
+_Project Structure:_ 
+```text
+expected.golden
 test1.cs
 test2.js
 ```

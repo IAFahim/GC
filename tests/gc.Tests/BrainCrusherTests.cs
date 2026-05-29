@@ -80,7 +80,8 @@ public class BrainCrusherTests
     public void Crush_HtmlComment_Stripped()
     {
         var input = "<div>hello</div> <!-- a comment --> <p>world</p>";
-        var result = _crusher.Crush(input);
+        var crusher = new BrainCrusher(".html");
+        var result = crusher.Crush(input);
         Assert.DoesNotContain("a comment", result);
         Assert.Contains("hello", result);
     }

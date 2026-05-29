@@ -415,7 +415,7 @@ public sealed class FileDiscovery : IFileDiscovery
                 continue;
             }
 
-            if (config.FollowSymlinks)
+            if (config.FollowSymlinks.GetValueOrDefault())
                 try
                 {
                     var dirInfo = new DirectoryInfo(currentDir);
@@ -443,7 +443,7 @@ public sealed class FileDiscovery : IFileDiscovery
                             var dirName = Path.GetFileName(entry);
                             if (!ignoredDirs.Contains(dirName))
                             {
-                                if (!config.FollowSymlinks &&
+                                if (!config.FollowSymlinks.GetValueOrDefault() &&
                                     (attr & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint) continue;
 
                                 queue.Enqueue((entry, depth + 1));

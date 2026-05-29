@@ -316,8 +316,8 @@ public class DomainModelTests
     {
         var cfg = new DiscoveryConfiguration();
         Assert.Null(cfg.Mode);
-        Assert.True(cfg.UseGit);
-        Assert.False(cfg.FollowSymlinks);
+        Assert.Null(cfg.UseGit);
+        Assert.Null(cfg.FollowSymlinks);
         Assert.Null(cfg.MaxDepth);
         Assert.Null(cfg.Cluster);
     }
@@ -364,8 +364,8 @@ public class DomainModelTests
     {
         var cfg = new MarkdownConfiguration();
         Assert.Equal("```", cfg.Fence);
-        Assert.Equal("_Project Structure:_", cfg.ProjectStructureHeader);
-        Assert.Equal("{path}", cfg.FileHeaderTemplate);
+        Assert.Equal("_Project Structure:_ ", cfg.ProjectStructureHeader);
+        Assert.Equal("## File: {path}", cfg.FileHeaderTemplate);
         Assert.Equal("extension", cfg.LanguageDetection);
     }
 
@@ -374,8 +374,8 @@ public class DomainModelTests
     {
         var cfg = new OutputConfiguration();
         Assert.Equal("markdown", cfg.DefaultFormat);
-        Assert.True(cfg.IncludeStats);
-        Assert.True(cfg.SortByPath);
+        Assert.Null(cfg.IncludeStats);
+        Assert.Null(cfg.SortByPath);
     }
 
     [Fact]
@@ -383,7 +383,7 @@ public class DomainModelTests
     {
         var cfg = new LoggingConfiguration();
         Assert.Equal("normal", cfg.Level);
-        Assert.False(cfg.IncludeTimestamps);
+        Assert.Null(cfg.IncludeTimestamps);
     }
 
     // ─── LoggerExtensions ─────────────────────────────────────────────

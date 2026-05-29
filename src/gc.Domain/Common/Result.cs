@@ -56,11 +56,6 @@ public sealed record Result<T>
 
     private Result(T? value, string? error)
     {
-        if (error == null && value == null)
-            throw new ArgumentNullException(nameof(value), "Success result must have a non-null value.");
-        if (error != null && value != null)
-            throw new ArgumentException("Failure result cannot contain a value.");
-
         _value = value;
         Error = error;
     }
@@ -71,6 +66,8 @@ public sealed record Result<T>
 
     public static Result<T> Success(T value)
     {
+        if (value is null)
+            throw new ArgumentNullException(nameof(value), "Success result must have a non-null value.");
         return new Result<T>(value, null);
     }
 

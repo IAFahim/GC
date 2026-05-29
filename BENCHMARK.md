@@ -4,8 +4,8 @@ Latest benchmark results from automated testing:
 
 | Metric | Value |
 |--------|-------|
-| Discovery Time | 18 ms |
-| File Read Time | 50 ms |
-| Total Time | 68 ms |
+| Discovery Time | 0 ms |
+| File Read Time |  ms |
+| Total Time | 0 ms |
 
-*Last updated: 2026-05-28 04:14:40 UTC*
+*Last updated: 2026-05-29 05:35:01 UTC*

@@ -523,6 +523,12 @@ public class ApplicationCoverageTests
             return Task.FromResult(Result<IEnumerable<string>>.Success(Array.Empty<string>()));
         }
 
+        public Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(
+            string rootPath, string reference, GcConfiguration config, CancellationToken ct)
+        {
+            return DiscoverFilesAsync(rootPath, config, ct);
+        }
+
         public Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(
             string clusterRoot, ClusterConfiguration clusterConfig, CancellationToken ct)
         {

@@ -183,7 +183,8 @@ public sealed class ConfigurationLoader
             LanguageMappings = ConfigurationMerger.MergeLanguageMappings(target.LanguageMappings, source.LanguageMappings),
             Markdown = ConfigurationMerger.MergeMarkdown(target.Markdown, source.Markdown),
             Output = ConfigurationMerger.MergeOutput(target.Output, source.Output),
-            Logging = ConfigurationMerger.MergeLogging(target.Logging, source.Logging)
+            Logging = ConfigurationMerger.MergeLogging(target.Logging, source.Logging),
+            Performance = ConfigurationMerger.MergePerformance(target.Performance, source.Performance)
         };
     }
 

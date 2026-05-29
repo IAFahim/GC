@@ -5,6 +5,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\..\schema.json" Link="schema.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="IoUring" Version="0.4.0-beta1" />
   </ItemGroup>
 

@@ -119,4 +119,64 @@ public class MarkdownGeneratorTests
         Assert.Contains("public class Test {}", str);
         Assert.DoesNotContain("using System;\n\npublic", str); // Ensure no double newline exists in content area
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // TEST-004 — Streaming limit tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task GenerateMarkdownStreamingAsync_EnforcesMemoryLimit_InMemory()
+    {
+        var generator = new MarkdownGenerator(_logger, _reader);
+        var entry = new FileEntry("test.cs", "cs", "cs", 5000);
+        var content = new string('A', 5000);
+
+        var config = _config with { Limits = _config.Limits with { MaxMemoryBytes = "1KB" } };
+
+        var fileContents = new List<FileContent> { new(entry, content, content.Length) };
+        using var output = new MemoryStream();
+
+        var result = await generator.GenerateMarkdownStreamingAsync(
+            fileContents,
+            output,
+            config,
+            null, null, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("exceed maximum output limit", result.Error);
+        Assert.Equal(0, output.Length); // Ensure no partial output is written before failure
+    }
+
+    [Fact]
+    public async Task GenerateMarkdownStreamingAsync_EnforcesMemoryLimit_Streaming()
+    {
+        var generator = new MarkdownGenerator(_logger, _reader);
+        var tempFile = Path.GetTempFileName();
+
+        try
+        {
+            var content = new string('A', 5000);
+            await File.WriteAllTextAsync(tempFile, content);
+            var entry = new FileEntry(tempFile, "cs", "cs", 5000);
+
+            var config = _config with { Limits = _config.Limits with { MaxMemoryBytes = "1KB" } };
+
+            var fileContents = new List<FileContent> { new(entry, null, 5000) };
+            using var output = new MemoryStream();
+
+            var result = await generator.GenerateMarkdownStreamingAsync(
+                fileContents,
+                output,
+                config,
+                null, null, CancellationToken.None);
+
+            Assert.False(result.IsSuccess);
+            Assert.Contains("exceed maximum output limit", result.Error);
+            Assert.Equal(0, output.Length); // Ensure no partial output is written before failure
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
 }

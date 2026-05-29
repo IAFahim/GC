@@ -25,7 +25,12 @@ public sealed class CliParser
         ExcludePath,
         IncludePath,
         ExcludeContent,
-        IncludeContent
+        IncludeContent,
+        ProfileOutput,
+        StatsOutput,
+        ChangedSince,
+        ExportSchema,
+        ExplainFilter
     }
 
     public Result<CliArguments> Parse(string[] args, GcConfiguration configuration)
@@ -66,6 +71,12 @@ public sealed class CliParser
         var countTokens = false;
         var profile = false;
         string? profileOutput = null;
+        var unsafeDirectWrite = false;
+        var showStats = false;
+        string? statsOutput = null;
+        string? changedSince = null;
+        string? exportSchema = null;
+        string? explainFilter = null;
 
         var state = ParseState.None;
         var onlyPaths = false;
@@ -99,7 +110,7 @@ public sealed class CliParser
 
             if (IsFlag(arg, out var flagType))
             {
-                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort, ref showHistory, ref brainMode, ref compress, ref noCache, ref cluster, ref dryRun, ref countTokens, ref profile);
+                ProcessFlag(flagType, ref showHelp, ref showVersion, ref runTests, ref runRealBenchmark, ref verbose, ref debug, ref initConfig, ref validateConfig, ref dumpConfig, ref appendMode, ref force, ref noSort, ref showHistory, ref brainMode, ref compress, ref noCache, ref cluster, ref dryRun, ref countTokens, ref profile, ref unsafeDirectWrite, ref showStats);
                 state = ParseState.None;
                 continue;
             }
@@ -115,7 +126,8 @@ public sealed class CliParser
             {
                 ProcessStateArg(arg, state, paths, extensions, excludes, presets, excludeLineIfStart,
                     ref output, ref maxMemoryBytes, ref depth, ref clusterDir, ref clusterDepth,
-                    excludePathPatterns, includePathPatterns, excludeContentPatterns, includeContentPatterns);
+                    excludePathPatterns, includePathPatterns, excludeContentPatterns, includeContentPatterns,
+                    ref profileOutput, ref statsOutput, ref changedSince, ref exportSchema, ref explainFilter);
                 if (IsSingleValueState(state))
                 {
                     state = ParseState.None;
@@ -178,7 +190,13 @@ public sealed class CliParser
             DryRun = dryRun,
             CountTokens = countTokens,
             Profile = profile,
-            ProfileOutput = profileOutput
+            ProfileOutput = profileOutput,
+            UnsafeDirectWrite = unsafeDirectWrite,
+            ShowStats = showStats,
+            StatsOutput = statsOutput,
+            ChangedSince = changedSince,
+            ExportSchema = exportSchema,
+            ExplainFilter = explainFilter
         });
     }
 
@@ -210,12 +228,15 @@ public sealed class CliParser
             "--tokens-only" => "count",
             "--profile" => "profile",
             "--profile-json" => "profile-json",
+            "--unsafe-direct-write" => "unsafe-direct-write",
+            "--stats" => "stats",
+            "--json-stats" => "json-stats",
             _ => string.Empty
         };
         return !string.IsNullOrEmpty(flagType);
     }
 
-    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort, ref bool showHistory, ref bool brainMode, ref bool compress, ref bool noCache, ref bool cluster, ref bool dryRun, ref bool countTokens, ref bool profile)
+    private static void ProcessFlag(string flagType, ref bool showHelp, ref bool showVersion, ref bool runTests, ref bool runRealBenchmark, ref bool verbose, ref bool debug, ref bool initConfig, ref bool validateConfig, ref bool dumpConfig, ref bool appendMode, ref bool force, ref bool noSort, ref bool showHistory, ref bool brainMode, ref bool compress, ref bool noCache, ref bool cluster, ref bool dryRun, ref bool countTokens, ref bool profile, ref bool unsafeDirectWrite, ref bool showStats)
     {
         switch (flagType)
         {
@@ -241,6 +262,9 @@ public sealed class CliParser
             case "count": countTokens = true; break;
             case "profile": profile = true; break;
             case "profile-json": profile = true; break;
+            case "unsafe-direct-write": unsafeDirectWrite = true; break;
+            case "stats": showStats = true; break;
+            case "json-stats": showStats = true; break;
         }
     }
 
@@ -263,6 +287,11 @@ public sealed class CliParser
             "--include-path" => ParseState.IncludePath,
             "--exclude-content" => ParseState.ExcludeContent,
             "--include-content" => ParseState.IncludeContent,
+            "--profile-json" => ParseState.ProfileOutput,
+            "--json-stats" => ParseState.StatsOutput,
+            "--changed-since" => ParseState.ChangedSince,
+            "--export-schema" => ParseState.ExportSchema,
+            "--explain-filter" => ParseState.ExplainFilter,
             _ => ParseState.None
         };
         return state != ParseState.None;
@@ -270,7 +299,7 @@ public sealed class CliParser
 
     private static bool IsSingleValueState(ParseState state)
     {
-        return state is ParseState.Output or ParseState.MaxMemory or ParseState.Depth or ParseState.ClusterDir or ParseState.ClusterDepth;
+        return state is ParseState.Output or ParseState.MaxMemory or ParseState.Depth or ParseState.ClusterDir or ParseState.ClusterDepth or ParseState.ProfileOutput or ParseState.StatsOutput or ParseState.ChangedSince or ParseState.ExportSchema or ParseState.ExplainFilter;
     }
 
     private static void ProcessStateArg(
@@ -278,7 +307,8 @@ public sealed class CliParser
         List<string> paths, List<string> extensions, List<string> excludes, List<string> presets, List<string> excludeLineIfStart,
         ref string output, ref long maxMemoryBytes, ref int? depth, ref string clusterDir, ref int? clusterDepth,
         List<string> excludePathPatterns, List<string> includePathPatterns,
-        List<string> excludeContentPatterns, List<string> includeContentPatterns)
+        List<string> excludeContentPatterns, List<string> includeContentPatterns,
+        ref string? profileOutput, ref string? statsOutput, ref string? changedSince, ref string? exportSchema, ref string? explainFilter)
     {
         switch (state)
         {
@@ -303,6 +333,11 @@ public sealed class CliParser
             case ParseState.IncludePath: includePathPatterns.Add(arg.Replace('\\', '/')); break;
             case ParseState.ExcludeContent: excludeContentPatterns.Add(arg); break;
             case ParseState.IncludeContent: includeContentPatterns.Add(arg); break;
+            case ParseState.ProfileOutput: profileOutput = arg; break;
+            case ParseState.StatsOutput: statsOutput = arg; break;
+            case ParseState.ChangedSince: changedSince = arg; break;
+            case ParseState.ExportSchema: exportSchema = arg; break;
+            case ParseState.ExplainFilter: explainFilter = arg; break;
         }
     }
 
@@ -352,6 +387,11 @@ public sealed class CliParser
             ParseState.IncludePath => "--include-path",
             ParseState.ExcludeContent => "--exclude-content",
             ParseState.IncludeContent => "--include-content",
+            ParseState.ProfileOutput => "--profile-json",
+            ParseState.StatsOutput => "--json-stats",
+            ParseState.ChangedSince => "--changed-since",
+            ParseState.ExportSchema => "--export-schema",
+            ParseState.ExplainFilter => "--explain-filter",
             _ => "unknown"
         };
     }

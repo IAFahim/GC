@@ -52,6 +52,20 @@ public sealed class ClipboardService : IClipboardService
         {
             var maxClipboardSize = limits.GetMaxClipboardSizeBytes();
 
+            if (!append)
+            {
+                // If not appending, check stream length if available, then copy stream directly
+                if (stream.CanSeek)
+                {
+                    if (stream.Length > maxClipboardSize)
+                    {
+                        return Result.Failure($"Content size ({stream.Length} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
+                    }
+                    stream.Position = 0;
+                }
+                return await CopyToClipboardAsync(stream, ct);
+            }
+
             // Read new content first
             if (stream.CanSeek) stream.Position = 0;
             string newContent;
@@ -60,6 +74,32 @@ public sealed class ClipboardService : IClipboardService
                 newContent = await reader.ReadToEndAsync(ct);
             }
 
+            return await CopyToClipboardStringInternalAsync(newContent, maxClipboardSize, append, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("Clipboard copy failed", ex);
+            return Result.Failure(ex.Message);
+        }
+    }
+
+    public async Task<Result> CopyToClipboardAsync(string content, CancellationToken ct = default)
+    {
+        var finalBytes = Utf8NoBom.GetBytes(content);
+        using var ms = new MemoryStream(finalBytes);
+        return await CopyToClipboardAsync(ms, ct);
+    }
+
+    public async Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append = false, CancellationToken ct = default)
+    {
+        var maxClipboardSize = limits.GetMaxClipboardSizeBytes();
+        return await CopyToClipboardStringInternalAsync(content, maxClipboardSize, append, ct);
+    }
+
+    private async Task<Result> CopyToClipboardStringInternalAsync(string newContent, long maxClipboardSize, bool append, CancellationToken ct)
+    {
+        try
+        {
             string finalContent;
             if (append)
             {
@@ -78,51 +118,20 @@ public sealed class ClipboardService : IClipboardService
                 finalContent = newContent;
             }
 
-            // Enforce size limit on COMBINED content before allocating
-            var finalBytes = Utf8NoBom.GetByteCount(finalContent);
-            if (finalBytes > maxClipboardSize)
+            var finalBytes = Utf8NoBom.GetBytes(finalContent);
+            if (finalBytes.Length > maxClipboardSize)
             {
-                return Result.Failure($"Combined content size ({finalBytes} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
+                return Result.Failure($"Combined content size ({finalBytes.Length} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
             }
 
-            using var combinedStream = new MemoryStream(Utf8NoBom.GetBytes(finalContent));
-            bool success = _platform switch
-            {
-                OsKind.Windows => await CopyToWindowsAsync(combinedStream, ct),
-                OsKind.Mac      => await CopyToMacAsync(combinedStream, ct),
-                OsKind.Linux    => await CopyToLinuxAsync(combinedStream, ct),
-                _               => false
-            };
-
-            return success
-                ? Result.Success()
-                : Result.Failure("Failed to copy to clipboard. Clipboard tools may not be available. Use --output file.md to save to a file instead.");
+            using var combinedStream = new MemoryStream(finalBytes);
+            return await CopyToClipboardAsync(combinedStream, ct);
         }
         catch (Exception ex)
         {
             _logger.Error("Clipboard copy failed", ex);
             return Result.Failure(ex.Message);
         }
-    }
-
-    public async Task<Result> CopyToClipboardAsync(string content, CancellationToken ct = default)
-    {
-        using var ms = new MemoryStream(Utf8NoBom.GetBytes(content));
-        return await CopyToClipboardAsync(ms, ct);
-    }
-
-    public async Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append = false, CancellationToken ct = default)
-    {
-        var maxClipboardSize = limits.GetMaxClipboardSizeBytes();
-        var contentBytes = Utf8NoBom.GetByteCount(content);
-
-        if (contentBytes > maxClipboardSize)
-        {
-            return Result.Failure($"Content size ({contentBytes} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
-        }
-
-        using var ms = new MemoryStream(Utf8NoBom.GetBytes(content));
-        return await CopyToClipboardAsync(ms, limits, append, ct);
     }
 
     private async Task<string> GetClipboardTextAsync(CancellationToken ct)

@@ -480,4 +480,73 @@ public class ConfigurationTests
         // Assert
         Assert.Contains("valid", output.ToLowerInvariant());
     }
+
+    [Fact]
+    public void ConfigurationMerger_SmartMerges_ClusterBools_PreservingDefaults()
+    {
+        var target = new GcConfiguration
+        {
+            Discovery = new DiscoveryConfiguration
+            {
+                Cluster = new ClusterConfiguration
+                {
+                    Enabled = true,
+                    IncludeRepoHeader = false,
+                    IncludeRootFiles = true,
+                    FailFast = true
+                }
+            }
+        };
+
+        var source = new GcConfiguration
+        {
+            Discovery = new DiscoveryConfiguration
+            {
+                Cluster = new ClusterConfiguration
+                {
+                    // Implicit default nulls
+                }
+            }
+        };
+
+        var merged = ConfigurationMerger.MergeDiscovery(target.Discovery, source.Discovery);
+
+        Assert.True(merged!.Cluster!.Enabled);
+        Assert.False(merged.Cluster!.IncludeRepoHeader);
+        Assert.True(merged.Cluster!.IncludeRootFiles);
+        Assert.True(merged.Cluster!.FailFast);
+    }
+
+    [Fact]
+    public void ConfigurationMerger_SmartMerges_ClusterBools_OverridingDefaults()
+    {
+        var target = new GcConfiguration
+        {
+            Discovery = new DiscoveryConfiguration
+            {
+                Cluster = new ClusterConfiguration
+                {
+                    Enabled = true,
+                    IncludeRepoHeader = false
+                }
+            }
+        };
+
+        var source = new GcConfiguration
+        {
+            Discovery = new DiscoveryConfiguration
+            {
+                Cluster = new ClusterConfiguration
+                {
+                    Enabled = false, // explicit false
+                    IncludeRepoHeader = true // explicit true
+                }
+            }
+        };
+
+        var merged = ConfigurationMerger.MergeDiscovery(target.Discovery, source.Discovery);
+
+        Assert.False(merged!.Cluster!.Enabled);
+        Assert.True(merged.Cluster!.IncludeRepoHeader);
+    }
 }

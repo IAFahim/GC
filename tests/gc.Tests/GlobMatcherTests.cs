@@ -253,4 +253,51 @@ public class GlobMatcherTests
         // Should complete in under 100ms for 1k operations with complex patterns
         Assert.True(sw.ElapsedMilliseconds < 100, $"Took {sw.ElapsedMilliseconds}ms");
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Property-like fuzz tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void IsMatch_FuzzTesting_DoesNotThrow()
+    {
+        var random = new Random(42);
+        for (int i = 0; i < 1000; i++)
+        {
+            // Generate random path
+            int pathLen = random.Next(1, 100);
+            var pathChars = new char[pathLen];
+            for (int j = 0; j < pathLen; j++)
+            {
+                pathChars[j] = random.Next(10) == 0 ? '/' : (char)random.Next('a', 'z' + 1);
+            }
+            var path = new string(pathChars);
+
+            // Generate random pattern
+            int patLen = random.Next(1, 50);
+            var patChars = new char[patLen];
+            for (int j = 0; j < patLen; j++)
+            {
+                int c = random.Next(15);
+                patChars[j] = c switch
+                {
+                    0 => '*',
+                    1 => '?',
+                    2 => '/',
+                    _ => (char)random.Next('a', 'z' + 1)
+                };
+            }
+            var pattern = new string(patChars);
+
+            // Must not throw or hang
+            try
+            {
+                GlobMatcher.IsMatch(path, pattern);
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail($"Threw {ex.GetType().Name} for path '{path}' and pattern '{pattern}'");
+            }
+        }
+    }
 }

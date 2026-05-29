@@ -587,6 +587,7 @@ namespace MyApp
         private readonly FileEntry[] _entries;
         public MockDiscovery(FileEntry[] entries) => _entries = entries;
         public Task<Result<IEnumerable<string>>> DiscoverFilesAsync(string rootPath, GcConfiguration config, CancellationToken ct = default) => Task.FromResult(Result<IEnumerable<string>>.Success(_entries.Select(e => e.Path)));
+        public Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(string rootPath, string reference, GcConfiguration config, CancellationToken ct = default) => Task.FromResult(Result<IEnumerable<string>>.Success(_entries.Select(e => e.Path)));
         public Task<Result<IReadOnlyList<RepoInfo>>> DiscoverGitReposAsync(string clusterRoot, ClusterConfiguration clusterConfig, CancellationToken ct = default) => Task.FromResult(Result<IReadOnlyList<RepoInfo>>.Success(Array.Empty<RepoInfo>()));
     }
 

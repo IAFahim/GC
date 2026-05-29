@@ -47,6 +47,31 @@ public static class Program
         if (cliArgs.RunTests) { TestRunner.RunTests(); return 0; }
         if (cliArgs.RunRealBenchmark) { await RealBenchmark.RunRealBenchmarkAsync(logger); return 0; }
 
+        if (!string.IsNullOrEmpty(cliArgs.ExportSchema))
+        {
+            try
+            {
+                using var stream = typeof(Program).Assembly.GetManifestResourceStream("schema.json")
+                                   ?? typeof(ConfigurationService).Assembly.GetManifestResourceStream("schema.json");
+
+                if (stream == null)
+                {
+                    logger.Error("Could not find embedded schema.json resource.");
+                    return 1;
+                }
+
+                using var fileStream = File.Create(cliArgs.ExportSchema);
+                await stream.CopyToAsync(fileStream, cts.Token);
+                logger.Success($"Schema exported to {cliArgs.ExportSchema}");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                logger.Error($"Failed to export schema: {ex.Message}");
+                return 1;
+            }
+        }
+
         var historyService = new HistoryService(configLoader.GetConfigDirectory(), logger);
 
         if (cliArgs.ShowHistory)
@@ -63,9 +88,48 @@ public static class Program
         var validator = new ConfigurationValidator();
         var configService = new ConfigurationService(logger, validator);
 
+        bool needsReporter = cliArgs.Profile || cliArgs.ShowStats || !string.IsNullOrEmpty(cliArgs.StatsOutput);
+        ProfileReporter? profileReporter = needsReporter ? new ProfileReporter() : null;
+
         var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
 
-        var exitCode = await ExecuteAsync(Directory.GetCurrentDirectory(), cliArgs, config, useCase, configService, logger, cts.Token);
+        var exitCode = await ExecuteAsync(Directory.GetCurrentDirectory(), cliArgs, config, useCase, configService, logger, cts.Token, profileReporter);
+
+        if (profileReporter != null)
+        {
+            profileReporter.Stop();
+            
+            if (cliArgs.Profile || cliArgs.ShowStats)
+            {
+                logger.Info("\n" + profileReporter.ToMarkdown());
+            }
+
+            if (!string.IsNullOrEmpty(cliArgs.ProfileOutput))
+            {
+                try
+                {
+                    File.WriteAllText(cliArgs.ProfileOutput, profileReporter.ToJson());
+                    logger.Info($"Profile JSON written to {cliArgs.ProfileOutput}");
+                }
+                catch (Exception ex)
+                {
+                    logger.Error($"Failed to write profile JSON: {ex.Message}");
+                }
+            }
+
+            if (!string.IsNullOrEmpty(cliArgs.StatsOutput))
+            {
+                try
+                {
+                    File.WriteAllText(cliArgs.StatsOutput, profileReporter.ToJson());
+                    logger.Info($"Stats JSON written to {cliArgs.StatsOutput}");
+                }
+                catch (Exception ex)
+                {
+                    logger.Error($"Failed to write stats JSON: {ex.Message}");
+                }
+            }
+        }
 
         if (exitCode == 0)
         {
@@ -78,7 +142,7 @@ public static class Program
         return exitCode;
     }
 
-    internal static async Task<int> ExecuteAsync(string currentDirectory, CliArguments cliArgs, GcConfiguration config, GenerateContextUseCase useCase, ConfigurationService configService, ILogger logger, CancellationToken ct)
+    internal static async Task<int> ExecuteAsync(string currentDirectory, CliArguments cliArgs, GcConfiguration config, GenerateContextUseCase useCase, ConfigurationService configService, ILogger logger, CancellationToken ct, ProfileReporter? profileReporter = null)
     {
         if (cliArgs.InitConfig) return (await configService.InitializeConfigAsync()).IsSuccess ? 0 : 1;
         if (cliArgs.ValidateConfig) return configService.ValidateConfig(config).IsSuccess ? 0 : 1;
@@ -126,6 +190,20 @@ public static class Program
                     SortByPath = false
                 }
             };
+        }
+
+        if (!string.IsNullOrEmpty(cliArgs.ExplainFilter))
+        {
+            var filter2 = new FileFilter(logger);
+            filter2.ExplainFilter(
+                cliArgs.ExplainFilter,
+                config,
+                cliArgs.Paths,
+                cliArgs.Excludes,
+                cliArgs.Extensions,
+                cliArgs.ExcludePathPatterns,
+                cliArgs.IncludePathPatterns);
+            return 0;
         }
 
         // Dry-run: just print the files that would be processed
@@ -269,7 +347,10 @@ public static class Program
                 cliArgs.IncludePathPatterns,
                 cliArgs.ExcludeContentPatterns,
                 cliArgs.IncludeContentPatterns,
-                ct);
+                ct,
+                profileReporter,
+                cliArgs.UnsafeDirectWrite,
+                cliArgs.ChangedSince);
 
             if (!result.IsSuccess)
             {
@@ -296,17 +377,15 @@ public static class Program
             cliArgs.IncludePathPatterns,
             cliArgs.ExcludeContentPatterns,
             cliArgs.IncludeContentPatterns,
-            ct);
+            ct,
+            profileReporter,
+            cliArgs.UnsafeDirectWrite,
+            cliArgs.ChangedSince);
 
         if (!normalResult.IsSuccess)
         {
             logger.Error(normalResult.Error!);
             return 1;
-        }
-
-        if (cliArgs.Profile)
-        {
-            logger.Info("\nProfile: --profile requires --output or clipboard mode. Use --profile for basic timing.");
         }
 
         return 0;
@@ -330,6 +409,8 @@ FILTERING:
     --include-path <pattern>         Include only paths matching glob pattern
     --exclude-content <keyword>      Exclude files containing this keyword
     --include-content <keyword>      Include only files containing this keyword
+    --changed-since <ref>            Only include files changed since git ref
+    --explain-filter <path>          Explain why a file is included or excluded
     --preset <name>                  Use a built-in preset (web,backend,dotnet,etc)
 
 OUTPUT:
@@ -344,6 +425,9 @@ OUTPUT:
     --count, --tokens-only           Show token count estimate without generating output
     --profile                        Print stage timing profile after execution
     --profile-json <file>            Write machine-readable profile JSON to file
+    --stats                          Show detailed execution statistics
+    --json-stats <file>              Write execution statistics to JSON file
+    --unsafe-direct-write            Disable transactional file writes (write directly to target)
 
 CLUSTER MODE:
     horde, --cluster                 Enable cluster mode (batch process repos)
@@ -354,6 +438,7 @@ CONFIGURATION:
     --init-config                    Initialize configuration
     --validate-config                Validate configuration
     --dump-config                    Show configuration
+    --export-schema <file>           Export configuration JSON schema to file
 
 OTHER:
     --history [N]                    Show run history (optionally re-run entry N)

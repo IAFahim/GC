@@ -57,6 +57,140 @@ public sealed class FileFilter
         return Result<IEnumerable<FileEntry>>.Success(filtered);
     }
 
+    public void ExplainFilter(
+        string targetPath,
+        GcConfiguration config,
+        IEnumerable<string> searchPaths,
+        IEnumerable<string> excludePatterns,
+        IEnumerable<string> extensionFilters,
+        string[]? excludePathPatterns = null,
+        string[]? includePathPatterns = null)
+    {
+        _logger.Info($"\n--- Analyzing filter pipeline for: {targetPath} ---");
+        var pathNormalized = targetPath.Replace('\\', '/');
+
+        var activeExtensions = ResolveActiveExtensions(extensionFilters);
+        if (activeExtensions.Count > 0)
+        {
+            var fileNameSpan = GetFileNameSpan(pathNormalized.AsSpan());
+            var dotIdx = fileNameSpan.LastIndexOf('.');
+            bool matchesExtension = false;
+
+            var lookup = activeExtensions.GetAlternateLookup<ReadOnlySpan<char>>();
+
+            if (lookup.Contains(fileNameSpan))
+            {
+                matchesExtension = true;
+            }
+            else if (dotIdx >= 0 && dotIdx < fileNameSpan.Length - 1)
+            {
+                var extSpan = fileNameSpan[(dotIdx + 1)..];
+                if (lookup.Contains(extSpan))
+                {
+                    matchesExtension = true;
+                }
+            }
+
+            if (!matchesExtension)
+            {
+                _logger.Warning($"[EXCLUDED] Failed extension filter. Target: '{GetFileNameSpan(pathNormalized.AsSpan()).ToString()}', Required: {string.Join(", ", activeExtensions)}");
+                return;
+            }
+            _logger.Success($"[PASSED] Extension filter.");
+        }
+        else
+        {
+            _logger.Success($"[PASSED] Extension filter (none specified).");
+        }
+
+        var systemIgnored = config.Filters?.SystemIgnoredPatterns ?? Array.Empty<string>();
+        foreach (var p in systemIgnored)
+        {
+            if (pathNormalized.Contains(p.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Warning($"[EXCLUDED] Matched system ignored pattern: {p}");
+                return;
+            }
+        }
+        foreach (var p in excludePatterns)
+        {
+            if (pathNormalized.Contains(p.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Warning($"[EXCLUDED] Matched exact exclude pattern: {p}");
+                return;
+            }
+        }
+        _logger.Success($"[PASSED] Exact exclude checks.");
+
+        var mergedExcludePath = MergePatterns(excludePathPatterns, config.Filters?.ExcludePathPatterns);
+        if (mergedExcludePath.Length > 0)
+        {
+            foreach (var p in mergedExcludePath)
+            {
+                if (GlobMatcher.IsMatch(pathNormalized.AsSpan(), p.AsSpan()))
+                {
+                    _logger.Warning($"[EXCLUDED] Matched glob exclude pattern: {p}");
+                    return;
+                }
+            }
+        }
+        _logger.Success($"[PASSED] Glob exclude checks.");
+
+        var mergedIncludePath = MergePatterns(includePathPatterns, config.Filters?.IncludePathPatterns);
+        if (mergedIncludePath.Length > 0)
+        {
+            bool matched = false;
+            foreach (var p in mergedIncludePath)
+            {
+                if (GlobMatcher.IsMatch(pathNormalized.AsSpan(), p.AsSpan()))
+                {
+                    matched = true;
+                    _logger.Success($"[PASSED] Matched glob include pattern: {p}");
+                    break;
+                }
+            }
+            if (!matched)
+            {
+                _logger.Warning($"[EXCLUDED] Failed glob include patterns (did not match any): {string.Join(", ", mergedIncludePath)}");
+                return;
+            }
+        }
+        else
+        {
+            _logger.Success($"[PASSED] Glob include checks (none specified).");
+        }
+
+        var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToArray();
+        if (normalizedSearchPaths.Length > 0)
+        {
+            bool matchesSearchPath = false;
+            foreach (var searchPath in normalizedSearchPaths)
+            {
+                var searchSpan = searchPath.AsSpan();
+                var normalizedSpan = pathNormalized.AsSpan();
+                if (normalizedSpan.Equals(searchSpan, StringComparison.OrdinalIgnoreCase) ||
+                    normalizedSpan.StartsWith(searchPath + "/", StringComparison.OrdinalIgnoreCase) ||
+                    normalizedSpan.Contains(("/" + searchPath + "/").AsSpan(), StringComparison.OrdinalIgnoreCase))
+                {
+                    matchesSearchPath = true;
+                    _logger.Success($"[PASSED] Matched search path: {searchPath}");
+                    break;
+                }
+            }
+            if (!matchesSearchPath)
+            {
+                _logger.Warning($"[EXCLUDED] Failed search path checks. Active paths: {string.Join(", ", normalizedSearchPaths)}");
+                return;
+            }
+        }
+        else
+        {
+            _logger.Success($"[PASSED] Search path checks (none specified).");
+        }
+
+        _logger.Success($"[INCLUDED] File '{targetPath}' passes all path filters.");
+    }
+
     private static string[] MergePatterns(string[]? cliPatterns, string[]? configPatterns)
     {
         if ((cliPatterns == null || cliPatterns.Length == 0) &&

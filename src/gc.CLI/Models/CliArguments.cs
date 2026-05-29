@@ -52,4 +52,16 @@ public sealed record CliArguments
     public string ClusterDir { get; init; } = string.Empty;
 
     public int? ClusterDepth { get; init; }
+
+    public bool UnsafeDirectWrite { get; init; }
+
+    public bool ShowStats { get; init; }
+
+    public string? StatsOutput { get; init; }
+
+    public string? ChangedSince { get; init; }
+
+    public string? ExportSchema { get; init; }
+
+    public string? ExplainFilter { get; init; }
 }

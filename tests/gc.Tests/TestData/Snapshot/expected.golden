@@ -1,0 +1,24 @@
+[--- Project Structure ---]
+```text
+test1.cs
+test2.js
+```
+[--- test1.cs ---]
+```cs
+using System;
+public class TestClass
+{
+    public void TestMethod()
+    {
+        Console.WriteLine("Hello, World!");
+    }
+}
+```
+
+[--- test2.js ---]
+```js
+function test() {
+    console.log("Hello, JavaScript!");
+}
+```
+

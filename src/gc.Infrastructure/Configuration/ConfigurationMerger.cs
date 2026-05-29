@@ -24,7 +24,18 @@ public static class ConfigurationMerger
             LanguageMappings = MergeLanguageMappings(target.LanguageMappings, source.LanguageMappings),
             Markdown = MergeMarkdown(target.Markdown, source.Markdown),
             Output = MergeOutput(target.Output, source.Output),
-            Logging = MergeLogging(target.Logging, source.Logging)
+            Logging = MergeLogging(target.Logging, source.Logging),
+            Performance = MergePerformance(target.Performance, source.Performance)
+        };
+    }
+
+    public static PerformanceConfiguration MergePerformance(PerformanceConfiguration target, PerformanceConfiguration source)
+    {
+        return target with
+        {
+            PrewarmEnabled = source.PrewarmEnabled ?? target.PrewarmEnabled,
+            PrewarmMaxFiles = source.PrewarmMaxFiles > 0 ? source.PrewarmMaxFiles : target.PrewarmMaxFiles,
+            PrewarmMaxBytesPerFile = source.PrewarmMaxBytesPerFile ?? target.PrewarmMaxBytesPerFile
         };
     }
 

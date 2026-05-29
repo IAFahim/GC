@@ -46,6 +46,36 @@ public static class GlobMatcher
             return true;
         }
 
+        // Fast path for *.extension
+        if (pattern.Length >= 2 && pattern[0] == '*' && pattern[1] == '.' && !pattern.Contains('/'))
+        {
+            var extSpan = pattern.Slice(2);
+            if (!extSpan.ContainsAny('*', '?'))
+            {
+                if (path.EndsWith(pattern.Slice(1), StringComparison.OrdinalIgnoreCase))
+                    return true;
+                // If it doesn't end with the extension, it might still match a directory name
+                // so we fall through to MatchInternal.
+            }
+        }
+
+        // Fast path for directory prefix: prefix/*
+        if (pattern.Length >= 2 && pattern[^1] == '*' && pattern[^2] == '/')
+        {
+            var prefixSpan = pattern.Slice(0, pattern.Length - 2);
+            if (!prefixSpan.ContainsAny('*', '?'))
+            {
+                if (path.StartsWith(prefixSpan, StringComparison.OrdinalIgnoreCase) && 
+                    path.Length > prefixSpan.Length && 
+                    path[prefixSpan.Length] == '/')
+                {
+                    var remainder = path.Slice(prefixSpan.Length + 1);
+                    if (!remainder.Contains('/'))
+                        return true;
+                }
+            }
+        }
+
         // If the pattern has no '/', it can match against either the entire path or the filename
         if (!pattern.Contains('/'))
         {

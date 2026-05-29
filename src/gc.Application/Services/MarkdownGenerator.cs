@@ -419,34 +419,41 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void WriteStringLine(PipeWriter writer, string str)
+    private static void WriteString(PipeWriter writer, ReadOnlySpan<char> str)
     {
-        if (str.Length > 0)
+        if (str.IsEmpty) return;
+
+        // Optimization for small strings (most headers, fences, short lines)
+        if (str.Length < 1024)
         {
-            if (str.Length < 4096)
-            {
-                int maxBytes = Utf8NoBom.GetMaxByteCount(str.Length);
-                var span = writer.GetSpan(maxBytes);
-                int written = Utf8NoBom.GetBytes(str, span);
-                writer.Advance(written);
-            }
-            else
-            {
-                // For larger strings, write in chunks to avoid large allocations
-                const int chunkCharCount = 4096;
-                int offset = 0;
-                while (offset < str.Length)
-                {
-                    int length = Math.Min(chunkCharCount, str.Length - offset);
-                    int maxBytes = Utf8NoBom.GetMaxByteCount(length);
-                    var span = writer.GetSpan(maxBytes);
-                    int written = Utf8NoBom.GetBytes(str.AsSpan(offset, length), span);
-                    writer.Advance(written);
-                    offset += length;
-                }
-            }
+            int maxBytes = Utf8NoBom.GetMaxByteCount(str.Length);
+            var span = writer.GetSpan(maxBytes);
+            int written = Utf8NoBom.GetBytes(str, span);
+            writer.Advance(written);
+            return;
         }
 
+        // For larger strings, write in chunks to ensure we don't request 
+        // excessively large spans from the PipeWriter which might cause 
+        // internal buffer reallocations.
+        const int chunkCharCount = 4096;
+        int offset = 0;
+        while (offset < str.Length)
+        {
+            int length = Math.Min(chunkCharCount, str.Length - offset);
+            var chunk = str.Slice(offset, length);
+            int maxBytes = Utf8NoBom.GetMaxByteCount(chunk.Length);
+            var span = writer.GetSpan(maxBytes);
+            int written = Utf8NoBom.GetBytes(chunk, span);
+            writer.Advance(written);
+            offset += length;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void WriteStringLine(PipeWriter writer, string str)
+    {
+        WriteString(writer, str.AsSpan());
         var newlineSpan = writer.GetSpan(NewlineBytes.Length);
         NewlineBytes.CopyTo(newlineSpan);
         writer.Advance(NewlineBytes.Length);

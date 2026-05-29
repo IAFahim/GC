@@ -57,14 +57,32 @@ public sealed class GenerateContextUseCase
         string[]? includePathPatterns = null,
         string[]? excludeContentPatterns = null,
         string[]? includeContentPatterns = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ProfileReporter? profileReporter = null,
+        bool unsafeDirectWrite = false,
+        string? changedSince = null)
     {
-        var discoveryResult = await _discovery.DiscoverFilesAsync(rootPath, config, ct);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Result<IEnumerable<string>> discoveryResult;
+
+        if (!string.IsNullOrEmpty(changedSince))
+        {
+            _logger.Info($"Discovering files changed since {changedSince}...");
+            discoveryResult = await _discovery.DiscoverFilesSinceAsync(rootPath, changedSince, config, ct);
+        }
+        else
+        {
+            discoveryResult = await _discovery.DiscoverFilesAsync(rootPath, config, ct);
+        }
+
+        profileReporter?.RecordStage("Discovery", sw.ElapsedTicks);
         if (!discoveryResult.IsSuccess) return Result.Failure(discoveryResult.Error!);
 
+        sw.Restart();
         var filterResult = _filter.FilterFiles(
             discoveryResult.Value!, config, paths, excludes, extensions,
             excludePathPatterns, includePathPatterns);
+        profileReporter?.RecordStage("Filtering", sw.ElapsedTicks);
         if (!filterResult.IsSuccess) return Result.Failure(filterResult.Error!);
 
         var entries = filterResult.Value!.ToList();
@@ -74,15 +92,14 @@ public sealed class GenerateContextUseCase
             return Result.Success();
         }
 
-        var fullPaths = entries.Select(e => Path.Combine(rootPath, e.Path));
-        _ = gc.Application.Native.LinuxFastPath.PrewarmAsync(fullPaths, entries.Count);
+        profileReporter?.RecordMetric("DiscoveredFiles", entries.Count.ToString());
 
         _logger.Success("Processing...");
 
         var contents = entries.Select(e => new FileContent(e, null, e.Size));
 
         return await WriteOutputAsync(contents, entries.Count, rootPath, config, outputFile, appendMode,
-            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct);
+            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct, profileReporter, unsafeDirectWrite);
     }
 
     public async Task<Result> ExecuteClusterAsync(
@@ -101,12 +118,17 @@ public sealed class GenerateContextUseCase
         string[]? includePathPatterns = null,
         string[]? excludeContentPatterns = null,
         string[]? includeContentPatterns = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        ProfileReporter? profileReporter = null,
+        bool unsafeDirectWrite = false,
+        string? changedSince = null)
     {
         var clusterConfig = config.Discovery?.Cluster ?? new ClusterConfiguration();
         if (clusterConfig.MaxDepth <= 0) clusterConfig = clusterConfig with { MaxDepth = 2 };
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var reposResult = await _discovery.DiscoverGitReposAsync(clusterRoot, clusterConfig, ct);
+        profileReporter?.RecordStage("ClusterDiscovery", sw.ElapsedTicks);
         if (!reposResult.IsSuccess) return Result.Failure(reposResult.Error!);
 
         var repos = reposResult.Value!;
@@ -116,8 +138,11 @@ public sealed class GenerateContextUseCase
             return Result.Success();
         }
 
+        profileReporter?.RecordMetric("DiscoveredRepos", repos.Count.ToString());
+
         _logger.Info($"Processing {repos.Count} repos in cluster mode...");
 
+        sw.Restart();
         var repoEntries = new List<(RepoInfo Repo, List<FileEntry> Entries)>();
         var errors = new List<string>();
         var maxParallel = clusterConfig.MaxParallelRepos > 0
@@ -185,6 +210,7 @@ public sealed class GenerateContextUseCase
                 }
             }
         });
+        profileReporter?.RecordStage("ClusterProcessing", sw.ElapsedTicks);
 
         foreach (var error in errors)
         {
@@ -202,16 +228,14 @@ public sealed class GenerateContextUseCase
             .ToList();
 
         var totalFiles = sorted.Sum(s => s.Entries.Count);
+        profileReporter?.RecordMetric("TotalFiles", totalFiles.ToString());
 
         var allContents = BuildClusterContents(sorted, clusterConfig, clusterRoot);
-        var allEntries = sorted.SelectMany(s => s.Entries).ToList();
-
-        Native.LinuxFastPath.PrewarmAsync(allEntries.Select(e => e.Path), allEntries.Count);
 
         _logger.Success($"Processing {totalFiles} files from {sorted.Count} repos...");
 
         return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode,
-            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct);
+            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct, profileReporter, unsafeDirectWrite);
     }
 
     private IEnumerable<FileContent> BuildClusterContents(
@@ -256,8 +280,11 @@ public sealed class GenerateContextUseCase
         bool noCache,
         string[]? excludeContentPatterns,
         string[]? includeContentPatterns,
-        CancellationToken ct)
+        CancellationToken ct,
+        ProfileReporter? profileReporter = null,
+        bool unsafeDirectWrite = false)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         // Compile content filter once, pass to generator for streaming files.
         // Metadata entries (starting with '[') are always passed through.
         var compiled = _contentFilter.CompilePatterns(
@@ -296,6 +323,9 @@ public sealed class GenerateContextUseCase
             sqzService = null;
         }
 
+        profileReporter?.RecordStage("Preprocessing", sw.ElapsedTicks);
+
+        sw.Restart();
         if (!string.IsNullOrEmpty(outputFile))
         {
             var outputDir = Path.GetDirectoryName(outputFile);
@@ -311,6 +341,7 @@ public sealed class GenerateContextUseCase
             {
                 using var ms = new MemoryStream();
                 var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
+                profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
                 if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
                 ms.Position = 0;
@@ -320,6 +351,7 @@ public sealed class GenerateContextUseCase
                 string finalOutput;
                 string dynInfo = "";
 
+                sw.Restart();
                 if (compress)
                 {
                     var afterCrush = crusher!.Crush(rawOutput);
@@ -331,16 +363,26 @@ public sealed class GenerateContextUseCase
                     var afterCrush = crusher!.Crush(dynResult.Output);
                     finalOutput = dynResult.Legend + afterCrush;
                     dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
+                    profileReporter?.RecordMetric("BrainReplacements", dynResult.ReplacementCount.ToString());
                 }
+                profileReporter?.RecordStage("Transformation", sw.ElapsedTicks);
 
                 var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
 
-                using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-                await fs.WriteAsync(finalBytes, ct);
+                if (unsafeDirectWrite || shouldAppend)
+                {
+                    using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                    await fs.WriteAsync(finalBytes, ct);
+                }
+                else
+                {
+                    await SafeFileWriter.WriteAllBytesAsync(outputFile, finalBytes, ct);
+                }
 
                 string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
                 _logger.Success($"{action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
 
+                profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
                 return Result.Success();
             }
 
@@ -348,31 +390,58 @@ public sealed class GenerateContextUseCase
             {
                 using var ms = new MemoryStream();
                 var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
+                profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
                 if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
                 ms.Position = 0;
                 using var reader = new StreamReader(ms, Encoding.UTF8);
                 var rawOutput = await reader.ReadToEndAsync(ct);
 
+                sw.Restart();
                 var compressedOutput = await sqzService!.CompressAsync(rawOutput, noCache);
+                profileReporter?.RecordStage("Transformation", sw.ElapsedTicks);
                 var finalBytes = Encoding.UTF8.GetBytes(LlmContextHeader + compressedOutput);
 
-                using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-                await fs.WriteAsync(finalBytes, ct);
+                if (unsafeDirectWrite || shouldAppend)
+                {
+                    using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                    await fs.WriteAsync(finalBytes, ct);
+                }
+                else
+                {
+                    await SafeFileWriter.WriteAllBytesAsync(outputFile, finalBytes, ct);
+                }
 
                 string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
                 _logger.Success($"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | Compressed (sqz) | Tokens: ~{finalBytes.Length / 4}");
 
+                profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
                 return Result.Success();
             }
 
-            using var fs2 = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+            if (unsafeDirectWrite || shouldAppend)
+            {
+                using var fs2 = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                var genResult2 = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs2, config, compiled, excludeLineIfStart, null, ct);
+                profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
+                if (!genResult2.IsSuccess) return Result.Failure(genResult2.Error!);
 
-            var genResult2 = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs2, config, compiled, excludeLineIfStart, null, ct);
-            if (!genResult2.IsSuccess) return Result.Failure(genResult2.Error!);
+                string action2 = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
+                _logger.Success($"✔ {action2} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult2.Value)} | Tokens: ~{genResult2.Value / 4}");
+                profileReporter?.RecordMetric("OutputSize", genResult2.Value.ToString());
+            }
+            else
+            {
+                using var ms = new MemoryStream();
+                var genResult2 = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
+                profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
+                if (!genResult2.IsSuccess) return Result.Failure(genResult2.Error!);
 
-            string action2 = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-            _logger.Success($"✔ {action2} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult2.Value)} | Tokens: ~{genResult2.Value / 4}");
+                await SafeFileWriter.WriteAllBytesAsync(outputFile, ms.ToArray(), ct);
+
+                _logger.Success($"✔ Exported to {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult2.Value)} | Tokens: ~{genResult2.Value / 4}");
+                profileReporter?.RecordMetric("OutputSize", genResult2.Value.ToString());
+            }
 
             return Result.Success();
         }
@@ -380,6 +449,7 @@ public sealed class GenerateContextUseCase
         {
             using var ms = new MemoryStream();
             var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
+            profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
             if (brainMode)
@@ -391,6 +461,7 @@ public sealed class GenerateContextUseCase
                 string finalOutput;
                 string dynInfo = "";
 
+                sw.Restart();
                 if (compress)
                 {
                     var afterCrush = crusher!.Crush(rawOutput);
@@ -402,17 +473,22 @@ public sealed class GenerateContextUseCase
                     var afterCrush = crusher!.Crush(dynResult.Output);
                     finalOutput = dynResult.Legend + afterCrush;
                     dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
+                    profileReporter?.RecordMetric("BrainReplacements", dynResult.ReplacementCount.ToString());
                 }
+                profileReporter?.RecordStage("Transformation", sw.ElapsedTicks);
 
                 var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
 
                 using var finalMs = new MemoryStream(finalBytes);
                 finalMs.Position = 0;
+                sw.Restart();
                 var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
+                profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
                 if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
                 _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
 
+                profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
                 return Result.Success();
             }
 
@@ -422,25 +498,33 @@ public sealed class GenerateContextUseCase
                 using var reader = new StreamReader(ms, Encoding.UTF8);
                 var rawOutput = await reader.ReadToEndAsync(ct);
 
+                sw.Restart();
                 var compressedOutput = await sqzService!.CompressAsync(rawOutput, noCache);
+                profileReporter?.RecordStage("Transformation", sw.ElapsedTicks);
                 var finalBytes = Encoding.UTF8.GetBytes(LlmContextHeader + compressedOutput);
 
                 using var finalMs = new MemoryStream(finalBytes);
                 finalMs.Position = 0;
+                sw.Restart();
                 var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
+                profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
                 if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
                 _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | Compressed (sqz) | Tokens: ~{finalBytes.Length / 4}");
 
+                profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
                 return Result.Success();
             }
 
             ms.Position = 0;
+            sw.Restart();
             var clipResult2 = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
+            profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
             if (!clipResult2.IsSuccess) return Result.Failure(clipResult2.Error!);
 
             _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
 
+            profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
             return Result.Success();
         }
     }

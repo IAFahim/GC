@@ -22,7 +22,7 @@ public sealed class FileDiscovery : IFileDiscovery
         try
         {
             var discoveryConfig = config.Discovery ?? new DiscoveryConfiguration();
-            var mode = discoveryConfig.Mode.ToLowerInvariant();
+            var mode = discoveryConfig.Mode?.ToLowerInvariant() ?? "auto";
 
             if (mode == "git")
             {
@@ -48,6 +48,51 @@ public sealed class FileDiscovery : IFileDiscovery
         catch (Exception ex)
         {
             _logger.Error("File discovery failed", ex);
+            return Result<IEnumerable<string>>.Failure(ex.Message);
+        }
+    }
+
+    public async Task<Result<IEnumerable<string>>> DiscoverFilesSinceAsync(string rootPath, string reference, GcConfiguration config, CancellationToken ct = default)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = $"diff --name-only {reference}",
+                WorkingDirectory = rootPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null) return Result<IEnumerable<string>>.Failure("Failed to start git process");
+
+            var files = new List<string>();
+            var output = await process.StandardOutput.ReadToEndAsync(ct);
+            await process.WaitForExitAsync(ct);
+
+            if (process.ExitCode != 0)
+            {
+                var error = await process.StandardError.ReadToEndAsync(ct);
+                return Result<IEnumerable<string>>.Failure($"Git diff failed: {error}");
+            }
+
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = line.Trim().Replace('\\', '/');
+                if (!string.IsNullOrEmpty(trimmed))
+                {
+                    files.Add(trimmed);
+                }
+            }
+
+            return Result<IEnumerable<string>>.Success(files);
+        }
+        catch (Exception ex)
+        {
             return Result<IEnumerable<string>>.Failure(ex.Message);
         }
     }
@@ -253,42 +298,14 @@ public sealed class FileDiscovery : IFileDiscovery
         }
     }
 
-    private async Task<bool> IsGitRepositoryAsync(string rootPath, CancellationToken ct)
+    private Task<bool> IsGitRepositoryAsync(string rootPath, CancellationToken ct)
     {
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "git",
-                Arguments = "rev-parse --is-inside-work-tree",
-                WorkingDirectory = rootPath,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var process = Process.Start(psi);
-            if (process == null) return false;
-
-            await process.WaitForExitAsync(ct);
-            return process.ExitCode == 0;
-        }
-        catch (IOException ex)
-        {
-            _logger.Error("Git executable not found or failed to start", ex);
-            return false;
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _logger.Error($"Access denied when checking git repository in {rootPath}", ex);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _logger.Error($"Unexpected error checking if {rootPath} is a git repository", ex);
-            return false;
-        }
+        // Avoid spawning a git process just to check if it's a git repo.
+        // Checking for a .git directory or file (for worktrees) is much faster and sufficient
+        // for our discovery purposes before we actually call git ls-files.
+        var gitPath = Path.Combine(rootPath, ".git");
+        bool exists = Directory.Exists(gitPath) || File.Exists(gitPath);
+        return Task.FromResult(exists);
     }
 
     private async Task<Result<IEnumerable<string>>> DiscoverWithGitAsync(string rootPath, DiscoveryConfiguration config, CancellationToken ct)
@@ -395,7 +412,7 @@ public sealed class FileDiscovery : IFileDiscovery
 
     private async Task<Result<IEnumerable<string>>> DiscoverWithFileSystemAsync(string rootPath, DiscoveryConfiguration config, CancellationToken ct)
     {
-        var files = new List<string>();
+        var files = new List<string>(1024);
         var ignoredDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "node_modules", ".git", ".svn", ".hg", "bin", "obj", "dist", "build",
@@ -412,7 +429,13 @@ public sealed class FileDiscovery : IFileDiscovery
             ct.ThrowIfCancellationRequested();
             var (currentDir, depth) = queue.Dequeue();
 
-            var realPath = Path.GetFullPath(currentDir);
+            string realPath;
+            try
+            {
+                realPath = Path.GetFullPath(currentDir);
+            }
+            catch (IOException) { continue; }
+
             if (config.FollowSymlinks)
             {
                 try
@@ -431,35 +454,30 @@ public sealed class FileDiscovery : IFileDiscovery
 
             try
             {
-                foreach (var file in Directory.EnumerateFiles(currentDir, "*", SearchOption.TopDirectoryOnly))
+                foreach (var entry in Directory.EnumerateFileSystemEntries(currentDir, "*", SearchOption.TopDirectoryOnly))
                 {
                     ct.ThrowIfCancellationRequested();
-                    files.Add(Path.GetRelativePath(rootPath, file).Replace('\\', '/'));
-                }
 
-                if (!config.MaxDepth.HasValue || depth < config.MaxDepth.Value)
-                {
-                    foreach (var dir in Directory.EnumerateDirectories(currentDir, "*", SearchOption.TopDirectoryOnly))
+                    var attr = File.GetAttributes(entry);
+                    if ((attr & FileAttributes.Directory) == FileAttributes.Directory)
                     {
-                        ct.ThrowIfCancellationRequested();
-                        var dirName = Path.GetFileName(dir);
-                        if (!ignoredDirs.Contains(dirName))
+                        if (!config.MaxDepth.HasValue || depth < config.MaxDepth.Value)
                         {
-                            if (!config.FollowSymlinks)
+                            var dirName = Path.GetFileName(entry);
+                            if (!ignoredDirs.Contains(dirName))
                             {
-                                try
+                                if (!config.FollowSymlinks && (attr & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
                                 {
-                                    var dirInfo = new DirectoryInfo(dir);
-                                    if ((dirInfo.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
-                                    {
-                                        continue;
-                                    }
+                                    continue;
                                 }
-                                catch { }
-                            }
 
-                            queue.Enqueue((dir, depth + 1));
+                                queue.Enqueue((entry, depth + 1));
+                            }
                         }
+                    }
+                    else
+                    {
+                        files.Add(Path.GetFullPath(entry).Replace('\\', '/'));
                     }
                 }
             }

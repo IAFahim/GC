@@ -167,8 +167,8 @@ public static class BuiltInPresets
             Markdown = new MarkdownConfiguration
             {
                 Fence = "```",
-                ProjectStructureHeader = "_Project Structure:_",
-                FileHeaderTemplate = "{path}",
+                ProjectStructureHeader = "_Project Structure:_ ",
+                FileHeaderTemplate = "## File: {path}",
                 LanguageDetection = "extension"
             },
             Output = new OutputConfiguration

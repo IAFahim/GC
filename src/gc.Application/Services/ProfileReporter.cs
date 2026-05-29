@@ -39,7 +39,7 @@ public sealed class ProfileReporter
 
         foreach (var kvp in _stageTicks)
         {
-            var ms = TimeSpan.FromTicks(kvp.Value).TotalMilliseconds;
+            var ms = (double)kvp.Value * 1000 / Stopwatch.Frequency;
             sb.AppendLine($"| {kvp.Key} | {ms:F1}ms |");
         }
 
@@ -63,7 +63,7 @@ public sealed class ProfileReporter
             ["totalMs"] = _totalSw.ElapsedMilliseconds,
             ["stages"] = _stageTicks.ToDictionary(
                 kvp => kvp.Key,
-                kvp => TimeSpan.FromTicks(kvp.Value).TotalMilliseconds),
+                kvp => (double)kvp.Value * 1000 / Stopwatch.Frequency),
             ["metrics"] = _metrics
         };
         return JsonSerializer.Serialize(data, GcJsonSerializerContext.Default.DictionaryStringObject);

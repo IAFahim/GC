@@ -523,7 +523,7 @@ public class ReleaseBinaryTests : IDisposable
             try
             {
                 var psi = new ProcessStartInfo
-                    { FileName = "git", Arguments = "--version", UseShellExecute = false, CreateNoWindow = true };
+                { FileName = "git", Arguments = "--version", UseShellExecute = false, CreateNoWindow = true };
                 using var p = Process.Start(psi);
                 if (p != null)
                     try

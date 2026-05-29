@@ -65,19 +65,21 @@ public static class GlobMatcher
                 }
         }
 
-        // If the pattern has no '/', it can match against either the entire path or the filename
+        // If the pattern has no '/', it can match against either the entire path or any segment (directory or filename)
         if (!pattern.Contains('/'))
         {
-            if (MatchInternal(path, pattern, ref maxBacktrackIterations))
-                return true;
-
-            var lastSlash = path.LastIndexOf('/');
-            if (lastSlash >= 0)
+            var tempPath = path;
+            while (true)
             {
-                var remaining = path.Slice(lastSlash + 1);
+                var slashIdx = tempPath.IndexOf('/');
+                var segment = slashIdx >= 0 ? tempPath.Slice(0, slashIdx) : tempPath;
+
                 var budget = maxBacktrackIterations;
-                if (MatchInternal(remaining, pattern, ref budget))
+                if (MatchInternal(segment, pattern, ref budget))
                     return true;
+
+                if (slashIdx < 0) break;
+                tempPath = tempPath.Slice(slashIdx + 1);
             }
 
             return false;

@@ -54,9 +54,8 @@ public sealed class ContentFilter
 
         bool shouldIncludeBytes(byte[] buffer, int length)
         {
-            var checkLen = Math.Min(length, 8192);
-            var preview = Encoding.UTF8.GetString(buffer, 0, checkLen);
-            return shouldIncludeText(preview);
+            var text = Encoding.UTF8.GetString(buffer, 0, length);
+            return shouldIncludeText(text);
         }
 
         return new CompiledContentPatterns(shouldIncludeText, shouldIncludeBytes);

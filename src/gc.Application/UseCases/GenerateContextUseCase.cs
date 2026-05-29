@@ -164,10 +164,10 @@ public sealed class GenerateContextUseCase
         var errors = new List<string>();
 
         var lockObj = new object();
+        var maxParallel = clusterConfig.MaxParallelRepos > 0 ? clusterConfig.MaxParallelRepos : 1;
         await Parallel.ForEachAsync(repos, new ParallelOptions
         {
-            // libgit2sharp crashes under heavy concurrency, restrict to 1
-            MaxDegreeOfParallelism = 1,
+            MaxDegreeOfParallelism = maxParallel,
             CancellationToken = ct
         }, async (repo, token) =>
         {
@@ -190,7 +190,7 @@ public sealed class GenerateContextUseCase
 
                 var filterResult = _filter.FilterFiles(
                     discoveryResult.Value!, config, paths, excludes, extensions,
-                    excludePathPatterns, includePathPatterns);
+                    excludePathPatterns, includePathPatterns, rootPath: repo.RootPath);
                 if (!filterResult.IsSuccess)
                 {
                     lock (lockObj)
@@ -370,11 +370,11 @@ public sealed class GenerateContextUseCase
         // ── 2. Build the transform pipeline ──
         var transforms = new List<IOutputTransform>();
         SqzCompressionService? sqzService = null;
+        BrainCrusher? brainCrusherInstance = brainMode ? new BrainCrusher() : null;
 
         if (brainMode)
         {
             transforms.Add(new DynamicCompressorAdapter());
-            transforms.Add(new BrainCrusherAdapter());
         }
 
         if (compress)
@@ -407,7 +407,7 @@ public sealed class GenerateContextUseCase
         {
             await using var ms = new MemoryStream();
             var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled,
-                excludeLineIfStart, null, ct);
+                excludeLineIfStart, brainCrusherInstance, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
@@ -457,18 +457,18 @@ public sealed class GenerateContextUseCase
         if (!string.IsNullOrEmpty(outputFile))
             return await EmitToFile(filteredList, actualFileCount, outputFile, appendMode,
                 hasPipeline, finalOutput, compiled, excludeLineIfStart, transformInfo,
-                unsafeDirectWrite, config, ct, sw, profileReporter);
+                unsafeDirectWrite, config, brainCrusherInstance, ct, sw, profileReporter);
 
-        return await EmitToClipboard(filteredList, actualFileCount,
-            hasPipeline, finalOutput, compiled, excludeLineIfStart, transformInfo,
-            config, appendMode, ct, sw, profileReporter);
+        return await EmitToClipboard(filteredList, actualFileCount, hasPipeline, finalOutput,
+            compiled, excludeLineIfStart, transformInfo, config, appendMode, brainCrusherInstance, ct, sw,
+            profileReporter);
     }
 
     private async Task<Result> EmitToFile(
         List<FileContent> filteredList,
         int actualFileCount,
         string outputFile,
-        bool appendMode,
+        bool shouldAppend,
         bool hasPipeline,
         string finalOutput,
         CompiledContentPatterns compiled,
@@ -476,6 +476,7 @@ public sealed class GenerateContextUseCase
         string transformInfo,
         bool unsafeDirectWrite,
         GcConfiguration config,
+        BrainCrusher? brainCrusher,
         CancellationToken ct,
         Stopwatch sw,
         ProfileReporter? profileReporter)
@@ -484,15 +485,15 @@ public sealed class GenerateContextUseCase
         if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
             Directory.CreateDirectory(outputDir);
 
-        var shouldAppend = appendMode && File.Exists(outputFile);
+        var isAppend = shouldAppend && File.Exists(outputFile);
 
         if (hasPipeline)
         {
             var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
 
-            if (unsafeDirectWrite || shouldAppend)
+            if (unsafeDirectWrite || isAppend)
             {
-                var fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
+                var fileMode = isAppend ? FileMode.Append : FileMode.Create;
                 await using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, true);
                 await fs.WriteAsync(finalBytes, ct);
             }
@@ -501,24 +502,24 @@ public sealed class GenerateContextUseCase
                 await SafeFileWriter.WriteAllBytesAsync(outputFile, finalBytes, ct);
             }
 
-            var action = shouldAppend ? "Appended to" : "Exported to";
+            var action = isAppend ? "Appended to" : "Exported to";
             _logger.Success(
-                $"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{finalBytes.Length / 4}");
+                $"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{TokenEstimator.EstimateTokens(finalOutput)}");
             profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
             return Result.Success();
         }
 
         // No pipeline — stream directly to file
-        if (unsafeDirectWrite || shouldAppend)
+        if (unsafeDirectWrite || isAppend)
         {
-            var fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
+            var fileMode = isAppend ? FileMode.Append : FileMode.Create;
             await using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, true);
             var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs, config, compiled,
-                excludeLineIfStart, null, ct);
+                excludeLineIfStart, brainCrusher, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-            var action = shouldAppend ? "Appended to" : "Exported to";
+            var action = isAppend ? "Appended to" : "Exported to";
             _logger.Success(
                 $"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
             profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
@@ -527,7 +528,7 @@ public sealed class GenerateContextUseCase
         {
             await using var ms = new MemoryStream();
             var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled,
-                excludeLineIfStart, null, ct);
+                excludeLineIfStart, brainCrusher, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
@@ -551,6 +552,7 @@ public sealed class GenerateContextUseCase
         string transformInfo,
         GcConfiguration config,
         bool appendMode,
+        BrainCrusher? brainCrusher,
         CancellationToken ct,
         Stopwatch sw,
         ProfileReporter? profileReporter)
@@ -565,7 +567,7 @@ public sealed class GenerateContextUseCase
             if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
 
             _logger.Success(
-                $"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{finalBytes.Length / 4}");
+                $"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{TokenEstimator.EstimateTokens(finalOutput)}");
             profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
             return Result.Success();
         }
@@ -574,7 +576,7 @@ public sealed class GenerateContextUseCase
         await using var ms = new MemoryStream();
         var genResult =
             await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart,
-                null, ct);
+                brainCrusher, ct);
         profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
         if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 

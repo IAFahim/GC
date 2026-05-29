@@ -1,5 +1,9 @@
+using System;
 using System.Buffers;
 using System.Collections.Frozen;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using gc.Domain.Common;
 using gc.Domain.Constants;
@@ -32,11 +36,8 @@ public sealed class FileFilter
         var activeExtensions = ResolveActiveExtensions(extensionFilters);
 
         var systemIgnored = config.Filters?.SystemIgnoredPatterns ?? Array.Empty<string>();
-        var allExcludes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in systemIgnored) allExcludes.Add(p.Replace('\\', '/'));
-        foreach (var p in excludePatterns) allExcludes.Add(p.Replace('\\', '/'));
-
-        var excludeSearchValues = SearchValues.Create(allExcludes.ToArray(), StringComparison.OrdinalIgnoreCase);
+        var systemIgnoredNormalized = systemIgnored.Select(p => p.Replace('\\', '/')).ToArray();
+        var excludePatternsNormalized = excludePatterns.Select(p => p.Replace('\\', '/')).ToArray();
 
         var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToArray();
 
@@ -45,7 +46,7 @@ public sealed class FileFilter
         var mergedIncludePath = MergePatterns(includePathPatterns, config.Filters?.IncludePathPatterns);
 
         var filtered = rawFiles
-            .Where(path => IsValidPath(path, normalizedSearchPaths, excludeSearchValues, activeExtensions,
+            .Where(path => IsValidPath(path, normalizedSearchPaths, systemIgnoredNormalized, excludePatternsNormalized, activeExtensions,
                 mergedExcludePath, mergedIncludePath))
             .Select(path => CreateFileEntry(path, config, rootPath, absoluteRootPath))
             .Where(entry => entry != null)
@@ -106,20 +107,26 @@ public sealed class FileFilter
 
         var systemIgnored = config.Filters?.SystemIgnoredPatterns ?? Array.Empty<string>();
         foreach (var p in systemIgnored)
-            if (pathNormalized.Contains(p.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+        {
+            var pNormalized = p.Replace('\\', '/');
+            if (pathNormalized.Contains(pNormalized, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.Warning($"[EXCLUDED] Matched system ignored pattern: {p}");
                 return;
             }
+        }
 
         foreach (var p in excludePatterns)
-            if (pathNormalized.Contains(p.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+        {
+            var pNormalized = p.Replace('\\', '/');
+            if (GlobMatcher.IsMatch(pathNormalized.AsSpan(), pNormalized.AsSpan()))
             {
-                _logger.Warning($"[EXCLUDED] Matched exact exclude pattern: {p}");
+                _logger.Warning($"[EXCLUDED] Matched glob exclude pattern: {p}");
                 return;
             }
+        }
 
-        _logger.Success("[PASSED] Exact exclude checks.");
+        _logger.Success("[PASSED] Exact/glob exclude checks.");
 
         var mergedExcludePath = MergePatterns(excludePathPatterns, config.Filters?.ExcludePathPatterns);
         if (mergedExcludePath.Length > 0)
@@ -248,8 +255,9 @@ public sealed class FileFilter
                     : Path.Combine(root, relative);
                 size = new FileInfo(absPath).Length;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.Debug($"Failed to get file size for {path}: {ex.Message}");
             }
 
             return new FileEntry(
@@ -308,7 +316,7 @@ public sealed class FileFilter
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsValidPath(string path, string[] normalizedSearchPaths,
-        SearchValues<string> excludeSearchValues, FrozenSet<string> extensions, string[] excludePathPatterns,
+        string[] systemIgnoredPatterns, string[] excludePatterns, FrozenSet<string> extensions, string[] excludePathPatterns,
         string[] includePathPatterns)
     {
         var pathSpan = path.AsSpan();
@@ -341,7 +349,14 @@ public sealed class FileFilter
             pathNormalized = path;
         var normalizedSpan = pathNormalized.AsSpan();
 
-        if (normalizedSpan.ContainsAny(excludeSearchValues)) return false;
+        foreach (var p in systemIgnoredPatterns)
+        {
+            if (pathNormalized.Contains(p, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        if (excludePatterns.Length > 0 && GlobMatcher.MatchesAny(pathNormalized, excludePatterns))
+            return false;
 
         // Glob-based path exclude patterns (e.g., "*/test/*", "*.bench.*", "**/benchmark/**")
         if (excludePathPatterns.Length > 0 && GlobMatcher.MatchesAny(pathNormalized, excludePathPatterns)) return false;

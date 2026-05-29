@@ -1,18 +1,27 @@
+using System;
+
 namespace gc.Domain.Common;
 
 public sealed record Result
 {
-    public string? Error { get; init; }
+    private Result(string? error)
+    {
+        Error = error;
+    }
+
+    public string? Error { get; }
     public bool IsSuccess => Error == null;
 
     public static Result Success()
     {
-        return new Result();
+        return new Result((string?)null);
     }
 
     public static Result Failure(string error)
     {
-        return new Result { Error = error };
+        if (string.IsNullOrEmpty(error))
+            throw new ArgumentException("Failure result must specify an error message.", nameof(error));
+        return new Result(error);
     }
 
     /// <summary>
@@ -43,18 +52,33 @@ public sealed record Result
 
 public sealed record Result<T>
 {
-    public T? Value { get; init; }
-    public string? Error { get; init; }
+    private readonly T? _value;
+
+    private Result(T? value, string? error)
+    {
+        if (error == null && value == null)
+            throw new ArgumentNullException(nameof(value), "Success result must have a non-null value.");
+        if (error != null && value != null)
+            throw new ArgumentException("Failure result cannot contain a value.");
+
+        _value = value;
+        Error = error;
+    }
+
+    public T Value => IsSuccess ? _value! : throw new InvalidOperationException("Cannot access Value of a failed Result.");
+    public string? Error { get; }
     public bool IsSuccess => Error == null;
 
     public static Result<T> Success(T value)
     {
-        return new Result<T> { Value = value };
+        return new Result<T>(value, null);
     }
 
     public static Result<T> Failure(string error)
     {
-        return new Result<T> { Error = error };
+        if (string.IsNullOrEmpty(error))
+            throw new ArgumentException("Failure result must specify an error message.", nameof(error));
+        return new Result<T>(default, error);
     }
 
     /// <summary>
@@ -62,7 +86,7 @@ public sealed record Result<T>
     /// </summary>
     public Result<U> Map<U>(Func<T, U> mapper)
     {
-        return IsSuccess ? Result<U>.Success(mapper(Value!)) : Result<U>.Failure(Error!);
+        return IsSuccess ? Result<U>.Success(mapper(Value)) : Result<U>.Failure(Error!);
     }
 
     /// <summary>
@@ -70,7 +94,7 @@ public sealed record Result<T>
     /// </summary>
     public Result<U> Bind<U>(Func<T, Result<U>> binder)
     {
-        return IsSuccess ? binder(Value!) : Result<U>.Failure(Error!);
+        return IsSuccess ? binder(Value) : Result<U>.Failure(Error!);
     }
 
     /// <summary>
@@ -78,7 +102,7 @@ public sealed record Result<T>
     /// </summary>
     public Result<T> Tap(Action<T> onSuccess)
     {
-        if (IsSuccess) onSuccess(Value!);
+        if (IsSuccess) onSuccess(Value);
         return this;
     }
 
@@ -87,6 +111,6 @@ public sealed record Result<T>
     /// </summary>
     public U Match<U>(Func<T, U> onSuccess, Func<string, U> onFailure)
     {
-        return IsSuccess ? onSuccess(Value!) : onFailure(Error!);
+        return IsSuccess ? onSuccess(Value) : onFailure(Error!);
     }
 }

@@ -9,20 +9,34 @@ namespace gc.Domain.Models;
 ///     This ensures Size is always computed against the correct base directory
 ///     and avoids the bug where cluster mode computed file sizes against CWD.
 /// </summary>
-public readonly record struct FileEntry(
-    string Root,
-    string Relative,
-    string Extension,
-    string Language,
-    long Size,
-    string? Display = null)
+public readonly record struct FileEntry
 {
-    /// <summary>
-    ///     Computed absolute path to the file. Always resolved against Root + Relative.
-    /// </summary>
-    public string Absolute => string.IsNullOrEmpty(Root)
-        ? Relative
-        : System.IO.Path.GetFullPath(System.IO.Path.Combine(Root, Relative));
+    public string Root { get; init; }
+    public string Relative { get; init; }
+    public string Extension { get; init; }
+    public string Language { get; init; }
+    public long Size { get; init; }
+    public string? Display { get; init; }
+    public string Absolute { get; init; }
+
+    public FileEntry(
+        string root,
+        string relative,
+        string extension,
+        string language,
+        long size,
+        string? display = null)
+    {
+        Root = root;
+        Relative = relative;
+        Extension = extension;
+        Language = language;
+        Size = size;
+        Display = display;
+        Absolute = string.IsNullOrEmpty(root)
+            ? relative
+            : System.IO.Path.GetFullPath(System.IO.Path.Combine(root, relative));
+    }
 
     /// <summary>
     ///     Returns the relative path for backward compatibility.

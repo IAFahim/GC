@@ -162,6 +162,7 @@ public sealed class DynamicCompressor
         var sb = new StringBuilder(text.Length);
         var lines = text.Split('\n');
         var inCodeBlock = false;
+        var isSourceCode = false;
 
         // Sort by length descending to ensure greedy matching
         var sortedList = candidates.OrderByDescending(c => c.Phrase.Length).ToList();
@@ -172,11 +173,16 @@ public sealed class DynamicCompressor
 
             if (line.StartsWith("```"))
             {
+                if (!inCodeBlock)
+                {
+                    var lang = line.Substring(3).Trim().ToLowerInvariant();
+                    isSourceCode = IsSourceCodeLanguage(lang);
+                }
                 // Toggle code block state
                 inCodeBlock = !inCodeBlock;
                 sb.Append(line);
             }
-            else if (inCodeBlock)
+            else if (inCodeBlock && isSourceCode)
             {
                 // Only apply replacements in code blocks
                 var processedLine = line;

@@ -33,8 +33,8 @@ public sealed class AhoCorasick
 
         var chars = new HashSet<char>();
         foreach (var p in validPatterns)
-        foreach (var c in p)
-            chars.Add(c);
+            foreach (var c in p)
+                chars.Add(c);
 
         _charMap = new Dictionary<char, int>(chars.Count);
         var idx = 0;

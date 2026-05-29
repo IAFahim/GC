@@ -1,5 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using gc.Domain.Interfaces;
+using gc.Domain.Language;
 
 namespace gc.Application.Services;
 
@@ -11,39 +15,6 @@ namespace gc.Application.Services;
 /// </summary>
 public sealed class BrainCrusher : IBrainCrusher
 {
-    // File extensions that may legitimately contain SQL-style comments.
-    // Restricting to these prevents false positives in YAML, Markdown, shell scripts.
-    private static readonly HashSet<string> SqlLikeExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "sql", "pgsql", "psql", "mysql", "mariadb", "sqlite", "mssql", "oracle", "plsql",
-        "pl/pgsql", "duckdb", "bigquery", "snowflake", "transactsql", "tsql"
-    };
-
-    // File extensions where # should NOT be treated as a line comment.
-    // These files commonly have # at line starts that are not comments.
-    private static readonly HashSet<string> NonHashCommentExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "md", "markdown"
-    };
-
-    // File extensions where # SHOULD be treated as a line comment (including shell scripts).
-    private static readonly HashSet<string> HashCommentExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "sh", "bash", "zsh", "fish", "ksh", "csh", "tcsh", "shar", "zshrc", "bashrc",
-        "profile", "bash_profile", "bash_login", "zprofile", "env", "shell",
-        "dockerfile", "makefile", "gemfile", "rakefile", "cfg", "conf", "properties",
-        "yaml", "yml", "toml", "ini"
-    };
-
-    // File extensions that use // for single-line comments.
-    // Markdown/text/YAML should NOT have // treated as a comment.
-    private static readonly HashSet<string> DoubleSlashCommentExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "cs", "java", "js", "ts", "jsx", "tsx", "cpp", "cxx", "cc", "h", "hpp",
-        "go", "rs", "swift", "kt", "scala", "php", "rust", "dart", "groovy",
-        "c", "javascript", "typescript", "csharp", "cpp", "objectivec", "swift"
-    };
-
     private readonly string? _fileExtension;
 
     public BrainCrusher(string? fileExtension = null)
@@ -83,9 +54,8 @@ public sealed class BrainCrusher : IBrainCrusher
 
     // =========================================================================
     // Universal Syntax Minifier
-    // Agnostic state machine handles: //, /* */, #, <!-- -->, triple-quotes, --, strings
+    // Driven by LanguageProfiles state machine
     // =========================================================================
-
     internal static string StripComments(string content, string? fileExtension = null)
     {
         var sb = new StringBuilder(content.Length);
@@ -100,110 +70,167 @@ public sealed class BrainCrusher : IBrainCrusher
                 ? fileExtension.Substring(1)
                 : fileExtension;
 
-        var shouldStripSql = normalizedExt != null && SqlLikeExtensions.Contains(normalizedExt);
-        bool shouldTreatHashAsComment;
-        bool shouldStripDoubleSlash;
+        // Get language profile
+        var profile = LanguageProfiles.For(normalizedExt);
 
-        if (normalizedExt == null)
+        var hasBlockComment = profile.BlockComment.Length == 2;
+        var blockOpen = hasBlockComment ? profile.BlockComment[0] : "";
+        var blockClose = hasBlockComment ? profile.BlockComment[1] : "";
+
+        var shouldTreatHashAsComment = profile.HashComment;
+        var shouldStripDoubleSlash = profile.LineComment.Contains("//");
+        var shouldStripSql = profile.SqlComment;
+
+        // Preserve shebang line if present at the very beginning of the file
+        if (i == 0 && len >= 2 && span[0] == '#' && span[1] == '!')
         {
-            // Null extension (whole-document crush path) - strip both // and # for code
-            // URL protection prevents truncating https:// links
-            shouldTreatHashAsComment = true;
-            shouldStripDoubleSlash = true;
-        }
-        else
-        {
-            shouldTreatHashAsComment = !NonHashCommentExtensions.Contains(normalizedExt);
-            shouldStripDoubleSlash = DoubleSlashCommentExtensions.Contains(normalizedExt);
+            while (i < len && span[i] != '\n' && span[i] != '\r')
+            {
+                sb.Append(span[i]);
+                i++;
+            }
         }
 
-        var inString = false;
-        var inChar = false;
-        var inSingleLineComment = false;
+        var isCSharp = normalizedExt != null && (normalizedExt.Equals("cs", StringComparison.OrdinalIgnoreCase) || normalizedExt.Equals("csharp", StringComparison.OrdinalIgnoreCase));
+        var isPython = normalizedExt != null && (normalizedExt.Equals("py", StringComparison.OrdinalIgnoreCase) || normalizedExt.Equals("python", StringComparison.OrdinalIgnoreCase));
+
+        var stringMode = StringMode.None;
+        var csharpRawQuoteCount = 0;
         var inMultiLineComment = false;
-        var inHashComment = false;
-        var inHtmlComment = false;
-        var inTripleQuote = false;
-        var inSqlComment = false;
+        var inSingleLineComment = false;
 
         while (i < len)
         {
             var ch = span[i];
 
-            if (inTripleQuote)
+            // 1. Handle String Modes
+            if (stringMode != StringMode.None)
             {
-                if (ch == '"' && i + 2 < len && span[i + 1] == '"' && span[i + 2] == '"')
-                {
-                    sb.Append("\"\"\"");
-                    i += 3;
-                    inTripleQuote = false;
-                    continue;
-                }
-
-                if (ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
-                {
-                    sb.Append("'''");
-                    i += 3;
-                    inTripleQuote = false;
-                    continue;
-                }
-
                 sb.Append(ch);
-                if (ch == '\\' && i + 1 < len)
+
+                switch (stringMode)
                 {
-                    i++;
-                    sb.Append(span[i]);
+                    case StringMode.NormalDouble:
+                        if (ch == '\\' && i + 1 < len)
+                        {
+                            i++;
+                            sb.Append(span[i]);
+                        }
+                        else if (ch == '"')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.NormalSingle:
+                        if (ch == '\\' && i + 1 < len)
+                        {
+                            i++;
+                            sb.Append(span[i]);
+                        }
+                        else if (ch == '\'')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.CSharpVerbatim:
+                        if (ch == '"')
+                        {
+                            if (i + 1 < len && span[i + 1] == '"')
+                            {
+                                sb.Append('"');
+                                i++; // Skip the escaped quote
+                            }
+                            else
+                            {
+                                stringMode = StringMode.None;
+                            }
+                        }
+                        break;
+
+                    case StringMode.CSharpRaw:
+                        // Count trailing quotes to check if raw string ends
+                        if (ch == '"')
+                        {
+                            var quotes = 0;
+                            while (i + quotes < len && span[i + quotes] == '"')
+                            {
+                                quotes++;
+                            }
+                            if (quotes >= csharpRawQuoteCount)
+                            {
+                                for (var q = 1; q < quotes; q++) sb.Append('"');
+                                i += quotes - 1;
+                                stringMode = StringMode.None;
+                            }
+                        }
+                        break;
+
+                    case StringMode.PythonRawDouble:
+                        if (ch == '\\' && i + 1 < len && span[i + 1] == '"')
+                        {
+                            i++;
+                            sb.Append(span[i]);
+                        }
+                        else if (ch == '"')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.PythonRawSingle:
+                        if (ch == '\\' && i + 1 < len && span[i + 1] == '\'')
+                        {
+                            i++;
+                            sb.Append(span[i]);
+                        }
+                        else if (ch == '\'')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.TripleQuoteDouble:
+                        if (ch == '\\' && i + 1 < len)
+                        {
+                            i++;
+                            sb.Append(span[i]);
+                        }
+                        else if (ch == '"' && i + 2 < len && span[i + 1] == '"' && span[i + 2] == '"')
+                        {
+                            sb.Append("\"\"");
+                            i += 2;
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.TripleQuoteSingle:
+                        if (ch == '\\' && i + 1 < len)
+                        {
+                            i++;
+                            sb.Append(span[i]);
+                        }
+                        else if (ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
+                        {
+                            sb.Append("''");
+                            i += 2;
+                            stringMode = StringMode.None;
+                        }
+                        break;
                 }
 
                 i++;
                 continue;
             }
 
-            if (inSqlComment)
-            {
-                if (ch == '\n')
-                {
-                    inSqlComment = false;
-                    sb.Append('\n');
-                }
-
-                i++;
-                continue;
-            }
-
-            if (inHtmlComment)
-            {
-                if (ch == '-' && i + 2 < len && span[i + 1] == '-' && span[i + 2] == '>')
-                {
-                    inHtmlComment = false;
-                    i += 3;
-                    sb.Append(' ');
-                    continue;
-                }
-
-                if (ch == '\n') sb.Append('\n');
-                i++;
-                continue;
-            }
-
-            if (inHashComment)
-            {
-                if (ch == '\n')
-                {
-                    inHashComment = false;
-                    sb.Append('\n');
-                }
-
-                i++;
-                continue;
-            }
-
+            // 2. Handle Multi-line Block Comments
             if (inMultiLineComment)
             {
-                if (ch == '*' && i + 1 < len && span[i + 1] == '/')
+                if (span[i..].StartsWith(blockClose.AsSpan()))
                 {
                     inMultiLineComment = false;
-                    i += 2;
+                    i += blockClose.Length;
                     sb.Append(' ');
                     continue;
                 }
@@ -213,6 +240,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
+            // 3. Handle Single-line Comments
             if (inSingleLineComment)
             {
                 if (ch == '\n')
@@ -225,78 +253,19 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
-            if (inString)
-            {
-                sb.Append(ch);
-                if (ch == '\\' && i + 1 < len)
-                {
-                    i++;
-                    sb.Append(span[i]);
-                }
-                else if (ch == '"')
-                {
-                    inString = false;
-                }
+            // 4. Start Comment Checks
 
-                i++;
+            // Start block comment check
+            if (hasBlockComment && span[i..].StartsWith(blockOpen.AsSpan()))
+            {
+                inMultiLineComment = true;
+                i += blockOpen.Length;
                 continue;
             }
 
-            if (inChar)
-            {
-                sb.Append(ch);
-                if (ch == '\\' && i + 1 < len)
-                {
-                    i++;
-                    sb.Append(span[i]);
-                }
-                else if (ch == '\'')
-                {
-                    inChar = false;
-                }
-
-                i++;
-                continue;
-            }
-
-            // Triple-quote start
-            if (ch == '"' && i + 2 < len && span[i + 1] == '"' && span[i + 2] == '"')
-            {
-                inTripleQuote = true;
-                sb.Append("\"\"\"");
-                i += 3;
-                continue;
-            }
-
-            if (ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
-            {
-                inTripleQuote = true;
-                sb.Append("'''");
-                i += 3;
-                continue;
-            }
-
-            // SQL comment (--): only strip for SQL files to avoid false positives
-            // in CLI flags (--verbose), YAML separators (---), and Markdown headers
-            if (shouldStripSql && ch == '-' && i + 1 < len && span[i + 1] == '-')
-            {
-                inSqlComment = true;
-                i += 2;
-                continue;
-            }
-
-            if (ch == '<' && i + 3 < len && span[i + 1] == '!' && span[i + 2] == '-' && span[i + 3] == '-')
-            {
-                inHtmlComment = true;
-                i += 4;
-                continue;
-            }
-
-            // Check for // comments only in languages that use them
-            // But NOT if it's part of a URL (e.g., https://, http://, ftp://)
+            // Start double slash line comment check
             if (shouldStripDoubleSlash && ch == '/' && i + 1 < len && span[i + 1] == '/')
             {
-                // Don't start // comment if preceded by : (URL protocol separator)
                 var precededByColon = i > 0 && span[i - 1] == ':';
                 if (!precededByColon)
                 {
@@ -306,36 +275,151 @@ public sealed class BrainCrusher : IBrainCrusher
                 }
             }
 
-            if (ch == '/' && i + 1 < len && span[i + 1] == '*')
+            // Start SQL line comment check
+            if (shouldStripSql && ch == '-' && i + 1 < len && span[i + 1] == '-')
             {
-                inMultiLineComment = true;
+                inSingleLineComment = true;
                 i += 2;
                 continue;
             }
 
-            if (ch == '#' && shouldTreatHashAsComment)
+            // Start Hash comment check
+            if (shouldTreatHashAsComment && ch == '#')
             {
-                inHashComment = true;
+                inSingleLineComment = true;
                 i++;
                 continue;
             }
 
+            // 5. Start String Checks
+
+            // Python raw triple/single/double quote check
+            if (isPython && (ch == 'r' || ch == 'R') && i + 1 < len)
+            {
+                var next = span[i + 1];
+                if (next == '"')
+                {
+                    if (i + 3 < len && span[i + 2] == '"' && span[i + 3] == '"')
+                    {
+                        stringMode = StringMode.TripleQuoteDouble;
+                        sb.Append("r\"\"\"");
+                        i += 4;
+                        continue;
+                    }
+                    stringMode = StringMode.PythonRawDouble;
+                    sb.Append("r\"");
+                    i += 2;
+                    continue;
+                }
+                if (next == '\'')
+                {
+                    if (i + 3 < len && span[i + 2] == '\'' && span[i + 3] == '\'')
+                    {
+                        stringMode = StringMode.TripleQuoteSingle;
+                        sb.Append("r'''");
+                        i += 4;
+                        continue;
+                    }
+                    stringMode = StringMode.PythonRawSingle;
+                    sb.Append("r'");
+                    i += 2;
+                    continue;
+                }
+            }
+
+            // Python triple quote check (non-raw)
+            if (isPython && ch == '"' && i + 2 < len && span[i + 1] == '"' && span[i + 2] == '"')
+            {
+                stringMode = StringMode.TripleQuoteDouble;
+                sb.Append("\"\"\"");
+                i += 3;
+                continue;
+            }
+            if (isPython && ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
+            {
+                stringMode = StringMode.TripleQuoteSingle;
+                sb.Append("'''");
+                i += 3;
+                continue;
+            }
+
+            // C# raw string literal check
+            if (isCSharp && ch == '"')
+            {
+                var quotes = 0;
+                while (i + quotes < len && span[i + quotes] == '"')
+                {
+                    quotes++;
+                }
+                if (quotes >= 3)
+                {
+                    stringMode = StringMode.CSharpRaw;
+                    csharpRawQuoteCount = quotes;
+                    for (var q = 0; q < quotes; q++) sb.Append('"');
+                    i += quotes;
+                    continue;
+                }
+            }
+            // C# raw string literal with $ check
+            if (isCSharp && ch == '$' && i + 3 < len && span[i + 1] == '"' && span[i + 2] == '"' && span[i + 3] == '"')
+            {
+                var idxTemp = i + 1;
+                var quotes = 0;
+                while (idxTemp < len && span[idxTemp] == '"')
+                {
+                    quotes++;
+                    idxTemp++;
+                }
+                stringMode = StringMode.CSharpRaw;
+                csharpRawQuoteCount = quotes;
+                sb.Append('$');
+                for (var q = 0; q < quotes; q++) sb.Append('"');
+                i += 1 + quotes;
+                continue;
+            }
+
+            // C# verbatim string check
+            if (isCSharp && ch == '@' && i + 1 < len && span[i + 1] == '"')
+            {
+                stringMode = StringMode.CSharpVerbatim;
+                sb.Append("@\"");
+                i += 2;
+                continue;
+            }
+            if (isCSharp && ch == '$' && i + 2 < len && span[i + 1] == '@' && span[i + 2] == '"')
+            {
+                stringMode = StringMode.CSharpVerbatim;
+                sb.Append("$@\"");
+                i += 3;
+                continue;
+            }
+            if (isCSharp && ch == '@' && i + 2 < len && span[i + 1] == '$' && span[i + 2] == '"')
+            {
+                stringMode = StringMode.CSharpVerbatim;
+                sb.Append("@$\"");
+                i += 3;
+                continue;
+            }
+
+            // Standard double quote string
             if (ch == '"')
             {
-                inString = true;
-                sb.Append(ch);
+                stringMode = StringMode.NormalDouble;
+                sb.Append('"');
                 i++;
                 continue;
             }
 
+            // Standard single quote/char
             if (ch == '\'')
             {
-                inChar = true;
-                sb.Append(ch);
+                stringMode = StringMode.NormalSingle;
+                sb.Append('\'');
                 i++;
                 continue;
             }
 
+            // Regular character
             sb.Append(ch);
             i++;
         }
@@ -345,10 +429,7 @@ public sealed class BrainCrusher : IBrainCrusher
 
     // =========================================================================
     // Whitespace collapse: multiple spaces → single, blank lines removed
-    // String interiors are preserved verbatim to avoid corrupting format strings,
-    // SQL queries, regex patterns, and other content where whitespace is semantic.
     // =========================================================================
-
     internal static string CollapseWhitespace(string stripped)
     {
         var result = new StringBuilder(stripped.Length);
@@ -456,5 +537,18 @@ public sealed class BrainCrusher : IBrainCrusher
         }
 
         return result.ToString();
+    }
+
+    private enum StringMode
+    {
+        None,
+        NormalDouble,
+        NormalSingle,
+        CSharpVerbatim,
+        CSharpRaw,
+        PythonRawDouble,
+        PythonRawSingle,
+        TripleQuoteDouble,
+        TripleQuoteSingle
     }
 }

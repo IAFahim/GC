@@ -127,8 +127,8 @@ public sealed class CliParser
     {
         _tokenMap = new Dictionary<string, OptionSpec>(StringComparer.OrdinalIgnoreCase);
         foreach (var spec in _options)
-        foreach (var token in spec.Tokens)
-            _tokenMap[token] = spec;
+            foreach (var token in spec.Tokens)
+                _tokenMap[token] = spec;
     }
 
     public Result<CliArguments> Parse(string[] args, GcConfiguration configuration)
@@ -150,7 +150,7 @@ public sealed class CliParser
             // After --, everything is a path
             if (onlyPaths)
             {
-                result.Paths = [..result.Paths, arg.Replace('\\', '/')];
+                result.Paths = [.. result.Paths, arg.Replace('\\', '/')];
                 continue;
             }
 
@@ -220,7 +220,7 @@ public sealed class CliParser
                 continue;
             }
 
-            result.Paths = [..result.Paths, arg.Replace('\\', '/')];
+            result.Paths = [.. result.Paths, arg.Replace('\\', '/')];
         }
 
         // Missing value for a single-value option
@@ -241,11 +241,11 @@ public sealed class CliParser
         {
             var split = arg.Split(',', StringSplitOptions.RemoveEmptyEntries);
             foreach (var ext in split)
-                result.Extensions = [..result.Extensions, ext.Trim().TrimStart('.').ToLowerInvariant()];
+                result.Extensions = [.. result.Extensions, ext.Trim().TrimStart('.').ToLowerInvariant()];
         }
         else
         {
-            result.Extensions = [..result.Extensions, arg.TrimStart('.').ToLowerInvariant()];
+            result.Extensions = [.. result.Extensions, arg.TrimStart('.').ToLowerInvariant()];
         }
     }
 }

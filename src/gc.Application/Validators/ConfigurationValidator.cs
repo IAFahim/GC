@@ -230,22 +230,6 @@ public sealed class ConfigurationValidator
     {
         if (string.IsNullOrWhiteSpace(size))
             return false;
-
-        size = size.Trim().ToUpperInvariant();
-
-        var hasValidSuffix = size.EndsWith("B") ||
-                             size.EndsWith("KB") ||
-                             size.EndsWith("MB") ||
-                             size.EndsWith("GB");
-
-        if (!hasValidSuffix)
-            return false;
-
-        if (size.Length > 2 && (size.EndsWith("KB") || size.EndsWith("MB") || size.EndsWith("GB")))
-            size = size[..^2];
-        else if (size.EndsWith("B"))
-            size = size[..^1];
-
-        return double.TryParse(size, out var value) && value > 0;
+        return gc.Domain.Common.MemorySizeParser.TryParse(size, out _);
     }
 }

@@ -31,9 +31,6 @@ public static class SafeFileWriter
                 await writer.FlushAsync();
             }
 
-            if (File.Exists(path))
-                File.Delete(path);
-
             File.Move(tmpPath, path, true);
         }
         catch
@@ -70,9 +67,6 @@ public static class SafeFileWriter
                 await fs.WriteAsync(content, ct);
                 await fs.FlushAsync();
             }
-
-            if (File.Exists(path))
-                File.Delete(path);
 
             File.Move(tmpPath, path, true);
         }

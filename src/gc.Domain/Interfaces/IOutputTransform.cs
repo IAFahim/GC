@@ -1,8 +1,10 @@
+using System.Threading.Tasks;
+
 namespace gc.Domain.Interfaces;
 
 /// <summary>
 ///     Defines a transform that can be applied to content as part of an output pipeline.
-///     Each transform takes a string and returns a transformed result.
+///     Each transform takes a string and returns a transformed result asynchronously.
 /// </summary>
 public interface IOutputTransform
 {
@@ -12,11 +14,12 @@ public interface IOutputTransform
     string Name { get; }
 
     /// <summary>
-    ///     Applies this transform to the input content.
+    ///     Applies this transform to the input content asynchronously.
     /// </summary>
     /// <param name="input">The input string to transform.</param>
+    /// <param name="ct">The cancellation token.</param>
     /// <returns>The transform result with output, legend, and metadata.</returns>
-    TransformResult Transform(string input);
+    Task<TransformResult> TransformAsync(string input, System.Threading.CancellationToken ct = default);
 }
 
 /// <summary>
@@ -29,17 +32,3 @@ public readonly record struct TransformResult(
     string Output,
     string Legend,
     int TokensSaved);
-
-/// <summary>
-///     Marker interface for transforms that produce their legend inline.
-/// </summary>
-public interface ILegendlessTransform : IOutputTransform
-{
-}
-
-/// <summary>
-///     Marker interface for transforms that must run last in a pipeline.
-/// </summary>
-public interface ICompressTransform : IOutputTransform
-{
-}

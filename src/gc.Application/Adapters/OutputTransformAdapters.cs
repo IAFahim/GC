@@ -1,4 +1,7 @@
+using System.Collections.Generic;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using gc.Application.Services;
 using gc.Domain.Interfaces;
 
@@ -18,10 +21,10 @@ public sealed class BrainCrusherAdapter : IOutputTransform
 
     public string Name => "BrainCrusher";
 
-    public TransformResult Transform(string input)
+    public Task<TransformResult> TransformAsync(string input, CancellationToken ct = default)
     {
         var crushed = _inner.Crush(input);
-        return new TransformResult(crushed, string.Empty, 0);
+        return Task.FromResult(new TransformResult(crushed, string.Empty, 0));
     }
 }
 
@@ -39,18 +42,18 @@ public sealed class DynamicCompressorAdapter : IOutputTransform
 
     public string Name => "DynamicCompressor";
 
-    public TransformResult Transform(string input)
+    public Task<TransformResult> TransformAsync(string input, CancellationToken ct = default)
     {
         var result = _inner.Compress(input);
-        return new TransformResult(result.Output, result.Legend, result.TokensSaved);
+        return Task.FromResult(new TransformResult(result.Output, result.Legend, result.TokensSaved));
     }
 }
 
 /// <summary>
-///     Adapter that wraps SqzCompressionService to implement ICompressTransform.
+///     Adapter that wraps SqzCompressionService to implement IOutputTransform.
 ///     Must run last in the pipeline since sqz is an external compression tool.
 /// </summary>
-public sealed class SqzCompressionAdapter : ICompressTransform
+public sealed class SqzCompressionAdapter : IOutputTransform
 {
     private readonly SqzCompressionService _inner;
     private readonly bool _noCache;
@@ -62,15 +65,6 @@ public sealed class SqzCompressionAdapter : ICompressTransform
     }
 
     public string Name => "SqzCompression";
-
-    public TransformResult Transform(string input)
-    {
-        // Sqz is async, so we use GetAwaiter().GetResult() in the sync interface.
-        // This is safe because the pipeline only runs it from WriteOutputAsync
-        // which is already async.
-        var compressed = _inner.CompressAsync(input, _noCache).GetAwaiter().GetResult();
-        return new TransformResult(compressed, string.Empty, 0);
-    }
 
     public async Task<TransformResult> TransformAsync(string input, CancellationToken ct = default)
     {
@@ -93,28 +87,7 @@ public sealed class OutputPipeline
     }
 
     /// <summary>
-    ///     Applies all transforms sequentially, accumulating legend text.
-    /// </summary>
-    public PipelineResult Apply(string input)
-    {
-        var current = input;
-        var legendBuilder = new StringBuilder();
-        var totalTokensSaved = 0;
-
-        foreach (var transform in _transforms)
-        {
-            var result = transform.Transform(current);
-            if (!string.IsNullOrEmpty(result.Legend))
-                legendBuilder.AppendLine(result.Legend);
-            totalTokensSaved += result.TokensSaved;
-            current = result.Output;
-        }
-
-        return new PipelineResult(current, legendBuilder.ToString(), totalTokensSaved);
-    }
-
-    /// <summary>
-    ///     Applies all transforms sequentially with async support for the final sqz transform.
+    ///     Applies all transforms sequentially with async support.
     /// </summary>
     public async Task<PipelineResult> ApplyAsync(string input, CancellationToken ct = default)
     {
@@ -123,22 +96,13 @@ public sealed class OutputPipeline
         var totalTokensSaved = 0;
 
         foreach (var transform in _transforms)
-            if (transform is SqzCompressionAdapter sqzAdapter)
-            {
-                var result = await sqzAdapter.TransformAsync(current, ct);
-                if (!string.IsNullOrEmpty(result.Legend))
-                    legendBuilder.AppendLine(result.Legend);
-                totalTokensSaved += result.TokensSaved;
-                current = result.Output;
-            }
-            else
-            {
-                var result = transform.Transform(current);
-                if (!string.IsNullOrEmpty(result.Legend))
-                    legendBuilder.AppendLine(result.Legend);
-                totalTokensSaved += result.TokensSaved;
-                current = result.Output;
-            }
+        {
+            var result = await transform.TransformAsync(current, ct);
+            if (!string.IsNullOrEmpty(result.Legend))
+                legendBuilder.AppendLine(result.Legend);
+            totalTokensSaved += result.TokensSaved;
+            current = result.Output;
+        }
 
         return new PipelineResult(current, legendBuilder.ToString(), totalTokensSaved);
     }

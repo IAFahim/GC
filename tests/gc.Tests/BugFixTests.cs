@@ -142,9 +142,9 @@ public class BugFixTests
     {
         // Arrange
         var config1 = new LimitsConfiguration
-            { MaxFileSize = "500KB", MaxClipboardSize = "2MB", MaxMemoryBytes = "100MB" };
+        { MaxFileSize = "500KB", MaxClipboardSize = "2MB", MaxMemoryBytes = "100MB" };
         var config2 = new LimitsConfiguration
-            { MaxFileSize = "1GB", MaxClipboardSize = "500MB", MaxMemoryBytes = "10GB" };
+        { MaxFileSize = "1GB", MaxClipboardSize = "500MB", MaxMemoryBytes = "10GB" };
 
         // Act & Assert
         Assert.Equal(500 * 1024, config1.GetMaxFileSizeBytes());

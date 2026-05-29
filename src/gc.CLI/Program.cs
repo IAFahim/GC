@@ -42,6 +42,13 @@ public static class Program
         }
 
         var cliArgs = parseResult.Value!;
+
+        // Validate shard argument early
+        if (cliArgs.ShardError != null && cliArgs.ShardInfo == null)
+        {
+            logger.Error($"Invalid --shard value '{cliArgs.ShardError}'. Expected format: N.M where N ≤ M (e.g. 1.3, 2.5)");
+            return 1;
+        }
         if (cliArgs.Debug) logger.Level = LogLevel.Debug;
         else if (cliArgs.Verbose) logger.Level = LogLevel.Info;
 

@@ -71,4 +71,6 @@ public sealed class CliArguments
     public string? ExportSchema { get; set; }
 
     public ShardInfo? ShardInfo { get; set; }
+
+    public string? ShardError { get; set; }
 }

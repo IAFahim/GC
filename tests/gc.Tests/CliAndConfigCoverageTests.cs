@@ -306,6 +306,6 @@ public sealed class ConfigurationServiceTests
 
         // The JSON is logged, not returned; verify it was logged
         Assert.Contains(logger.Messages, m =>
-            m.Level == LogLevel.Info && m.Message.Contains("\"Version\""));
+            m.Level == LogLevel.Info && m.Message.Contains("version"));
     }
 }

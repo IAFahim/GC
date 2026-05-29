@@ -91,6 +91,7 @@ public sealed class CliParser
         new(["--shard"], OptionKind.SingleValue, (a, v) =>
         {
             if (v != null) a.ShardInfo = ShardInfo.TryParse(v);
+            if (a.ShardInfo == null) a.ShardError = v ?? "(empty)";
         }),
 
         // ── Multi-value options (accumulate) ──

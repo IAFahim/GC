@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using gc.Domain.Models.Configuration;
 
 namespace gc.Application.Services;
 
@@ -65,6 +66,6 @@ public sealed class ProfileReporter
                 kvp => TimeSpan.FromTicks(kvp.Value).TotalMilliseconds),
             ["metrics"] = _metrics
         };
-        return JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(data, GcJsonSerializerContext.Default.DictionaryStringObject);
     }
 }

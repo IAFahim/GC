@@ -40,33 +40,11 @@ public sealed class ConfigurationService
 
     private async Task<Result> WriteDefaultConfigAsync(string configPath)
     {
-        var defaultConfig = new
-        {
-            version = "1.0.0",
-            limits = new
-            {
-                maxFileSize = "1MB",
-                maxClipboardSize = "10MB",
-                maxMemoryBytes = "100MB",
-                maxFiles = 100000
-            },
-            discovery = new
-            {
-                mode = "auto",
-                useGit = true,
-                followSymlinks = false
-            },
-            markdown = new
-            {
-                fence = "```",
-                projectStructureHeader = "_Project Structure:_ ",
-                fileHeaderTemplate = "## File: {path}"
-            }
-        };
+        var defaultConfig = new DefaultConfigOptions();
 
         try
         {
-            var json = JsonSerializer.Serialize(defaultConfig, new JsonSerializerOptions { WriteIndented = true });
+            var json = JsonSerializer.Serialize(defaultConfig, GcJsonSerializerContext.Default.DefaultConfigOptions);
             await File.WriteAllTextAsync(configPath, json, new UTF8Encoding(false));
             _logger.Info($"✓ Configuration file created: {configPath}");
             return Result.Success();
@@ -91,7 +69,7 @@ public sealed class ConfigurationService
         try
         {
             var options = new JsonSerializerOptions { WriteIndented = true };
-            var json = JsonSerializer.Serialize(config, options);
+            var json = JsonSerializer.Serialize(config, GcJsonSerializerContext.Default.GcConfiguration);
             _logger.Info(json);
             return Result.Success();
         }

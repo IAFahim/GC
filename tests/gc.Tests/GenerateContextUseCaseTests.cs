@@ -143,7 +143,7 @@ public class GenerateContextUseCaseTests
         var reader = new MockFileReader();
         var generator = new MockMarkdownGenerator();
         var clipboard = new MockClipboardService();
-        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
+        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
         return (useCase, discovery, generator, clipboard, logger);
     }
 

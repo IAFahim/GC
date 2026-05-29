@@ -119,8 +119,8 @@ public class BugFixTests
         var config = BuiltInPresets.GetDefaultConfiguration();
         config = config with { Limits = config.Limits with { MaxMemoryBytes = "1KB" } }; // Very small limit
 
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
-        var fileEntry = new FileEntry("large.txt", "txt", "text", 2000);
+        var generator = new MarkdownGenerator(new ConsoleLogger());
+        var fileEntry = new FileEntry(Root: "", Relative: "large.txt", Extension: "txt", Language: "text", Size: 2000);
         var fileContents = new List<FileContent>
         {
             new(fileEntry, new string('x', 2000), 2000)
@@ -261,8 +261,8 @@ public class BugFixTests
     {
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
-        var fileEntry = new FileEntry("test.cs", "cs", "cs", 20);
+        var generator = new MarkdownGenerator(new ConsoleLogger());
+        var fileEntry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: 20);
         var fileContents = new List<FileContent>
         {
             new(fileEntry, "Console.WriteLine();", 20)
@@ -290,9 +290,9 @@ public class BugFixTests
     {
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator(new ConsoleLogger());
         var content = "line1\nline2";
-        var fileEntry = new FileEntry("test.txt", "txt", "text", content.Length);
+        var fileEntry = new FileEntry(Root: "", Relative: "test.txt", Extension: "txt", Language: "text", Size: content.Length);
         var fileContents = new List<FileContent>
         {
             new(fileEntry, content, content.Length)
@@ -324,9 +324,9 @@ public class BugFixTests
     {
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
-        var entry1 = new FileEntry("file1.cs", "cs", "cs", 15);
-        var entry2 = new FileEntry("file2.js", "js", "javascript", 20);
+        var generator = new MarkdownGenerator(new ConsoleLogger());
+        var entry1 = new FileEntry(Root: "", Relative: "file1.cs", Extension: "cs", Language: "cs", Size: 15);
+        var entry2 = new FileEntry(Root: "", Relative: "file2.js", Extension: "js", Language: "javascript", Size: 20);
         var fileContents = new List<FileContent>
         {
             new(entry1, "class Test { }", 15),
@@ -353,8 +353,8 @@ public class BugFixTests
     {
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
-        var entry = new FileEntry("test.cs", "cs", "cs", 8);
+        var generator = new MarkdownGenerator(new ConsoleLogger());
+        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: 8);
         var fileContents = new List<FileContent>
         {
             new(entry, "// test", 8)
@@ -380,9 +380,9 @@ public class BugFixTests
     {
         // Arrange
         var config = BuiltInPresets.GetDefaultConfiguration();
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator(new ConsoleLogger());
         var multibyteContent = "Hello 世界 🌍"; // Mix of ASCII, Chinese, emoji
-        var entry = new FileEntry("unicode.txt", "txt", "text", Encoding.UTF8.GetByteCount(multibyteContent));
+        var entry = new FileEntry(Root: "", Relative: "unicode.txt", Extension: "txt", Language: "text", Size: Encoding.UTF8.GetByteCount(multibyteContent));
         var fileContents = new List<FileContent>
         {
             new(entry, multibyteContent, Encoding.UTF8.GetByteCount(multibyteContent))

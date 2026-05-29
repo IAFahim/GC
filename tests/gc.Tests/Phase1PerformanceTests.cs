@@ -260,11 +260,11 @@ public class Phase1PerformanceTests : IDisposable
     public async Task Optimization12_StringBuilderReuse_LineExclusion()
     {
         // Verify line exclusion still works with pooled StringBuilder
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var content = "// comment 1\ncode line\n// comment 2\nmore code\n// comment 3";
         var entries = new List<FileContent>
         {
-            new(new FileEntry("test.cs", "cs", "cs", content.Length), content, content.Length)
+            new(new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: content.Length), content, content.Length)
         };
 
         using var ms = new MemoryStream();
@@ -282,12 +282,12 @@ public class Phase1PerformanceTests : IDisposable
     public async Task Optimization12_StringBuilderReuse_MultipleFilesInSequence()
     {
         // Verify the pooled StringBuilder works correctly across multiple files
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var entries = Enumerable.Range(0, 10).Select(i =>
         {
             var c = $"// header {i}\ncode_{i}_line1\n// footer {i}\ncode_{i}_line2";
             return new FileContent(
-                new FileEntry($"file{i}.cs", "cs", "cs", c.Length), c, c.Length);
+                new FileEntry(Root: "", Relative: $"file{i}.cs", Extension: "cs", Language: "cs", Size: c.Length), c, c.Length);
         }).ToList();
 
         using var ms = new MemoryStream();
@@ -312,11 +312,11 @@ public class Phase1PerformanceTests : IDisposable
     public async Task Optimization12_StringBuilderReuse_EmptyLineExclusion()
     {
         // Verify excluding blank lines works with pooled SB
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var content = "line1\n\nline2\n\n\nline3";
         var entries = new List<FileContent>
         {
-            new(new FileEntry("test.txt", "txt", "text", content.Length), content, content.Length)
+            new(new FileEntry(Root: "", Relative: "test.txt", Extension: "txt", Language: "text", Size: content.Length), content, content.Length)
         };
 
         using var ms = new MemoryStream();
@@ -334,13 +334,13 @@ public class Phase1PerformanceTests : IDisposable
     [Fact]
     public async Task Optimization12_Performance_LineExclusion_200Files()
     {
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var entries = Enumerable.Range(0, 200).Select(i =>
         {
             var c = string.Join("\n", Enumerable.Range(0, 20).Select(j =>
                 j % 3 == 0 ? $"// comment {j}" : $"code_line_{j}"));
             return new FileContent(
-                new FileEntry($"file{i}.cs", "cs", "cs", c.Length), c, c.Length);
+                new FileEntry(Root: "", Relative: $"file{i}.cs", Extension: "cs", Language: "cs", Size: c.Length), c, c.Length);
         }).ToList();
 
         // Warm up
@@ -403,10 +403,10 @@ public class Phase1PerformanceTests : IDisposable
         data[100] = 0x00; // null byte = binary
         await File.WriteAllBytesAsync(tmpFile, data);
 
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var entries = new List<FileContent>
         {
-            new(new FileEntry(tmpFile, "dat", "dat", -1), null, -1)
+            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "dat", Language: "dat", Size: -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -425,10 +425,10 @@ public class Phase1PerformanceTests : IDisposable
         var tmpFile = Path.Combine(_tempDir, "text_test.txt");
         await File.WriteAllTextAsync(tmpFile, "This is valid text content\nWith multiple lines\n");
 
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var entries = new List<FileContent>
         {
-            new(new FileEntry(tmpFile, "txt", "text", -1), null, -1)
+            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "txt", Language: "text", Size: -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -451,10 +451,10 @@ public class Phase1PerformanceTests : IDisposable
         data[500] = 0x00; // null byte in first 4096 bytes
         await File.WriteAllBytesAsync(tmpFile, data);
 
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var entries = new List<FileContent>
         {
-            new(new FileEntry(tmpFile, "bin", "bin", -1), null, -1)
+            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "bin", Language: "bin", Size: -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -479,10 +479,10 @@ public class Phase1PerformanceTests : IDisposable
         data[5000] = 0x00; // after the 4096-byte check window
         await File.WriteAllBytesAsync(tmpFile, data);
 
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var entries = new List<FileContent>
         {
-            new(new FileEntry(tmpFile, "txt", "text", -1), null, -1)
+            new(new FileEntry(Root: "", Relative: tmpFile, Extension: "txt", Language: "text", Size: -1), null, -1)
         };
 
         using var ms = new MemoryStream();
@@ -542,12 +542,12 @@ public class Phase1PerformanceTests : IDisposable
         Assert.True(entries.All(e => e.Size >= -1)); // Size populated or deferred for non-existent
 
         // Generate with line exclusion
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var contents = entries.Select(e =>
         {
             var fullPath = Path.Combine(filesDir, e.Path);
             return new FileContent(
-                new FileEntry(fullPath, e.Extension, e.Language, -1), null, -1);
+                new FileEntry(Root: "", Relative: fullPath, Extension: e.Extension, Language: e.Language, Size: -1), null, -1);
         }).ToList();
 
         using var ms = new MemoryStream();
@@ -568,13 +568,13 @@ public class Phase1PerformanceTests : IDisposable
     public async Task EndToEnd_Phase1_ByteCountStillAccurate()
     {
         // Verify all Phase 1 changes maintain byte count accuracy
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
 
         // In-memory with line exclusion (uses pooled SB)
         var content = "// skip\nkeep1\n// skip\nkeep2\n// skip\nkeep3";
         var entries = new List<FileContent>
         {
-            new(new FileEntry("test.cs", "cs", "cs", content.Length), content, content.Length)
+            new(new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: content.Length), content, content.Length)
         };
 
         using var ms = new MemoryStream();

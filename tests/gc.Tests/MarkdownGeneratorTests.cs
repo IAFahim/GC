@@ -28,8 +28,8 @@ public class MarkdownGeneratorTests
     [Fact]
     public async Task ExcludeLineIfStart_InMemory_FiltersCorrectly()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.cs", "cs", "cs", 100);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: 100);
         var content = "using System;\n// This is a comment\npublic class Test {\n  // Another comment\n}\n\n";
 
         var fileContents = new List<FileContent> { new(entry, content, content.Length) };
@@ -58,13 +58,13 @@ public class MarkdownGeneratorTests
     [Fact]
     public async Task ExcludeLineIfStart_Streaming_FiltersCorrectly()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var tempFile = Path.GetTempFileName();
 
         try
         {
             await File.WriteAllTextAsync(tempFile, "using System;\r\n// A comment\npublic class Test {\n  // Another comment\r\n}");
-            var entry = new FileEntry(tempFile, "cs", "cs", 100);
+            var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "cs", Language: "cs", Size: 100);
 
             // Content is null so it falls back to streaming
             var fileContents = new List<FileContent> { new(entry, null, 100) };
@@ -98,8 +98,8 @@ public class MarkdownGeneratorTests
     [Fact]
     public async Task ProcessLineSequence_HandlesEmptyLine_WithNewlineExclude()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.cs", "cs", "cs", 100);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: 100);
         var content = "using System;\n\npublic class Test {}";
 
         var fileContents = new List<FileContent> { new(entry, content, content.Length) };
@@ -127,8 +127,8 @@ public class MarkdownGeneratorTests
     [Fact]
     public async Task GenerateMarkdownStreamingAsync_EnforcesMemoryLimit_InMemory()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.cs", "cs", "cs", 5000);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "cs", Size: 5000);
         var content = new string('A', 5000);
 
         var config = _config with { Limits = _config.Limits with { MaxMemoryBytes = "1KB" } };
@@ -150,14 +150,14 @@ public class MarkdownGeneratorTests
     [Fact]
     public async Task GenerateMarkdownStreamingAsync_EnforcesMemoryLimit_Streaming()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var tempFile = Path.GetTempFileName();
 
         try
         {
             var content = new string('A', 5000);
             await File.WriteAllTextAsync(tempFile, content);
-            var entry = new FileEntry(tempFile, "cs", "cs", 5000);
+            var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "cs", Language: "cs", Size: 5000);
 
             var config = _config with { Limits = _config.Limits with { MaxMemoryBytes = "1KB" } };
 

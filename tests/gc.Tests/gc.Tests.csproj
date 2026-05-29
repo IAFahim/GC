@@ -30,6 +30,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="TestData\**\*.cs" />
+    <None Include="TestData\**\*.cs" CopyToOutputDirectory="PreserveNewest" />
     <None Update="TestData\**\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

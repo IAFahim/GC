@@ -9,35 +9,45 @@ public sealed class AhoCorasick
     private readonly int[] _gotoFunc;
     private readonly int[] _fail;
     private readonly int[] _output;
-    private readonly string[] _patterns;
     private readonly int _alphabetSize;
     private readonly int _root;
     private readonly int _nodeCount;
 
     private readonly Dictionary<char, int> _charMap;
-    private readonly char[] _reverseCharMap;
 
     public AhoCorasick(string[] patterns)
     {
-        _patterns = patterns;
+        // Filter out empty/null patterns and keep only non-empty ones
+        var validPatterns = patterns.Where(p => !string.IsNullOrEmpty(p)).ToArray();
+
+        // Handle empty pattern set - return a no-op automaton
+        if (validPatterns.Length == 0)
+        {
+            _alphabetSize = 0;
+            _gotoFunc = Array.Empty<int>();
+            _fail = new[] { 0 };
+            _output = new[] { -1 };
+            _root = 0;
+            _nodeCount = 1;
+            _charMap = new Dictionary<char, int>();
+            return;
+        }
 
         var chars = new HashSet<char>();
-        foreach (var p in patterns)
+        foreach (var p in validPatterns)
             foreach (var c in p)
                 chars.Add(c);
 
         _charMap = new Dictionary<char, int>(chars.Count);
-        _reverseCharMap = new char[chars.Count];
         var idx = 0;
         foreach (var c in chars.OrderBy(c => c))
         {
             _charMap[c] = idx;
-            _reverseCharMap[idx] = c;
             idx++;
         }
         _alphabetSize = chars.Count;
 
-        var maxNodes = patterns.Sum(p => p.Length) + 1;
+        var maxNodes = validPatterns.Sum(p => p.Length) + 1;
         _gotoFunc = new int[maxNodes * _alphabetSize];
         Array.Fill(_gotoFunc, -1);
         _fail = new int[maxNodes];
@@ -47,10 +57,10 @@ public sealed class AhoCorasick
         _root = 0;
         _nodeCount = 1;
 
-        for (var i = 0; i < patterns.Length; i++)
+        for (var i = 0; i < validPatterns.Length; i++)
         {
             var currentState = _root;
-            foreach (var c in patterns[i])
+            foreach (var c in validPatterns[i])
             {
                 var ci = _charMap[c];
                 var next = Goto(currentState, ci);
@@ -99,55 +109,6 @@ public sealed class AhoCorasick
                 }
             }
         }
-    }
-
-    public string ReplaceAll(string input, string[] replacements)
-    {
-        if (input.Length == 0) return input;
-
-        var sb = new StringBuilder(input.Length);
-        var i = 0;
-        var len = input.Length;
-
-        while (i < len)
-        {
-            var state = _root;
-            var lastMatch = -1;
-            var lastMatchEnd = -1;
-            var j = i;
-
-            while (j < len)
-            {
-                if (!_charMap.TryGetValue(input[j], out var ci))
-                    break;
-
-                var next = Goto(state, ci);
-                if (next == -1)
-                    break;
-
-                state = next;
-                j++;
-
-                if (_output[state] != -1)
-                {
-                    lastMatch = _output[state];
-                    lastMatchEnd = j;
-                }
-            }
-
-            if (lastMatch != -1)
-            {
-                sb.Append(replacements[lastMatch]);
-                i = lastMatchEnd;
-            }
-            else
-            {
-                sb.Append(input[i]);
-                i++;
-            }
-        }
-
-        return sb.ToString();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

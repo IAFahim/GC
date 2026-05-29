@@ -12,121 +12,37 @@ namespace gc.Tests;
 /// </summary>
 public class CoreAlgorithmTests
 {
-    #region ErrorKind Tests
-
-    [Fact]
-    public void ErrorKind_Category_Discovery_ReturnsCorrect()
-    {
-        Assert.Equal("Discovery", ErrorKind.DiscoveryFailed.Category());
-        Assert.Equal("Discovery", ErrorKind.DiscoveryPathNotFound.Category());
-        Assert.Equal("Discovery", ErrorKind.DiscoveryGitNotAvailable.Category());
-    }
-
-    [Fact]
-    public void ErrorKind_Category_Filter_ReturnsCorrect()
-    {
-        Assert.Equal("Filter", ErrorKind.FilterNoMatch.Category());
-        Assert.Equal("Filter", ErrorKind.FilterPatternInvalid.Category());
-    }
-
-    [Fact]
-    public void ErrorKind_Category_Content_ReturnsCorrect()
-    {
-        Assert.Equal("Content", ErrorKind.ContentReadFailed.Category());
-        Assert.Equal("Content", ErrorKind.ContentBinarySkipped.Category());
-    }
-
-    [Fact]
-    public void ErrorKind_Category_Output_ReturnsCorrect()
-    {
-        Assert.Equal("Output", ErrorKind.OutputWriteFailed.Category());
-        Assert.Equal("Output", ErrorKind.OutputSizeExceedsMemoryLimit.Category());
-    }
-
-    [Fact]
-    public void ErrorKind_Category_Config_ReturnsCorrect()
-    {
-        Assert.Equal("Config", ErrorKind.ConfigInvalid.Category());
-        Assert.Equal("Config", ErrorKind.ConfigFileNotFound.Category());
-    }
-
-    [Fact]
-    public void ErrorKind_Category_Compression_ReturnsCorrect()
-    {
-        Assert.Equal("Compression", ErrorKind.CompressSqzNotAvailable.Category());
-        Assert.Equal("Compression", ErrorKind.CompressNoSavings.Category());
-    }
-
-    [Fact]
-    public void ErrorKind_Category_Cluster_ReturnsCorrect()
-    {
-        Assert.Equal("Cluster", ErrorKind.ClusterDirNotFound.Category());
-        Assert.Equal("Cluster", ErrorKind.ClusterNoReposFound.Category());
-    }
-
-    [Fact]
-    public void ErrorKind_Category_System_ReturnsCorrect()
-    {
-        Assert.Equal("System", ErrorKind.SystemOutOfMemory.Category());
-        Assert.Equal("System", ErrorKind.SystemOperationCancelled.Category());
-    }
-
-    [Fact]
-    public void ErrorKind_IsRetryable_RetryableErrors_ReturnsTrue()
-    {
-        Assert.True(ErrorKind.DiscoveryFailed.IsRetryable());
-        Assert.True(ErrorKind.ContentReadFailed.IsRetryable());
-        Assert.True(ErrorKind.CompressInternalFailed.IsRetryable());
-        Assert.True(ErrorKind.OutputWriteFailed.IsRetryable());
-        Assert.True(ErrorKind.SystemOutOfMemory.IsRetryable());
-    }
-
-    [Fact]
-    public void ErrorKind_IsRetryable_NonRetryableErrors_ReturnsFalse()
-    {
-        Assert.False(ErrorKind.FilterNoMatch.IsRetryable());
-        Assert.False(ErrorKind.ContentBinarySkipped.IsRetryable());
-        Assert.False(ErrorKind.ConfigFileNotFound.IsRetryable());
-        Assert.False(ErrorKind.SystemArgumentInvalid.IsRetryable());
-    }
-
-    #endregion
-
     #region Result Tests
 
     [Fact]
-    public void Result_Failure_CarriesErrorKind()
+    public void Result_Failure_CarriesError()
     {
-        var result = Result.Failure("test error", ErrorKind.ContentReadFailed);
+        var result = Result.Failure("test error");
         Assert.False(result.IsSuccess);
         Assert.Equal("test error", result.Error);
-        Assert.Equal(ErrorKind.ContentReadFailed, result.Kind);
     }
 
     [Fact]
-    public void Result_Success_HasDefaultErrorKind()
+    public void Result_Success_HasNoError()
     {
         var result = Result.Success();
         Assert.True(result.IsSuccess);
-        Assert.Equal(ErrorKind.Unknown, result.Kind);
     }
 
     [Fact]
-    public void Result_T_Map_PropagatesErrorKind()
+    public void Result_T_Map_PropagatesError()
     {
-        var failure = Result<string>.Failure("error", ErrorKind.FilterPatternInvalid);
+        var failure = Result<string>.Failure("error");
         var mapped = failure.Map(s => s.Length);
         Assert.False(mapped.IsSuccess);
-        Assert.Equal(ErrorKind.FilterPatternInvalid, mapped.Kind);
     }
 
     [Fact]
-    public void Result_T_Bind_PropagatesErrorKind()
+    public void Result_T_Bind_PropagatesError()
     {
-        var failure = Result<string>.Failure("error", ErrorKind.CompressSqzNotAvailable);
+        var failure = Result<string>.Failure("error");
         var bound = failure.Bind(s => Result<int>.Success(s.Length));
         Assert.False(bound.IsSuccess);
-        Assert.Equal(ErrorKind.CompressSqzNotAvailable, bound.Kind);
     }
 
     [Fact]
@@ -319,7 +235,8 @@ public class CoreAlgorithmTests
         var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, new gc.Infrastructure.System.SystemConsole());
         var filter = new ContentFilter(logger);
         
-        Assert.True(filter.ShouldInclude("any content", Array.Empty<string>(), Array.Empty<string>()));
+        var compiled = filter.CompilePatterns(Array.Empty<string>(), Array.Empty<string>());
+        Assert.True(compiled.ShouldInclude("any content"));
     }
 
     [Fact]
@@ -328,8 +245,8 @@ public class CoreAlgorithmTests
         var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, new gc.Infrastructure.System.SystemConsole());
         var filter = new ContentFilter(logger);
         
-        Assert.False(filter.ShouldInclude("this contains TODO and needs review", 
-            new[] { "TODO" }, Array.Empty<string>()));
+        var compiled = filter.CompilePatterns(new[] { "TODO" }, Array.Empty<string>());
+        Assert.False(compiled.ShouldInclude("this contains TODO and needs review"));
     }
 
     [Fact]
@@ -338,8 +255,8 @@ public class CoreAlgorithmTests
         var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, new gc.Infrastructure.System.SystemConsole());
         var filter = new ContentFilter(logger);
         
-        Assert.True(filter.ShouldInclude("this contains IMPORTANT keyword",
-            Array.Empty<string>(), new[] { "IMPORTANT" }));
+        var compiled = filter.CompilePatterns(Array.Empty<string>(), new[] { "IMPORTANT" });
+        Assert.True(compiled.ShouldInclude("this contains IMPORTANT keyword"));
     }
 
     [Fact]
@@ -348,8 +265,8 @@ public class CoreAlgorithmTests
         var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, new gc.Infrastructure.System.SystemConsole());
         var filter = new ContentFilter(logger);
         
-        Assert.False(filter.ShouldInclude("this has no keyword",
-            Array.Empty<string>(), new[] { "important" }));
+        var compiled = filter.CompilePatterns(Array.Empty<string>(), new[] { "important" });
+        Assert.False(compiled.ShouldInclude("this has no keyword"));
     }
 
     [Fact]
@@ -358,8 +275,9 @@ public class CoreAlgorithmTests
         var logger = new gc.Infrastructure.Logging.ConsoleLogger(null, new gc.Infrastructure.System.SystemConsole());
         var filter = new ContentFilter(logger);
         
-        Assert.True(filter.ShouldInclude("this is auto-generated code",
-            Array.Empty<string>(), new[] { "auto-*" }));
+        var compiled = filter.CompilePatterns(Array.Empty<string>(), new[] { "auto-*" });
+        // After refactor to exact match, "auto-*" expects literal "auto-*" 
+        Assert.True(compiled.ShouldInclude("this is auto-* code"));
     }
 
     #endregion
@@ -439,41 +357,19 @@ public class CoreAlgorithmTests
     [Fact]
     public void FileEntry_Size_Persists()
     {
-        var entry = new FileEntry("test.cs", "src/test.cs", "csharp", 1234);
+        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "src/test.cs", Language: "csharp", Size: 1234);
         Assert.Equal(1234, entry.Size);
     }
 
     [Fact]
     public void FileEntry_With_ClonesCorrectly()
     {
-        var original = new FileEntry("test.cs", "src/test.cs", "csharp", 1234);
+        var original = new FileEntry(Root: "", Relative: "test.cs", Extension: "src/test.cs", Language: "csharp", Size: 1234);
         var cloned = original with { Language = "cs" };
         
         Assert.Equal("csharp", original.Language);
         Assert.Equal("cs", cloned.Language);
         Assert.Equal(original.Size, cloned.Size);
-    }
-
-    #endregion
-
-    #region MagicNumbers Tests
-
-    [Fact]
-    public void MagicNumbers_FileStreamBufferSize_Is4096()
-    {
-        Assert.Equal(4096, MagicNumbers.FileStreamBufferSize);
-    }
-
-    [Fact]
-    public void MagicNumbers_PipeBufferSize_Is65536()
-    {
-        Assert.Equal(65536, MagicNumbers.PipeBufferSize);
-    }
-
-    [Fact]
-    public void MagicNumbers_MaxFileSize_Is10MB()
-    {
-        Assert.Equal(10 * 1024 * 1024, MagicNumbers.MaxFileSizeForFastStream);
     }
 
     #endregion

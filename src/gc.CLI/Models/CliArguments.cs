@@ -2,66 +2,72 @@ using gc.Domain.Models.Configuration;
 
 namespace gc.CLI.Models;
 
-public sealed record CliArguments
+/// <summary>
+/// Mutable CLI argument bag — populated by the declarative CliParser table.
+/// Properties use { get; set; } so the OptionSpec.Apply lambdas can write them.
+/// </summary>
+public sealed class CliArguments
 {
-    public string[] Paths { get; init; } = Array.Empty<string>();
-    public string[] Extensions { get; init; } = Array.Empty<string>();
-    public string[] Excludes { get; init; } = Array.Empty<string>();
-    public string[] Presets { get; init; } = Array.Empty<string>();
-    public string[] ExcludeLineIfStart { get; init; } = Array.Empty<string>();
-    public string OutputFile { get; init; } = string.Empty;
-    public bool ShowHelp { get; init; }
-    public bool ShowVersion { get; init; }
-    public bool RunTests { get; init; }
-    public bool RunRealBenchmark { get; init; }
-    public long MaxMemoryBytes { get; init; }
-    public bool Verbose { get; init; }
-    public bool Debug { get; init; }
-    public bool InitConfig { get; init; }
-    public bool ValidateConfig { get; init; }
-    public bool DumpConfig { get; init; }
-    public bool Append { get; init; }
-    public bool NoSort { get; init; }
-    public bool Force { get; init; }
-    public int? Depth { get; init; }
-    public bool ShowHistory { get; init; }
-    public int? HistoryIndex { get; init; }
-    public GcConfiguration? Configuration { get; init; }
+    public string[] Paths { get; set; } = [];
+    public string[] Extensions { get; set; } = [];
+    public string[] Excludes { get; set; } = [];
+    public string[] Presets { get; set; } = [];
+    public string[] ExcludeLineIfStart { get; set; } = [];
+    public string OutputFile { get; set; } = string.Empty;
+    public bool ShowHelp { get; set; }
+    public bool ShowVersion { get; set; }
+    public bool RunTests { get; set; }
+    public bool RunRealBenchmark { get; set; }
+    public long MaxMemoryBytes { get; set; }
+    public bool Verbose { get; set; }
+    public bool Debug { get; set; }
+    public bool InitConfig { get; set; }
+    public bool ValidateConfig { get; set; }
+    public bool DumpConfig { get; set; }
+    public bool Append { get; set; }
+    public bool NoSort { get; set; }
+    public bool Force { get; set; }
+    public int? Depth { get; set; }
+    public bool ShowHistory { get; set; }
+    public int? HistoryIndex { get; set; }
+    public GcConfiguration? Configuration { get; set; }
 
-    public bool BrainMode { get; init; }
+    public bool BrainMode { get; set; }
 
-    public bool Compress { get; init; }
+    public bool Compress { get; set; }
 
-    public bool NoCache { get; init; }
+    public bool NoCache { get; set; }
 
-    public string[] ExcludePathPatterns { get; init; } = Array.Empty<string>();
-    public string[] IncludePathPatterns { get; init; } = Array.Empty<string>();
-    public string[] ExcludeContentPatterns { get; init; } = Array.Empty<string>();
-    public string[] IncludeContentPatterns { get; init; } = Array.Empty<string>();
+    public string[] ExcludePathPatterns { get; set; } = [];
+    public string[] IncludePathPatterns { get; set; } = [];
+    public string[] ExcludeContentPatterns { get; set; } = [];
+    public string[] IncludeContentPatterns { get; set; } = [];
 
-    public bool DryRun { get; init; }
+    public bool DryRun { get; set; }
 
-    public bool CountTokens { get; init; }
+    public bool CountTokens { get; set; }
 
-    public bool Profile { get; init; }
+    public bool Profile { get; set; }
 
-    public string? ProfileOutput { get; init; }
+    public string? ProfileOutput { get; set; }
 
-    public bool Cluster { get; init; }
+    public bool Cluster { get; set; }
 
-    public string ClusterDir { get; init; } = string.Empty;
+    public string ClusterDir { get; set; } = string.Empty;
 
-    public int? ClusterDepth { get; init; }
+    public int? ClusterDepth { get; set; }
 
-    public bool UnsafeDirectWrite { get; init; }
+    public bool UnsafeDirectWrite { get; set; }
 
-    public bool ShowStats { get; init; }
+    public bool ShowStats { get; set; }
 
-    public string? StatsOutput { get; init; }
+    public string? StatsOutput { get; set; }
 
-    public string? ChangedSince { get; init; }
+    public string? ChangedSince { get; set; }
 
-    public string? ExportSchema { get; init; }
+    public string? ExplainFilter { get; set; }
 
-    public string? ExplainFilter { get; init; }
+    public string? ExportSchema { get; set; }
+
+    public gc.Domain.Models.ShardInfo? ShardInfo { get; set; }
 }

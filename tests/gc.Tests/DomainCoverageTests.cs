@@ -287,8 +287,8 @@ public class FileEntryTests
     [Fact]
     public void FileEntry_RecordStructEquality()
     {
-        var a = new FileEntry("src/foo.cs", ".cs", "csharp", 100);
-        var b = new FileEntry("src/foo.cs", ".cs", "csharp", 100);
+        var a = new FileEntry(Root: "", Relative: "src/foo.cs", Extension: ".cs", Language: "csharp", Size: 100);
+        var b = new FileEntry(Root: "", Relative: "src/foo.cs", Extension: ".cs", Language: "csharp", Size: 100);
         Assert.Equal(a, b);
     }
 
@@ -307,7 +307,7 @@ public class FileContentTests
     [Fact]
     public void FileContent_RecordStructEquality()
     {
-        var entry = new FileEntry("a.cs", ".cs", "csharp", 10);
+        var entry = new FileEntry(Root: "", Relative: "a.cs", Extension: ".cs", Language: "csharp", Size: 10);
         var a = new FileContent(entry, "hello", 5);
         var b = new FileContent(entry, "hello", 5);
         Assert.Equal(a, b);
@@ -316,7 +316,7 @@ public class FileContentTests
     [Fact]
     public void FileContent_EmptyStringContent()
     {
-        var entry = new FileEntry("a.cs", ".cs", "csharp", 0);
+        var entry = new FileEntry(Root: "", Relative: "a.cs", Extension: ".cs", Language: "csharp", Size: 0);
         var content = new FileContent(entry, "", 0);
         Assert.False(content.IsStreaming); // Content is "" not null
     }

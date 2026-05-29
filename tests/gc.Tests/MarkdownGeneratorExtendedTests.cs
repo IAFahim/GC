@@ -34,7 +34,7 @@ public class MarkdownGeneratorExtendedTests
     {
         // Entries with Path starting with '[' are virtual (cluster headers) and should
         // NOT appear in the Project Structure section at the bottom.
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Output = _config.Output with { SortByPath = false }
@@ -42,8 +42,8 @@ public class MarkdownGeneratorExtendedTests
 
         var entries = new List<FileContent>
         {
-            new(new FileEntry("[Cluster: backend]", "txt", "text", 0), "// cluster header", 16),
-            new(new FileEntry("src/Program.cs", "cs", "csharp", 50), "class Program {}", 16),
+            new(new FileEntry(Root: "", Relative: "[Cluster: backend]", Extension: "txt", Language: "text", Size: 0), "// cluster header", 16),
+            new(new FileEntry(Root: "", Relative: "src/Program.cs", Extension: "cs", Language: "csharp", Size: 50), "class Program {}", 16),
         };
 
         using var ms = new MemoryStream();
@@ -68,7 +68,7 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_MixedVirtualAndRealEntries_ProjectStructureOnlyShowsReal()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Output = _config.Output with { SortByPath = false }
@@ -76,10 +76,10 @@ public class MarkdownGeneratorExtendedTests
 
         var entries = new List<FileContent>
         {
-            new(new FileEntry("[Repo A]", "txt", "text", 0), "=== Repo A ===", 14),
-            new(new FileEntry("repo-a/file1.cs", "cs", "csharp", 30), "class A {}", 10),
-            new(new FileEntry("[Repo B]", "txt", "text", 0), "=== Repo B ===", 14),
-            new(new FileEntry("repo-b/file2.cs", "cs", "csharp", 30), "class B {}", 10),
+            new(new FileEntry(Root: "", Relative: "[Repo A]", Extension: "txt", Language: "text", Size: 0), "=== Repo A ===", 14),
+            new(new FileEntry(Root: "", Relative: "repo-a/file1.cs", Extension: "cs", Language: "csharp", Size: 30), "class A {}", 10),
+            new(new FileEntry(Root: "", Relative: "[Repo B]", Extension: "txt", Language: "text", Size: 0), "=== Repo B ===", 14),
+            new(new FileEntry(Root: "", Relative: "repo-b/file2.cs", Extension: "cs", Language: "csharp", Size: 30), "class B {}", 10),
         };
 
         using var ms = new MemoryStream();
@@ -103,7 +103,7 @@ public class MarkdownGeneratorExtendedTests
     {
         // Virtual entries should still have their inline content written to the
         // markdown output as a normal file section.
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Output = _config.Output with { SortByPath = false }
@@ -111,7 +111,7 @@ public class MarkdownGeneratorExtendedTests
 
         var entries = new List<FileContent>
         {
-            new(new FileEntry("[Separator]", "txt", "text", 0), "--- CLUSTER BREAK ---", 20),
+            new(new FileEntry(Root: "", Relative: "[Separator]", Extension: "txt", Language: "text", Size: 0), "--- CLUSTER BREAK ---", 20),
         };
 
         using var ms = new MemoryStream();
@@ -132,8 +132,8 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task LineExclusion_WithNewlineFilter_RemovesBlankLines()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.cs", "cs", "csharp", 50);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "csharp", Size: 50);
         var content = "line1\n\n\nline2\n\nline3";
         var entries = new List<FileContent> { new(entry, content, content.Length) };
 
@@ -158,8 +158,8 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task LineExclusion_WithMultipleFilters_AllApplied()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.cs", "cs", "csharp", 100);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "csharp", Size: 100);
         var content = "using System;\n// comment\n#pragma warning\npublic class Foo {}\n// end comment";
         var entries = new List<FileContent> { new(entry, content, content.Length) };
 
@@ -182,14 +182,14 @@ public class MarkdownGeneratorExtendedTests
     public async Task LineExclusion_StreamingPath_Works()
     {
         // When Content is null, the generator reads from file using streaming path.
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var tempFile = Path.GetTempFileName();
         try
         {
             var fileContent = "using System;\n// this should be removed\npublic class Bar {}";
             await File.WriteAllTextAsync(tempFile, fileContent);
 
-            var entry = new FileEntry(tempFile, "cs", "csharp", 100);
+            var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "cs", Language: "csharp", Size: 100);
             // Content is null -> streaming path
             var entries = new List<FileContent> { new(entry, null, 100) };
 
@@ -214,8 +214,8 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task LineExclusion_EmptyExcludeList_NoChange()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.cs", "cs", "csharp", 50);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "csharp", Size: 50);
         var content = "line1\n// comment\nline3";
         var entries = new List<FileContent> { new(entry, content, content.Length) };
 
@@ -240,7 +240,7 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_ExceedsMaxMemory_ReturnsFailure()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         // Set extremely small memory limit (1 byte) so output always exceeds it
         var config = _config with
         {
@@ -250,7 +250,7 @@ public class MarkdownGeneratorExtendedTests
 
         var entries = new List<FileContent>
         {
-            new(new FileEntry("big.cs", "cs", "csharp", 100), new string('x', 500), 500),
+            new(new FileEntry(Root: "", Relative: "big.cs", Extension: "cs", Language: "csharp", Size: 100), new string('x', 500), 500),
         };
 
         using var ms = new MemoryStream();
@@ -264,7 +264,7 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_JustUnderMaxMemory_Succeeds()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         // Use a generous limit that should accommodate our small content
         var config = _config with
         {
@@ -274,7 +274,7 @@ public class MarkdownGeneratorExtendedTests
 
         var entries = new List<FileContent>
         {
-            new(new FileEntry("small.cs", "cs", "csharp", 20), "class Foo {}", 12),
+            new(new FileEntry(Root: "", Relative: "small.cs", Extension: "cs", Language: "csharp", Size: 20), "class Foo {}", 12),
         };
 
         using var ms = new MemoryStream();
@@ -295,7 +295,7 @@ public class MarkdownGeneratorExtendedTests
     {
         // When Content is null (streaming), a file containing null bytes should be
         // detected as binary and skipped with a "[Skipping binary file:]" message.
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var tempFile = Path.GetTempFileName();
         try
         {
@@ -303,7 +303,7 @@ public class MarkdownGeneratorExtendedTests
             var binaryData = new byte[] { 0x01, 0x00, 0x00, 0x02, 0x03 };
             await File.WriteAllBytesAsync(tempFile, binaryData);
 
-            var entry = new FileEntry(tempFile, "bin", "text", binaryData.Length);
+            var entry = new FileEntry(Root: "", Relative: tempFile, Extension: "bin", Language: "text", Size: binaryData.Length);
             // Content is null -> streaming path which does binary detection
             var entries = new List<FileContent> { new(entry, null, binaryData.Length) };
 
@@ -327,9 +327,9 @@ public class MarkdownGeneratorExtendedTests
     {
         // When Content is null and the file doesn't exist on disk, an error
         // message should be written to the output.
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var nonExistentPath = "/tmp/gc_test_nonexistent_" + Guid.NewGuid() + ".cs";
-        var entry = new FileEntry(nonExistentPath, "cs", "csharp", 0);
+        var entry = new FileEntry(Root: "", Relative: nonExistentPath, Extension: "cs", Language: "csharp", Size: 0);
         // Content is null -> streaming path which checks file existence
         var entries = new List<FileContent> { new(entry, null, 0) };
 
@@ -351,8 +351,8 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_ContentWith5Backticks_UsesEscalatedFence()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.md", "md", "markdown", 50);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.md", Extension: "md", Language: "markdown", Size: 50);
         var content = "some text\n`````\ncode block\n`````\nmore text";
         var entries = new List<FileContent> { new(entry, content, content.Length) };
 
@@ -363,15 +363,15 @@ public class MarkdownGeneratorExtendedTests
         ms.Position = 0;
         var output = new StreamReader(ms).ReadToEnd();
 
-        // Should use 10 backtick fence for 5-backtick content
-        Assert.Contains("``````````", output);
+        // Should use escalated fence (5+1=6 backticks) for 5-backtick content
+        Assert.Contains("``````", output);
     }
 
     [Fact]
     public async Task Generate_ContentWith4Backticks_UsesEscalatedFence()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.md", "md", "markdown", 50);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.md", Extension: "md", Language: "markdown", Size: 50);
         var content = "some text\n````\ncode block\n````\nmore text";
         var entries = new List<FileContent> { new(entry, content, content.Length) };
 
@@ -382,17 +382,18 @@ public class MarkdownGeneratorExtendedTests
         ms.Position = 0;
         var output = new StreamReader(ms).ReadToEnd();
 
-        // Should use 6 backtick fence for 4-backtick content
-        Assert.Contains("``````", output);
+        // Should use escalated fence (4+1=5 backticks) for 4-backtick content
+        Assert.Contains("`````", output);
     }
 
     [Fact]
     public async Task Generate_ContentWith3Backticks_UsesNormalFence()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.md", "md", "markdown", 50);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.md", Extension: "md", Language: "markdown", Size: 50);
         // 3 backticks in content should still use normal fence (```) since
-        // the escalation logic checks for 4+ backticks
+        // fence = longestRun + 1, so 3 → 4, but we cap at max(3, 3+1)=4
+        // Actually 3 backticks → longestRun=3 → fence=4 backticks
         var content = "some text\n```\ncode block\n```\nmore text";
         var entries = new List<FileContent> { new(entry, content, content.Length) };
 
@@ -417,7 +418,7 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_SortByPathTrue_SortedOutput()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Output = _config.Output with { SortByPath = true }
@@ -425,9 +426,9 @@ public class MarkdownGeneratorExtendedTests
 
         var entries = new List<FileContent>
         {
-            new(new FileEntry("z_last.cs", "cs", "csharp", 10), "class Z {}", 10),
-            new(new FileEntry("a_first.cs", "cs", "csharp", 10), "class A {}", 10),
-            new(new FileEntry("m_middle.cs", "cs", "csharp", 10), "class M {}", 10),
+            new(new FileEntry(Root: "", Relative: "z_last.cs", Extension: "cs", Language: "csharp", Size: 10), "class Z {}", 10),
+            new(new FileEntry(Root: "", Relative: "a_first.cs", Extension: "cs", Language: "csharp", Size: 10), "class A {}", 10),
+            new(new FileEntry(Root: "", Relative: "m_middle.cs", Extension: "cs", Language: "csharp", Size: 10), "class M {}", 10),
         };
 
         using var ms = new MemoryStream();
@@ -449,7 +450,7 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_SortByPathFalse_PreserveOrder()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Output = _config.Output with { SortByPath = false }
@@ -457,9 +458,9 @@ public class MarkdownGeneratorExtendedTests
 
         var entries = new List<FileContent>
         {
-            new(new FileEntry("z_last.cs", "cs", "csharp", 10), "class Z {}", 10),
-            new(new FileEntry("a_first.cs", "cs", "csharp", 10), "class A {}", 10),
-            new(new FileEntry("m_middle.cs", "cs", "csharp", 10), "class M {}", 10),
+            new(new FileEntry(Root: "", Relative: "z_last.cs", Extension: "cs", Language: "csharp", Size: 10), "class Z {}", 10),
+            new(new FileEntry(Root: "", Relative: "a_first.cs", Extension: "cs", Language: "csharp", Size: 10), "class A {}", 10),
+            new(new FileEntry(Root: "", Relative: "m_middle.cs", Extension: "cs", Language: "csharp", Size: 10), "class M {}", 10),
         };
 
         using var ms = new MemoryStream();
@@ -485,13 +486,13 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_DisplayPath_UsedInHeader()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Output = _config.Output with { SortByPath = false }
         };
 
-        var entry = new FileEntry("/abs/path/to/file.cs", "cs", "csharp", 10, "relative/file.cs");
+        var entry = new FileEntry(Root: "", Relative: "/abs/path/to/file.cs", Extension: "cs", Language: "csharp", Size: 10, "relative/file.cs");
         var entries = new List<FileContent>
         {
             new(entry, "class Foo {}", 12),
@@ -511,13 +512,13 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_NoDisplayPath_UsesPathInHeader()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Output = _config.Output with { SortByPath = false }
         };
 
-        var entry = new FileEntry("simple/file.cs", "cs", "csharp", 10);
+        var entry = new FileEntry(Root: "", Relative: "simple/file.cs", Extension: "cs", Language: "csharp", Size: 10);
         var entries = new List<FileContent>
         {
             new(entry, "class Bar {}", 12),
@@ -540,7 +541,7 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task ByteCount_MatchesActualOutputSize()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Output = _config.Output with { SortByPath = false }
@@ -548,7 +549,7 @@ public class MarkdownGeneratorExtendedTests
 
         var entries = new List<FileContent>
         {
-            new(new FileEntry("test.cs", "cs", "csharp", 10), "class Foo {}", 12),
+            new(new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "csharp", Size: 10), "class Foo {}", 12),
         };
 
         using var ms = new MemoryStream();
@@ -569,7 +570,7 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_EmptyContentList_ReturnsSuccessWithStructureOnly()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>();
 
         using var ms = new MemoryStream();
@@ -586,7 +587,7 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_MultipleFiles_AllWrittenToOutput()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Output = _config.Output with { SortByPath = false }
@@ -594,9 +595,9 @@ public class MarkdownGeneratorExtendedTests
 
         var entries = new List<FileContent>
         {
-            new(new FileEntry("a.cs", "cs", "csharp", 10), "class A {}", 10),
-            new(new FileEntry("b.js", "js", "javascript", 10), "function b() {}", 15),
-            new(new FileEntry("c.py", "py", "python", 10), "def c(): pass", 14),
+            new(new FileEntry(Root: "", Relative: "a.cs", Extension: "cs", Language: "csharp", Size: 10), "class A {}", 10),
+            new(new FileEntry(Root: "", Relative: "b.js", Extension: "js", Language: "javascript", Size: 10), "function b() {}", 15),
+            new(new FileEntry(Root: "", Relative: "c.py", Extension: "py", Language: "python", Size: 10), "def c(): pass", 14),
         };
 
         using var ms = new MemoryStream();
@@ -619,8 +620,8 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_LanguageTag_InFenceLine()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.py", "py", "python", 10);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.py", Extension: "py", Language: "python", Size: 10);
         var entries = new List<FileContent>
         {
             new(entry, "print('hello')", 14),
@@ -640,10 +641,10 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_CancelledOperation_ReturnsFailure()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var entries = new List<FileContent>
         {
-            new(new FileEntry("test.cs", "cs", "csharp", 10), "class Foo {}", 12),
+            new(new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "csharp", Size: 10), "class Foo {}", 12),
         };
 
         using var ms = new MemoryStream();
@@ -659,14 +660,14 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_FileHeaderTemplate_UsesPath()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Markdown = _config.Markdown with { FileHeaderTemplate = "File: {path}" },
             Output = _config.Output with { SortByPath = false }
         };
 
-        var entry = new FileEntry("src/app.cs", "cs", "csharp", 10);
+        var entry = new FileEntry(Root: "", Relative: "src/app.cs", Extension: "cs", Language: "csharp", Size: 10);
         var entries = new List<FileContent>
         {
             new(entry, "class App {}", 12),
@@ -685,8 +686,8 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_ContentWithTrailingWhitespace_Trimmed()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
-        var entry = new FileEntry("test.cs", "cs", "csharp", 30);
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "csharp", Size: 30);
         var content = "class Foo {}   \n\n\n"; // trailing spaces and newlines
         var entries = new List<FileContent> { new(entry, content, content.Length) };
 
@@ -705,13 +706,13 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_DisplayPath_UsedInProjectStructure()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Output = _config.Output with { SortByPath = false }
         };
 
-        var entry = new FileEntry("/abs/path/src/code.cs", "cs", "csharp", 10, "src/code.cs");
+        var entry = new FileEntry(Root: "", Relative: "/abs/path/src/code.cs", Extension: "cs", Language: "csharp", Size: 10, "src/code.cs");
         var entries = new List<FileContent>
         {
             new(entry, "class Code {}", 12),
@@ -733,7 +734,7 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_LargeContentWithinMemoryLimit_Succeeds()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var config = _config with
         {
             Limits = _config.Limits with { MaxMemoryBytes = "1MB" },
@@ -742,7 +743,7 @@ public class MarkdownGeneratorExtendedTests
 
         // 100KB of content
         var largeContent = new string('A', 100 * 1024);
-        var entry = new FileEntry("large.cs", "cs", "csharp", largeContent.Length);
+        var entry = new FileEntry(Root: "", Relative: "large.cs", Extension: "cs", Language: "csharp", Size: largeContent.Length);
         var entries = new List<FileContent> { new(entry, largeContent, largeContent.Length) };
 
         using var ms = new MemoryStream();
@@ -759,9 +760,9 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_BrainMode_CodeBlocksCrushed()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var crusher = new BrainCrusher();
-        var entry = new FileEntry("src/Foo.cs", "cs", "csharp", 0);
+        var entry = new FileEntry(Root: "", Relative: "src/Foo.cs", Extension: "cs", Language: "csharp", Size: 0);
         var code = "public static void Main() { return; } // comment";
         var contents = new List<FileContent> { new(entry, code, code.Length) };
 
@@ -783,9 +784,9 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_BrainMode_FileHeadersPreserved()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var crusher = new BrainCrusher();
-        var entry = new FileEntry("src/public/X.cs", "cs", "csharp", 0);
+        var entry = new FileEntry(Root: "", Relative: "src/public/X.cs", Extension: "cs", Language: "csharp", Size: 0);
         var code = "public class X { }";
         var contents = new List<FileContent> { new(entry, code, code.Length) };
 
@@ -806,9 +807,9 @@ public class MarkdownGeneratorExtendedTests
     [Fact]
     public async Task Generate_BrainMode_StructureTreePreserved()
     {
-        var generator = new MarkdownGenerator(_logger, _reader);
+        var generator = new MarkdownGenerator(_logger);
         var crusher = new BrainCrusher();
-        var entry = new FileEntry("public/Foo.cs", "cs", "csharp", 0);
+        var entry = new FileEntry(Root: "", Relative: "public/Foo.cs", Extension: "cs", Language: "csharp", Size: 0);
         var code = "public class Foo { private int x; }";
         var contents = new List<FileContent> { new(entry, code, code.Length) };
 

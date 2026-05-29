@@ -190,11 +190,16 @@ public sealed class ClipboardService : IClipboardService
 
     private async Task<bool> CopyToWindowsAsync(Stream stream, CancellationToken ct)
     {
-        var success = await RunClipboardProcessAsync("clip.exe", "", stream, ct);
-        if (!success && stream.CanSeek)
+        // Prefer PowerShell's Set-Clipboard for UTF-8/UTF-16 safe handling.
+        // clip.exe truncates/garbles non-ANSI text (including PUA symbols from brain mode).
+        var success = await RunClipboardProcessAsync("powershell.exe", "-Command \"$input | Out-String | Set-Clipboard\"", stream, ct);
+        if (success) return true;
+
+        // Fallback to clip.exe only if PowerShell fails
+        if (stream.CanSeek)
         {
             stream.Position = 0;
-            success = await RunClipboardProcessAsync("powershell.exe", "-Command \"$input | Out-String | Set-Clipboard\"", stream, ct);
+            success = await RunClipboardProcessAsync("clip.exe", "", stream, ct);
         }
         return success;
     }

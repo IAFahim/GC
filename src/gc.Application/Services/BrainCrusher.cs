@@ -23,9 +23,30 @@ public sealed class BrainCrusher : IBrainCrusher
     // These files commonly have # at line starts that are not comments.
     private static readonly HashSet<string> NonHashCommentExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        "md", "markdown", "yaml", "yml", "toml", "ini", "cfg", "conf", "properties",
-        "dockerfile", "makefile", "gemfile", "rakefile", "lock", "json"
+        "md", "markdown"
     };
+
+    // File extensions where # SHOULD be treated as a line comment (including shell scripts).
+    private static readonly HashSet<string> HashCommentExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sh", "bash", "zsh", "fish", "ksh", "csh", "tcsh", "shar", "zshrc", "bashrc",
+        "profile", "bash_profile", "bash_login", "zprofile", "env", "shell",
+        "dockerfile", "makefile", "gemfile", "rakefile", "cfg", "conf", "properties",
+        "yaml", "yml", "toml", "ini"
+    };
+
+    // File extensions that use // for single-line comments.
+    // Markdown/text/YAML should NOT have // treated as a comment.
+    private static readonly HashSet<string> DoubleSlashCommentExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "cs", "java", "js", "ts", "jsx", "tsx", "cpp", "cxx", "cc", "h", "hpp",
+        "go", "rs", "swift", "kt", "scala", "php", "rust", "dart", "groovy",
+        "c", "javascript", "typescript", "csharp", "cpp", "objectivec", "swift"
+    };
+
+    // Shell shebang patterns - #! at start of file should be preserved
+    private static bool IsShebangLine(ReadOnlySpan<char> line) =>
+        line.Length >= 2 && line[0] == '#' && line[1] == '!';
 
     private string? _fileExtension;
 
@@ -64,10 +85,31 @@ public sealed class BrainCrusher : IBrainCrusher
         int i = 0;
         int len = span.Length;
 
-        bool shouldStripSql = fileExtension != null && fileExtension.StartsWith('.') &&
-            SqlLikeExtensions.Contains(fileExtension.Substring(1));
-        bool shouldTreatHashAsComment = fileExtension == null ||
-            !NonHashCommentExtensions.Contains(fileExtension.StartsWith('.') ? fileExtension.Substring(1) : fileExtension);
+        // Normalize extension (strip leading dot)
+        string? normalizedExt = null;
+        if (!string.IsNullOrEmpty(fileExtension))
+        {
+            normalizedExt = fileExtension.StartsWith('.') 
+                ? fileExtension.Substring(1) 
+                : fileExtension;
+        }
+
+        bool shouldStripSql = normalizedExt != null && SqlLikeExtensions.Contains(normalizedExt);
+        bool shouldTreatHashAsComment;
+        bool shouldStripDoubleSlash;
+
+        if (normalizedExt == null)
+        {
+            // Null extension (whole-document crush path) - strip both // and # for code
+            // URL protection prevents truncating https:// links
+            shouldTreatHashAsComment = true;
+            shouldStripDoubleSlash = true;
+        }
+        else
+        {
+            shouldTreatHashAsComment = !NonHashCommentExtensions.Contains(normalizedExt);
+            shouldStripDoubleSlash = DoubleSlashCommentExtensions.Contains(normalizedExt);
+        }
 
         bool inString = false;
         bool inChar = false;
@@ -233,11 +275,18 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
-            if (ch == '/' && i + 1 < len && span[i + 1] == '/')
+            // Check for // comments only in languages that use them
+            // But NOT if it's part of a URL (e.g., https://, http://, ftp://)
+            if (shouldStripDoubleSlash && ch == '/' && i + 1 < len && span[i + 1] == '/')
             {
-                inSingleLineComment = true;
-                i += 2;
-                continue;
+                // Don't start // comment if preceded by : (URL protocol separator)
+                bool precededByColon = i > 0 && span[i - 1] == ':';
+                if (!precededByColon)
+                {
+                    inSingleLineComment = true;
+                    i += 2;
+                    continue;
+                }
             }
 
             if (ch == '/' && i + 1 < len && span[i + 1] == '*')
@@ -279,6 +328,8 @@ public sealed class BrainCrusher : IBrainCrusher
 
     // =========================================================================
     // Whitespace collapse: multiple spaces → single, blank lines removed
+    // String interiors are preserved verbatim to avoid corrupting format strings,
+    // SQL queries, regex patterns, and other content where whitespace is semantic.
     // =========================================================================
 
     internal static string CollapseWhitespace(string stripped)
@@ -288,11 +339,63 @@ public sealed class BrainCrusher : IBrainCrusher
         int len = stripped.Length;
         bool lastWasSpace = false;
         bool lineIsEmpty = true;
+        bool inString = false;
+        bool inChar = false;
 
         while (i < len)
         {
             char ch = stripped[i];
 
+            // Handle string/char state - pass through verbatim
+            if (inString)
+            {
+                result.Append(ch);
+                if (ch == '\\' && i + 1 < len)
+                {
+                    i++;
+                    result.Append(stripped[i]);
+                }
+                else if (ch == '"')
+                {
+                    inString = false;
+                }
+                i++;
+                continue;
+            }
+
+            if (inChar)
+            {
+                result.Append(ch);
+                if (ch == '\\' && i + 1 < len)
+                {
+                    i++;
+                    result.Append(stripped[i]);
+                }
+                else if (ch == '\'')
+                {
+                    inChar = false;
+                }
+                i++;
+                continue;
+            }
+
+            // Track string/char start
+            if (ch == '"')
+            {
+                inString = true;
+                result.Append(ch);
+                i++;
+                continue;
+            }
+            if (ch == '\'')
+            {
+                inChar = true;
+                result.Append(ch);
+                i++;
+                continue;
+            }
+
+            // Newline handling
             if (ch == '\n' || ch == '\r')
             {
                 if (ch == '\r' && i + 1 < len && stripped[i + 1] == '\n')
@@ -308,6 +411,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
+            // Whitespace collapse
             if (ch == ' ' || ch == '\t')
             {
                 if (lineIsEmpty)

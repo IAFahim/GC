@@ -22,9 +22,10 @@ public sealed class HistoryService : IHistoryService
 
     public async Task<Result> AddEntryAsync(string directory, string[] arguments, CancellationToken ct = default)
     {
+        await _semaphore.WaitAsync(ct);
         try
         {
-            var entries = await LoadInternalAsync(ct);
+            var entries = await LoadFromFileAsync();
 
             entries.RemoveAll(e =>
                 string.Equals(e.Directory, directory, StringComparison.Ordinal) &&
@@ -35,7 +36,7 @@ public sealed class HistoryService : IHistoryService
             if (entries.Count > MaxHistoryEntries)
                 entries.RemoveRange(MaxHistoryEntries, entries.Count - MaxHistoryEntries);
 
-            await SaveInternalAsync(entries, ct);
+            await SaveToFileAsync(entries);
             return Result.Success();
         }
         catch (Exception ex)
@@ -43,20 +44,25 @@ public sealed class HistoryService : IHistoryService
             _logger.Debug($"Failed to save history: {ex.Message}");
             return Result.Failure(ex.Message);
         }
+        finally
+        {
+            _semaphore.Release();
+        }
     }
 
     public async Task<Result<IReadOnlyList<HistoryEntry>>> GetHistoryAsync(CancellationToken ct = default)
     {
+        await _semaphore.WaitAsync(ct);
         try
         {
-            var entries = await LoadInternalAsync(ct);
+            var entries = await LoadFromFileAsync();
 
             var pruned = entries.Where(e => Directory.Exists(e.Directory)).ToList();
 
             pruned.Sort((a, b) => b.LastRun.CompareTo(a.LastRun));
 
             if (pruned.Count != entries.Count)
-                await SaveInternalAsync(pruned, ct);
+                await SaveToFileAsync(pruned);
 
             return Result<IReadOnlyList<HistoryEntry>>.Success(pruned);
         }
@@ -64,61 +70,70 @@ public sealed class HistoryService : IHistoryService
         {
             return Result<IReadOnlyList<HistoryEntry>>.Failure(ex.Message);
         }
+        finally
+        {
+            _semaphore.Release();
+        }
     }
 
     public async Task<Result> ClearHistoryAsync(CancellationToken ct = default)
     {
+        await _semaphore.WaitAsync(ct);
         try
         {
-            await SaveInternalAsync([], ct);
+            await SaveToFileAsync([]);
             return Result.Success();
         }
         catch (Exception ex)
         {
             return Result.Failure(ex.Message);
         }
-    }
-
-    private async Task<List<HistoryEntry>> LoadInternalAsync(CancellationToken ct)
-    {
-        if (!File.Exists(_historyFilePath))
-            return [];
-
-        await _semaphore.WaitAsync(ct);
-        try
-        {
-            await using var fs = new FileStream(_historyFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.Asynchronous);
-            using var reader = new StreamReader(fs);
-            var json = await reader.ReadToEndAsync(ct);
-            if (string.IsNullOrWhiteSpace(json))
-                return [];
-            var typeInfo = GcJsonSerializerContext.Default.ListHistoryEntry;
-            return JsonSerializer.Deserialize(json, typeInfo)?.ToList() ?? [];
-        }
         finally
         {
             _semaphore.Release();
         }
     }
 
-    private async Task SaveInternalAsync(List<HistoryEntry> entries, CancellationToken ct)
+    private async Task<List<HistoryEntry>> LoadFromFileAsync()
+    {
+        if (!File.Exists(_historyFilePath))
+            return [];
+
+        await using var fs = new FileStream(_historyFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, FileOptions.Asynchronous);
+        using var reader = new StreamReader(fs);
+        var json = await reader.ReadToEndAsync();
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+        var typeInfo = GcJsonSerializerContext.Default.ListHistoryEntry;
+        return JsonSerializer.Deserialize(json, typeInfo)?.ToList() ?? [];
+    }
+
+    private async Task SaveToFileAsync(List<HistoryEntry> entries)
     {
         var directory = Path.GetDirectoryName(_historyFilePath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
             Directory.CreateDirectory(directory);
 
-        await _semaphore.WaitAsync(ct);
+        var tmpPath = _historyFilePath + ".tmp." + Guid.NewGuid().ToString("N")[..8];
         try
         {
-            await using var fs = new FileStream(_historyFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous);
-            await using var writer = new StreamWriter(fs);
-            var typeInfo = GcJsonSerializerContext.Default.ListHistoryEntry;
-            var json = JsonSerializer.Serialize(entries, typeInfo);
-            await writer.WriteAsync(json);
+            await using (var fs = new FileStream(tmpPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous))
+            await using (var writer = new StreamWriter(fs))
+            {
+                var typeInfo = GcJsonSerializerContext.Default.ListHistoryEntry;
+                var json = JsonSerializer.Serialize(entries, typeInfo);
+                await writer.WriteAsync(json);
+            }
+
+            File.Delete(_historyFilePath);
+            File.Move(tmpPath, _historyFilePath);
         }
         finally
         {
-            _semaphore.Release();
+            if (File.Exists(tmpPath))
+            {
+                try { File.Delete(tmpPath); } catch { }
+            }
         }
     }
 }

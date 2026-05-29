@@ -22,7 +22,6 @@ namespace gc.Application.Services;
 public sealed class MarkdownGenerator : IMarkdownGenerator
 {
     private readonly ILogger _logger;
-    private readonly IFileReader _reader;
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
     private static readonly int NewlineByteCount = Utf8NoBom.GetByteCount(Environment.NewLine);
@@ -34,10 +33,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     [ThreadStatic]
     private static StringBuilder? t_lineExclusionBuilder;
 
-    public MarkdownGenerator(ILogger logger, IFileReader reader)
+    public MarkdownGenerator(ILogger logger)
     {
         _logger = logger;
-        _reader = reader;
     }
 
     public async Task<Result<long>> GenerateMarkdownStreamingAsync(IEnumerable<FileContent> contents, Stream outputStream, GcConfiguration config, IEnumerable<string>? excludeLineIfStart = null, IBrainCrusher? brainCrusher = null, CancellationToken ct = default)
@@ -87,10 +85,10 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                             try
                             {
-                                var fileInfo = new FileInfo(content.Entry.Path);
+                                var fileInfo = new FileInfo(content.Entry.AbsolutePath);
                                 if (!fileInfo.Exists)
                                 {
-                                    await channel.Writer.WriteAsync((index, null, 0, $"File not found: {content.Entry.DisplayPath ?? content.Entry.Path}"), token);
+                                    await channel.Writer.WriteAsync((index, null, 0, $"File not found: {content.Entry.DisplayPath ?? content.Entry.RelativePath}"), token);
                                     return;
                                 }
                                 if (fileInfo.Length > maxFileSize)
@@ -102,10 +100,10 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 SafeFileHandle handle;
                                 if (OperatingSystem.IsLinux())
                                 {
-                                    int fd = gc.Application.Native.LinuxFastPath.open(content.Entry.Path, 0x40000);
+                                    int fd = gc.Application.Native.LinuxFastPath.open(content.Entry.AbsolutePath, 0x40000);
                                     if (fd < 0)
                                     {
-                                        fd = gc.Application.Native.LinuxFastPath.open(content.Entry.Path, 0);
+                                        fd = gc.Application.Native.LinuxFastPath.open(content.Entry.AbsolutePath, 0);
                                     }
                                     if (fd >= 0)
                                     {
@@ -114,12 +112,12 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     }
                                     else
                                     {
-                                        handle = File.OpenHandle(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, FileOptions.SequentialScan | FileOptions.Asynchronous);
+                                        handle = File.OpenHandle(content.Entry.AbsolutePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, FileOptions.SequentialScan | FileOptions.Asynchronous);
                                     }
                                 }
                                 else
                                 {
-                                    handle = File.OpenHandle(content.Entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, FileOptions.SequentialScan | FileOptions.Asynchronous);
+                                    handle = File.OpenHandle(content.Entry.AbsolutePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, FileOptions.SequentialScan | FileOptions.Asynchronous);
                                 }
 
                                 using (handle)
@@ -141,7 +139,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             }
                             catch (Exception ex)
                             {
-                                _logger.Error($"Failed to read file {content.Entry.DisplayPath ?? content.Entry.Path}", ex);
+                                _logger.Error($"Failed to read file {content.Entry.DisplayPath ?? content.Entry.RelativePath}", ex);
                                 await channel.Writer.WriteAsync((index, null, 0, ex.Message), token);
                             }
                         });
@@ -207,11 +205,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 actualContent = sb.ToString();
                             }
 
-                            var fence = "```";
-                            if (actualContent.Contains("`````")) fence = "``````````";
-                            else if (actualContent.Contains("````")) fence = "``````";
+                            var fence = GetFenceForContent(actualContent);
 
-                            var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.DisplayPath ?? content.Entry.Path, StringComparison.OrdinalIgnoreCase);
+                            var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.DisplayPath ?? content.Entry.RelativePath, StringComparison.OrdinalIgnoreCase);
                             var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
                             var fenceLine = $"{fence}{content.Entry.Language}";
                             var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
@@ -242,7 +238,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             WriteStringLine(writer, fence);
                             WriteStringLine(writer, "");
 
-                            fileList.Add(content.Entry.DisplayPath ?? content.Entry.Path);
+                            fileList.Add(content.Entry.DisplayPath ?? content.Entry.RelativePath);
                             totalBytes += entryTotalBytes;
                         }
                         else
@@ -257,7 +253,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                             if (ready.Length == -1)
                             {
-                                var errorMsg = $"[File too large for fast streaming: {content.Entry.DisplayPath ?? content.Entry.Path}]";
+                                var errorMsg = $"[File too large for fast streaming: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
                                 WriteStringLine(writer, errorMsg);
                                 totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                 continue;
@@ -268,7 +264,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                             if (isBinary)
                             {
-                                var errorMsg = $"[Skipping binary file: {content.Entry.DisplayPath ?? content.Entry.Path}]";
+                                var errorMsg = $"[Skipping binary file: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
                                 WriteStringLine(writer, errorMsg);
                                 totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                 continue;
@@ -277,18 +273,15 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             // Apply compiled content filter to preview bytes — fast reject for streaming files.
                             if (!contentFilter.IsEmpty && !contentFilter.ShouldInclude(ready.Buffer!, ready.Length))
                             {
-                                var errorMsg = $"[Skipped by content filter: {content.Entry.DisplayPath ?? content.Entry.Path}]";
+                                var errorMsg = $"[Skipped by content filter: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
                                 WriteStringLine(writer, errorMsg);
                                 totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                 continue;
                             }
 
-                            var sample = Utf8NoBom.GetString(ready.Buffer!, 0, Math.Min(ready.Length, 4096));
-                            var fence = "```";
-                            if (sample.Contains("`````")) fence = "``````````";
-                            else if (sample.Contains("````")) fence = "``````";
+                            var fence = GetFenceForBytes(ready.Buffer!, ready.Length);
 
-                            var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.DisplayPath ?? content.Entry.Path, StringComparison.OrdinalIgnoreCase);
+                            var header = config.Markdown.FileHeaderTemplate.Replace("{path}", content.Entry.DisplayPath ?? content.Entry.RelativePath, StringComparison.OrdinalIgnoreCase);
                             var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
                             var fenceLine = $"{fence}{content.Entry.Language}";
                             var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
@@ -336,11 +329,25 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             }
                             else
                             {
-                                contentBuffer = ready.Buffer;
-                                contentBytesWritten = ready.Length;
+                                contentBuffer = ready.Buffer!;
+                                int validLength = ready.Length;
+                                while (validLength > 0)
+                                {
+                                    byte b = contentBuffer[validLength - 1];
+                                    if (b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n')
+                                        validLength--;
+                                    else
+                                        break;
+                                }
+                                contentBytesWritten = validLength;
                             }
 
-                            long entryTotalBytes = headerBytes + fenceLineBytes + contentBytesWritten + closingFenceBytes + (newlineBytes * 2);
+                            bool needsTrailingNewline = true;
+                            if (crushedContent != null && crushedContent.Length == 0) needsTrailingNewline = false;
+                            if (contentBuffer != null && contentBytesWritten == 0) needsTrailingNewline = false;
+
+                            long entryTotalBytes = headerBytes + fenceLineBytes + contentBytesWritten + closingFenceBytes + newlineBytes;
+                            if (needsTrailingNewline) entryTotalBytes += newlineBytes;
                             if (totalBytes + entryTotalBytes > maxMemoryBytes)
                             {
                                 return Result<long>.Failure($"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes).");
@@ -354,10 +361,10 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             {
                                 WriteStringLine(writer, crushedContent);
                             }
-                            else if (contentBuffer != null && contentBuffer.Length > 0)
+                            else if (contentBuffer != null && contentBytesWritten > 0)
                             {
                                 const int chunkSize = 65536;
-                                var remaining = contentBuffer.Length;
+                                var remaining = (int)contentBytesWritten;
                                 var offset = 0;
                                 while (remaining > 0)
                                 {
@@ -370,11 +377,11 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 }
                             }
 
-                            WriteStringLine(writer, "");
+                            if (needsTrailingNewline) WriteStringLine(writer, "");
                             WriteStringLine(writer, fence);
                             WriteStringLine(writer, "");
 
-                            fileList.Add(content.Entry.DisplayPath ?? content.Entry.Path);
+                            fileList.Add(content.Entry.DisplayPath ?? content.Entry.RelativePath);
                             totalBytes += entryTotalBytes;
                         }
                     }
@@ -472,6 +479,35 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
         WriteStringLine(writer, config.Markdown.Fence);
         WriteStringLine(writer, "");
+    }
+
+    // =========================================================================
+    // Fence selection: find the longest backtick run in content and use run+1.
+    // Shared by both in-memory and streamed paths so we never close early.
+    // =========================================================================
+    private static string GetFenceForContent(string content)
+    {
+        int longestRun = 3;
+        int run = 0;
+        for (int i = 0; i < content.Length; i++)
+        {
+            if (content[i] == '`') { run++; if (run > longestRun) longestRun = run; }
+            else run = 0;
+        }
+        return new string('`', longestRun + 1);
+    }
+
+    // For streaming: scan the full byte span for the longest backtick run.
+    private static string GetFenceForBytes(byte[] buffer, int length)
+    {
+        int longestRun = 3;
+        int run = 0;
+        for (int i = 0; i < length; i++)
+        {
+            if (buffer[i] == '`') { run++; if (run > longestRun) longestRun = run; }
+            else run = 0;
+        }
+        return new string('`', longestRun + 1);
     }
 
     private void ProcessLineSequence(ReadOnlySequence<byte> lineSequence, string[] excludeArray, bool excludeNewline, PipeWriter writer, ref long contentBytesWritten, int newlineBytes)

@@ -2,6 +2,7 @@ using gc.Domain.Common;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
+using gc.Application.Adapters;
 using gc.Application.Services;
 using System.Text;
 
@@ -18,16 +19,15 @@ public sealed class GenerateContextUseCase
     private readonly IFileDiscovery _discovery;
     private readonly FileFilter _filter;
     private readonly ContentFilter _contentFilter;
-    private readonly IFileReader _reader;
     private readonly IMarkdownGenerator _generator;
     private readonly IClipboardService _clipboard;
     private readonly ILogger _logger;
+    private readonly ShardSplitter _shardSplitter;
 
     public GenerateContextUseCase(
         IFileDiscovery discovery,
         FileFilter filter,
         ContentFilter contentFilter,
-        IFileReader reader,
         IMarkdownGenerator generator,
         IClipboardService clipboard,
         ILogger logger)
@@ -35,10 +35,10 @@ public sealed class GenerateContextUseCase
         _discovery = discovery;
         _filter = filter;
         _contentFilter = contentFilter;
-        _reader = reader;
         _generator = generator;
         _clipboard = clipboard;
         _logger = logger;
+        _shardSplitter = new ShardSplitter();
     }
 
     public async Task<Result> ExecuteAsync(
@@ -60,7 +60,8 @@ public sealed class GenerateContextUseCase
         CancellationToken ct = default,
         ProfileReporter? profileReporter = null,
         bool unsafeDirectWrite = false,
-        string? changedSince = null)
+        string? changedSince = null,
+        gc.Domain.Models.ShardInfo? shardInfo = null)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         Result<IEnumerable<string>> discoveryResult;
@@ -81,7 +82,7 @@ public sealed class GenerateContextUseCase
         sw.Restart();
         var filterResult = _filter.FilterFiles(
             discoveryResult.Value!, config, paths, excludes, extensions,
-            excludePathPatterns, includePathPatterns);
+            excludePathPatterns, includePathPatterns, rootPath, rootPath);
         profileReporter?.RecordStage("Filtering", sw.ElapsedTicks);
         if (!filterResult.IsSuccess) return Result.Failure(filterResult.Error!);
 
@@ -93,6 +94,17 @@ public sealed class GenerateContextUseCase
         }
 
         profileReporter?.RecordMetric("DiscoveredFiles", entries.Count.ToString());
+
+        // Shard mode: break into N pieces and take one slice
+        if (shardInfo != null && shardInfo.Of > 1)
+        {
+            _logger.Info($"Shard mode: processing slice {shardInfo.Slice} of {shardInfo.Of}...");
+            var shardLists = _shardSplitter.SplitIntoShards(entries, shardInfo.Of, shardInfo.Slice, _logger);
+            var shardEntries = shardLists.Count >= shardInfo.Slice ? shardLists[shardInfo.Slice - 1] : entries;
+            var shardContents = shardEntries.Select(e => new FileContent(e, null, e.Size));
+            return await WriteOutputAsync(shardContents, shardEntries.Count, rootPath, config, outputFile, appendMode,
+                excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct, profileReporter, unsafeDirectWrite);
+        }
 
         _logger.Success("Processing...");
 
@@ -121,7 +133,8 @@ public sealed class GenerateContextUseCase
         CancellationToken ct = default,
         ProfileReporter? profileReporter = null,
         bool unsafeDirectWrite = false,
-        string? changedSince = null)
+        string? changedSince = null,
+        gc.Domain.Models.ShardInfo? shardInfo = null)
     {
         var clusterConfig = config.Discovery?.Cluster ?? new ClusterConfiguration();
         if (clusterConfig.MaxDepth <= 0) clusterConfig = clusterConfig with { MaxDepth = 2 };
@@ -152,7 +165,8 @@ public sealed class GenerateContextUseCase
         var lockObj = new object();
         await Parallel.ForEachAsync(repos, new ParallelOptions
         {
-            MaxDegreeOfParallelism = Math.Min(maxParallel, repos.Count),
+            // libgit2sharp crashes under heavy concurrency, restrict to 1
+            MaxDegreeOfParallelism = 1,
             CancellationToken = ct
         }, async (repo, token) =>
         {
@@ -186,11 +200,12 @@ public sealed class GenerateContextUseCase
                 var entries = filterResult.Value!.ToList();
                 if (entries.Count > 0)
                 {
+                    // Cluster mode: override the root to the repo root and set display path.
+                    // Size is already correctly computed from the repo root in CreateFileEntry.
                     var prefixedEntries = entries.Select(e =>
                     {
-                        var displayPath = $"{repo.RelativePath}/{e.Path}";
-                        var absPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(repo.RootPath, e.Path));
-                        return e with { Path = absPath, DisplayPath = displayPath };
+                        var displayPath = $"{repo.RelativePath}/{e.Relative}";
+                        return e with { Root = repo.RootPath, Display = displayPath };
                     }).ToList();
 
                     lock (lockObj)
@@ -234,6 +249,18 @@ public sealed class GenerateContextUseCase
 
         _logger.Success($"Processing {totalFiles} files from {sorted.Count} repos...");
 
+        // Shard mode: break all repo files into N shards
+        if (shardInfo != null && shardInfo.Of > 1)
+        {
+            _logger.Info($"Shard mode: processing slice {shardInfo.Slice} of {shardInfo.Of}...");
+            var flatEntries = sorted.SelectMany(r => r.Entries).ToList();
+            var shardLists = _shardSplitter.SplitIntoShards(flatEntries, shardInfo.Of, shardInfo.Slice, _logger);
+            var shardEntries = shardLists.Count >= shardInfo.Slice ? shardLists[shardInfo.Slice - 1] : flatEntries;
+            var shardContents = shardEntries.Select(e => new FileContent(e, null, e.Size));
+            return await WriteOutputAsync(shardContents, shardEntries.Count, clusterRoot, config, outputFile, appendMode,
+                excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct, profileReporter, unsafeDirectWrite);
+        }
+
         return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode,
             excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct, profileReporter, unsafeDirectWrite);
     }
@@ -250,13 +277,27 @@ public sealed class GenerateContextUseCase
             if (clusterConfig.IncludeRepoHeader == true && i > 0)
             {
                 var separatorContent = $"{clusterConfig.RepoSeparator}\n# {repo.Name}\n{clusterConfig.RepoSeparator}";
-                var separatorEntry = new FileEntry($"[{clusterConfig.RepoSeparator}] {repo.RelativePath}", "", "markdown", separatorContent.Length);
+                // Use repo root as the "file" location, with a sentinel-like display path.
+                // This keeps FileEntry honest - no fake absolute paths.
+                var separatorEntry = new FileEntry(
+                    Root: repo.RootPath,
+                    Relative: $"[{clusterConfig.RepoSeparator}]",
+                    Extension: "",
+                    Language: "markdown",
+                    Size: separatorContent.Length,
+                    Display: $"[{clusterConfig.RepoSeparator}] {repo.RelativePath}");
                 yield return new FileContent(separatorEntry, separatorContent, separatorContent.Length);
             }
             else if (clusterConfig.IncludeRepoHeader == true && i == 0)
             {
                 var headerContent = $"# {repo.Name}";
-                var headerEntry = new FileEntry($"[header] {repo.RelativePath}", "", "markdown", headerContent.Length);
+                var headerEntry = new FileEntry(
+                    Root: repo.RootPath,
+                    Relative: "[header]",
+                    Extension: "",
+                    Language: "markdown",
+                    Size: headerContent.Length,
+                    Display: $"[header] {repo.RelativePath}");
                 yield return new FileContent(headerEntry, headerContent, headerContent.Length);
             }
 
@@ -266,6 +307,21 @@ public sealed class GenerateContextUseCase
             }
         }
     }
+
+    // ========================================================================
+    // Output Pipeline — composable transforms, two sinks (file, clipboard)
+    // ========================================================================
+    //
+    // Instead of a 6-way matrix of near-identical blocks (brain × compress × {file, clipboard}),
+    // we build a pipeline: IReadOnlyList<IOutputTransform>.
+    // Each transform is total and referentially transparent; adding one is one list element, not a new branch.
+    //
+    // Pipeline combinations:
+    //   []                         → no transforms, stream directly to sink
+    //   [Dynamic, Crush]          → brain mode
+    //   [Sqz]                     → compress only
+    //   [Dynamic, Crush, Sqz]     → brain + compress
+    // ========================================================================
 
     private async Task<Result> WriteOutputAsync(
         IEnumerable<FileContent> contents,
@@ -285,8 +341,8 @@ public sealed class GenerateContextUseCase
         bool unsafeDirectWrite = false)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        // Compile content filter once, pass to generator for streaming files.
-        // Metadata entries (starting with '[') are always passed through.
+
+        // ── 1. Compile content filter & filter entries ──
         var compiled = _contentFilter.CompilePatterns(
             excludeContentPatterns ?? Array.Empty<string>(),
             includeContentPatterns ?? Array.Empty<string>());
@@ -294,156 +350,174 @@ public sealed class GenerateContextUseCase
         var filteredList = new List<FileContent>();
         foreach (var content in contents)
         {
-            // Always include metadata entries (e.g., [---], [header])
             if (content.Entry.Path.StartsWith('['))
             {
                 filteredList.Add(content);
                 continue;
             }
-
-            // For files with embedded content, apply filter immediately.
-            // For streaming files, the generator applies the filter to a preview.
             if (content.Content != null && !compiled.ShouldInclude(content.Content))
                 continue;
-
             filteredList.Add(content);
         }
 
         int actualFileCount = filteredList.Count(c => !c.Entry.Path.StartsWith('['));
 
-        var crusher = brainMode ? new BrainCrusher() : null;
-        var dynamicCompressor = brainMode ? new DynamicCompressor() : null;
-        SqzCompressionService? sqzService = compress ? new SqzCompressionService() : null;
+        // ── 2. Build the transform pipeline ──
+        var transforms = new List<IOutputTransform>();
+        SqzCompressionService? sqzService = null;
 
-        if (compress && !sqzService!.IsAvailable)
+        if (brainMode)
         {
-            _logger.Warning(SqzCompressionService.InstallHint);
-            _logger.Warning("Compression disabled for this run.");
-            compress = false;
-            sqzService = null;
+            transforms.Add(new DynamicCompressorAdapter());
+            transforms.Add(new BrainCrusherAdapter());
         }
 
-        profileReporter?.RecordStage("Preprocessing", sw.ElapsedTicks);
-
-        sw.Restart();
-        if (!string.IsNullOrEmpty(outputFile))
+        if (compress)
         {
-            var outputDir = Path.GetDirectoryName(outputFile);
-            if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
+            sqzService = new SqzCompressionService();
+            if (!sqzService.IsAvailable)
             {
-                Directory.CreateDirectory(outputDir);
-            }
-
-            bool shouldAppend = appendMode && File.Exists(outputFile);
-            FileMode fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
-
-            if (brainMode)
-            {
-                using var ms = new MemoryStream();
-                var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
-                profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
-                if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
-
-                ms.Position = 0;
-                using var reader = new StreamReader(ms, Encoding.UTF8);
-                var rawOutput = await reader.ReadToEndAsync(ct);
-
-                string finalOutput;
-                string dynInfo = "";
-
-                sw.Restart();
-                if (compress)
-                {
-                    var afterCrush = crusher!.Crush(rawOutput);
-                    finalOutput = LlmContextHeader + await sqzService!.CompressAsync(afterCrush, noCache);
-                }
-                else
-                {
-                    var dynResult = dynamicCompressor!.Compress(rawOutput);
-                    var afterCrush = crusher!.Crush(dynResult.Output);
-                    finalOutput = dynResult.Legend + afterCrush;
-                    dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
-                    profileReporter?.RecordMetric("BrainReplacements", dynResult.ReplacementCount.ToString());
-                }
-                profileReporter?.RecordStage("Transformation", sw.ElapsedTicks);
-
-                var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
-
-                if (unsafeDirectWrite || shouldAppend)
-                {
-                    using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-                    await fs.WriteAsync(finalBytes, ct);
-                }
-                else
-                {
-                    await SafeFileWriter.WriteAllBytesAsync(outputFile, finalBytes, ct);
-                }
-
-                string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-                _logger.Success($"{action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
-
-                profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
-                return Result.Success();
-            }
-
-            if (compress)
-            {
-                using var ms = new MemoryStream();
-                var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
-                profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
-                if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
-
-                ms.Position = 0;
-                using var reader = new StreamReader(ms, Encoding.UTF8);
-                var rawOutput = await reader.ReadToEndAsync(ct);
-
-                sw.Restart();
-                var compressedOutput = await sqzService!.CompressAsync(rawOutput, noCache);
-                profileReporter?.RecordStage("Transformation", sw.ElapsedTicks);
-                var finalBytes = Encoding.UTF8.GetBytes(LlmContextHeader + compressedOutput);
-
-                if (unsafeDirectWrite || shouldAppend)
-                {
-                    using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-                    await fs.WriteAsync(finalBytes, ct);
-                }
-                else
-                {
-                    await SafeFileWriter.WriteAllBytesAsync(outputFile, finalBytes, ct);
-                }
-
-                string action = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-                _logger.Success($"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | Compressed (sqz) | Tokens: ~{finalBytes.Length / 4}");
-
-                profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
-                return Result.Success();
-            }
-
-            if (unsafeDirectWrite || shouldAppend)
-            {
-                using var fs2 = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-                var genResult2 = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs2, config, compiled, excludeLineIfStart, null, ct);
-                profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
-                if (!genResult2.IsSuccess) return Result.Failure(genResult2.Error!);
-
-                string action2 = shouldAppend && fileMode == FileMode.Append ? "Appended to" : "Exported to";
-                _logger.Success($"✔ {action2} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult2.Value)} | Tokens: ~{genResult2.Value / 4}");
-                profileReporter?.RecordMetric("OutputSize", genResult2.Value.ToString());
+                _logger.Warning(SqzCompressionService.InstallHint);
+                _logger.Warning("Compression disabled for this run.");
+                sqzService = null;
             }
             else
             {
-                using var ms = new MemoryStream();
-                var genResult2 = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
-                profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
-                if (!genResult2.IsSuccess) return Result.Failure(genResult2.Error!);
+                transforms.Add(new SqzCompressionAdapter(sqzService, noCache));
+            }
+        }
 
-                await SafeFileWriter.WriteAllBytesAsync(outputFile, ms.ToArray(), ct);
+        var pipeline = new OutputPipeline(transforms);
+        bool hasPipeline = transforms.Count > 0;
 
-                _logger.Success($"✔ Exported to {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult2.Value)} | Tokens: ~{genResult2.Value / 4}");
-                profileReporter?.RecordMetric("OutputSize", genResult2.Value.ToString());
+        profileReporter?.RecordStage("Preprocessing", sw.ElapsedTicks);
+
+        // ── 3. Generate markdown ──
+        // If pipeline exists, materialize to memory for transforms; otherwise stream directly.
+        sw.Restart();
+
+        string rawOutput = "";
+        long generatedBytes = 0;
+
+        if (hasPipeline)
+        {
+            using var ms = new MemoryStream();
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
+            profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
+            if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
+
+            ms.Position = 0;
+            using var reader = new StreamReader(ms, Encoding.UTF8);
+            rawOutput = await reader.ReadToEndAsync(ct);
+            generatedBytes = ms.Length;
+        }
+
+        // ── 4. Apply pipeline ──
+        sw.Restart();
+        string finalOutput;
+        string transformInfo = "";
+
+        if (hasPipeline)
+        {
+            var pipelineResult = await pipeline.ApplyAsync(rawOutput, ct);
+            finalOutput = pipelineResult.Output;
+
+            // Prepend legend (from dynamic compressor) and LlmContextHeader uniformly
+            finalOutput = pipelineResult.Legend + finalOutput;
+
+            if (brainMode || compress)
+                finalOutput = LlmContextHeader + finalOutput;
+
+            // Build logging info
+            var parts = new List<string>();
+            if (brainMode) parts.Add("BrainMode ON");
+            if (compress && sqzService != null) parts.Add("Compressed (sqz)");
+            if (brainMode && pipelineResult.TokensSaved > 0)
+            {
+                parts.Add($"Dynamic: ~{pipelineResult.TokensSaved} tokens saved");
+                profileReporter?.RecordMetric("BrainReplacements", pipelineResult.TokensSaved.ToString());
+            }
+            transformInfo = parts.Count > 0 ? $" | {string.Join(" | ", parts)}" : "";
+
+            profileReporter?.RecordStage("Transformation", sw.ElapsedTicks);
+        }
+        else
+        {
+            finalOutput = "";
+        }
+
+        // ── 5. Emit to sink ──
+        sw.Restart();
+
+        if (!string.IsNullOrEmpty(outputFile))
+        {
+            return await EmitToFile(filteredList, actualFileCount, outputFile, appendMode,
+                hasPipeline, finalOutput, compiled, excludeLineIfStart, transformInfo,
+                unsafeDirectWrite, config, ct, sw, profileReporter);
+        }
+        else
+        {
+            return await EmitToClipboard(filteredList, actualFileCount,
+                hasPipeline, finalOutput, compiled, excludeLineIfStart, transformInfo,
+                config, appendMode, ct, sw, profileReporter);
+        }
+    }
+
+    private async Task<Result> EmitToFile(
+        List<FileContent> filteredList,
+        int actualFileCount,
+        string outputFile,
+        bool appendMode,
+        bool hasPipeline,
+        string finalOutput,
+        CompiledContentPatterns compiled,
+        IEnumerable<string>? excludeLineIfStart,
+        string transformInfo,
+        bool unsafeDirectWrite,
+        GcConfiguration config,
+        CancellationToken ct,
+        System.Diagnostics.Stopwatch sw,
+        ProfileReporter? profileReporter)
+    {
+        var outputDir = Path.GetDirectoryName(outputFile);
+        if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
+            Directory.CreateDirectory(outputDir);
+
+        bool shouldAppend = appendMode && File.Exists(outputFile);
+
+        if (hasPipeline)
+        {
+            var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
+
+            if (unsafeDirectWrite || shouldAppend)
+            {
+                var fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
+                using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                await fs.WriteAsync(finalBytes, ct);
+            }
+            else
+            {
+                await SafeFileWriter.WriteAllBytesAsync(outputFile, finalBytes, ct);
             }
 
+            string action = shouldAppend ? "Appended to" : "Exported to";
+            _logger.Success($"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{finalBytes.Length / 4}");
+            profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
             return Result.Success();
+        }
+
+        // No pipeline — stream directly to file
+        if (unsafeDirectWrite || shouldAppend)
+        {
+            var fileMode = shouldAppend ? FileMode.Append : FileMode.Create;
+            using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, fs, config, compiled, excludeLineIfStart, null, ct);
+            profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
+            if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
+
+            string action = shouldAppend ? "Appended to" : "Exported to";
+            _logger.Success($"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         }
         else
         {
@@ -452,80 +526,56 @@ public sealed class GenerateContextUseCase
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-            if (brainMode)
-            {
-                ms.Position = 0;
-                using var reader = new StreamReader(ms, Encoding.UTF8);
-                var rawOutput = await reader.ReadToEndAsync(ct);
+            await SafeFileWriter.WriteAllBytesAsync(outputFile, ms.ToArray(), ct);
 
-                string finalOutput;
-                string dynInfo = "";
-
-                sw.Restart();
-                if (compress)
-                {
-                    var afterCrush = crusher!.Crush(rawOutput);
-                    finalOutput = LlmContextHeader + await sqzService!.CompressAsync(afterCrush, noCache);
-                }
-                else
-                {
-                    var dynResult = dynamicCompressor!.Compress(rawOutput);
-                    var afterCrush = crusher!.Crush(dynResult.Output);
-                    finalOutput = dynResult.Legend + afterCrush;
-                    dynInfo = dynResult.ReplacementCount > 0 ? $" | Dynamic: {dynResult.ReplacementCount} replacements, ~{dynResult.TokensSaved} tokens saved" : "";
-                    profileReporter?.RecordMetric("BrainReplacements", dynResult.ReplacementCount.ToString());
-                }
-                profileReporter?.RecordStage("Transformation", sw.ElapsedTicks);
-
-                var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
-
-                using var finalMs = new MemoryStream(finalBytes);
-                finalMs.Position = 0;
-                sw.Restart();
-                var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
-                profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
-                if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
-
-                _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | BrainMode ON{dynInfo} | Tokens: ~{finalBytes.Length / 4}");
-
-                profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
-                return Result.Success();
-            }
-
-            if (compress)
-            {
-                ms.Position = 0;
-                using var reader = new StreamReader(ms, Encoding.UTF8);
-                var rawOutput = await reader.ReadToEndAsync(ct);
-
-                sw.Restart();
-                var compressedOutput = await sqzService!.CompressAsync(rawOutput, noCache);
-                profileReporter?.RecordStage("Transformation", sw.ElapsedTicks);
-                var finalBytes = Encoding.UTF8.GetBytes(LlmContextHeader + compressedOutput);
-
-                using var finalMs = new MemoryStream(finalBytes);
-                finalMs.Position = 0;
-                sw.Restart();
-                var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
-                profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
-                if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
-
-                _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)} | Compressed (sqz) | Tokens: ~{finalBytes.Length / 4}");
-
-                profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
-                return Result.Success();
-            }
-
-            ms.Position = 0;
-            sw.Restart();
-            var clipResult2 = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
-            profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
-            if (!clipResult2.IsSuccess) return Result.Failure(clipResult2.Error!);
-
-            _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
-
+            _logger.Success($"✔ Exported to {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
             profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
+        }
+
+        return Result.Success();
+    }
+
+    private async Task<Result> EmitToClipboard(
+        List<FileContent> filteredList,
+        int actualFileCount,
+        bool hasPipeline,
+        string finalOutput,
+        CompiledContentPatterns compiled,
+        IEnumerable<string>? excludeLineIfStart,
+        string transformInfo,
+        GcConfiguration config,
+        bool appendMode,
+        CancellationToken ct,
+        System.Diagnostics.Stopwatch sw,
+        ProfileReporter? profileReporter)
+    {
+        if (hasPipeline)
+        {
+            var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
+            using var finalMs = new MemoryStream(finalBytes);
+            finalMs.Position = 0;
+            var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
+            profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
+            if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
+
+            _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{finalBytes.Length / 4}");
+            profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
             return Result.Success();
         }
+
+        // No pipeline — stream directly to clipboard
+        using var ms = new MemoryStream();
+        var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled, excludeLineIfStart, null, ct);
+        profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
+        if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
+
+        ms.Position = 0;
+        var clipResult2 = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
+        profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
+        if (!clipResult2.IsSuccess) return Result.Failure(clipResult2.Error!);
+
+        _logger.Success($"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+        profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
+        return Result.Success();
     }
 }

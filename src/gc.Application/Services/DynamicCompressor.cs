@@ -50,7 +50,10 @@ public sealed class DynamicCompressor
         var symbolMap = new Dictionary<string, string>(StringComparer.Ordinal);
         var symbolIndex = 0;
 
-        foreach (var kvp in refinedMap.OrderByDescending(k => k.Key.Length * k.Value))
+        // Sort by (length * frequency) descending, then by key for determinism.
+        // Dictionary enumeration order is implementation-defined, so we must sort
+        // before iterating to ensure byte-identical output across runtimes.
+        foreach (var kvp in refinedMap.OrderByDescending(k => k.Key.Length * k.Value).ThenBy(k => k.Key, StringComparer.Ordinal))
         {
             var phrase = kvp.Key;
             var freq = kvp.Value;
@@ -238,9 +241,10 @@ public sealed class DynamicCompressor
     {
         var sb = new StringBuilder();
         sb.AppendLine("# GC_DICT");
-        foreach (var (phrase, symbol) in symbolMap)
+        // Sort by symbol for deterministic output - dictionary iteration is not ordered
+        foreach (var kvp in symbolMap.OrderBy(k => k.Value, StringComparer.Ordinal))
         {
-            sb.AppendLine($"{symbol}={phrase}");
+            sb.AppendLine($"{kvp.Key}={kvp.Value}");
         }
         sb.AppendLine();
         return sb.ToString();

@@ -31,7 +31,7 @@ public class Phase2PerformanceTests : IDisposable
     [Fact]
     public async Task Optimization2_ParallelRead_PreservesOrder()
     {
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var filesDir = Path.Combine(_tempDir, "parallel_order");
         Directory.CreateDirectory(filesDir);
 
@@ -40,7 +40,7 @@ public class Phase2PerformanceTests : IDisposable
         {
             var path = Path.Combine(filesDir, $"file_{i:D2}.txt");
             await File.WriteAllTextAsync(path, $"Content {i}");
-            entries.Add(new FileContent(new FileEntry(path, "txt", "text", -1), null, -1));
+            entries.Add(new FileContent(new FileEntry(Root: "", Relative: path, Extension: "txt", Language: "text", Size: -1), null, -1));
         }
 
         using var ms = new MemoryStream();
@@ -63,12 +63,12 @@ public class Phase2PerformanceTests : IDisposable
     [Fact]
     public async Task Optimization2_DirectUTF8Writes_ByteCountAccurate()
     {
-        var generator = new MarkdownGenerator(_logger, new FileReader(_logger));
+        var generator = new MarkdownGenerator();
         var content = "direct utf8 test content";
         var path = Path.Combine(_tempDir, "utf8.txt");
         await File.WriteAllTextAsync(path, content);
 
-        var entries = new List<FileContent> { new(new FileEntry(path, "txt", "text", -1), null, -1) };
+        var entries = new List<FileContent> { new(new FileEntry(Root: "", Relative: path, Extension: "txt", Language: "text", Size: -1), null, -1) };
         using var ms = new MemoryStream();
         var result = await generator.GenerateMarkdownStreamingAsync(entries, ms, _config, null, null, CancellationToken.None);
 

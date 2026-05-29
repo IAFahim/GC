@@ -114,10 +114,9 @@ public static class HistoryMenu
         var discovery = new gc.Infrastructure.Discovery.FileDiscovery(logger);
         var filter = new gc.Application.Services.FileFilter(logger);
         var contentFilter = new gc.Application.Services.ContentFilter(logger);
-        var reader = new gc.Infrastructure.IO.FileReader(logger);
-        var generator = new gc.Application.Services.MarkdownGenerator(logger, reader);
+        var generator = new gc.Application.Services.MarkdownGenerator(logger);
         var clipboard = new gc.Infrastructure.System.ClipboardService(logger);
-        var useCase = new gc.Application.UseCases.GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
+        var useCase = new gc.Application.UseCases.GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
         var validator = new gc.Application.Validators.ConfigurationValidator();
         var configService = new gc.Application.Services.ConfigurationService(logger, validator);
 

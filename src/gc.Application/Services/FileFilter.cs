@@ -24,7 +24,9 @@ public sealed class FileFilter
         IEnumerable<string> excludePatterns,
         IEnumerable<string> extensionFilters,
         string[]? excludePathPatterns = null,
-        string[]? includePathPatterns = null)
+        string[]? includePathPatterns = null,
+        string? rootPath = null,
+        string? absoluteRootPath = null)
     {
         var activeExtensions = ResolveActiveExtensions(extensionFilters);
 
@@ -43,7 +45,7 @@ public sealed class FileFilter
 
         var filtered = rawFiles
             .Where(path => IsValidPath(path, normalizedSearchPaths, excludeSearchValues, activeExtensions, mergedExcludePath, mergedIncludePath))
-            .Select(path => CreateFileEntry(path, config))
+            .Select(path => CreateFileEntry(path, config, rootPath, absoluteRootPath))
             .Where(entry => entry != null)
             .Cast<FileEntry>()
             .ToList();
@@ -203,7 +205,7 @@ public sealed class FileFilter
         return list.ToArray();
     }
 
-    private FileEntry? CreateFileEntry(string path, GcConfiguration config)
+    private FileEntry? CreateFileEntry(string path, GcConfiguration config, string? rootPath = null, string? absoluteRootPath = null)
     {
         try
         {
@@ -212,12 +214,51 @@ public sealed class FileFilter
             var languageKey = string.IsNullOrEmpty(extension) ? fileName.ToString().ToLowerInvariant() : extension;
             var language = ResolveLanguage(languageKey, config);
 
-            // Populate file size during filtering to avoid redundant stat calls downstream.
-            // Falls back to -1 only if the file is inaccessible.
-            long size = -1;
-            try { size = new System.IO.FileInfo(path).Length; } catch { }
+            // Compute root and relative path properly:
+            // - rootPath is the repo root
+            // - absoluteRootPath is the absolute version of rootPath
+            // - path may be absolute or relative
+            string root = string.Empty;
+            string relative = path;
 
-            return new FileEntry(path, extension, language, size);
+            if (!string.IsNullOrEmpty(rootPath))
+            {
+                var absRoot = !string.IsNullOrEmpty(absoluteRootPath) 
+                    ? absoluteRootPath 
+                    : System.IO.Path.GetFullPath(rootPath);
+
+                if (System.IO.Path.IsPathFullyQualified(path))
+                {
+                    // path is absolute - compute relative from root
+                    root = absRoot;
+                    relative = System.IO.Path.GetRelativePath(absRoot, path).Replace('\\', '/');
+                }
+                else
+                {
+                    // path is already relative to root
+                    root = absRoot;
+                    relative = path.Replace('\\', '/');
+                }
+            }
+
+            // Populate file size during filtering to avoid redundant stat calls downstream.
+            // Use the absolute path to stat correctly.
+            long size = -1;
+            try 
+            { 
+                var absPath = string.IsNullOrEmpty(root) 
+                    ? System.IO.Path.GetFullPath(path) 
+                    : System.IO.Path.Combine(root, relative);
+                size = new System.IO.FileInfo(absPath).Length; 
+            } 
+            catch { }
+
+            return new FileEntry(
+                Root: root,
+                Relative: relative,
+                Extension: extension,
+                Language: language,
+                Size: size);
         }
         catch (Exception ex)
         {

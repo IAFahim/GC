@@ -217,11 +217,7 @@ public sealed class ConfigurationLoader
 
     private FiltersConfiguration MergeFilters(FiltersConfiguration target, FiltersConfiguration source)
     {
-        return target with
-        {
-            SystemIgnoredPatterns = source.SystemIgnoredPatterns ?? target.SystemIgnoredPatterns,
-            AdditionalExtensions = source.AdditionalExtensions ?? target.AdditionalExtensions
-        };
+        return ConfigurationMerger.MergeFilters(target, source);
     }
 
     private IReadOnlyDictionary<string, PresetConfiguration> MergePresets(

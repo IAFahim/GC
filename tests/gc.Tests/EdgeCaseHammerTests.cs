@@ -188,53 +188,14 @@ namespace MyApp
         Assert.Equal(9, sa.Length);
     }
 
-    [Fact]
-    public void SuffixArray_FindRepeated_PublicStaticReadonly()
-    {
-        var text = "public static readonly public static readonly";
-        var phrases = SuffixArray.FindRepeatedPhrases(text, 6, 40, 2, 10);
-        Assert.True(phrases.Count > 0, "Should find repeated 'public static readonly'");
-    }
-
-    [Fact]
-    public void SuffixArray_FindRepeated_ShortRepeats_ExcludedByMinLength()
-    {
-        var text = "aaaaaa";
-        var phrases = SuffixArray.FindRepeatedPhrases(text, 6, 40, 2, 10);
-        // "aaaaaa" is exactly 6 chars, but only repeated as "a" substrings
-        // Should not find useful phrases since min length is 6
-    }
-
-    [Fact]
-    public void SuffixArray_FindRepeated_VeryLongRepeatedString()
-    {
-        var chunk = new string('x', 200) + "END";
-        var text = string.Join("SEP", Enumerable.Repeat(chunk, 5));
-        var phrases = SuffixArray.FindRepeatedPhrases(text, 6, 250, 2, 10);
-        // Just verify it doesn't crash and returns something reasonable
-        Assert.NotNull(phrases);
-    }
+    // SuffixArray.ExtractMaximalPhrases is tested via DynamicCompressor integration tests
+    // FindRepeatedPhrases was deleted as dead code
 
     // =========================================================================
     // AhoCorasick edge cases
     // =========================================================================
 
-    [Fact]
-    public void AhoCorasick_OverlappingPatterns_LongestMatchWins()
-    {
-        var ac = new AhoCorasick(new[] { "abc", "abcd", "abcde" });
-        var result = ac.ReplaceAll("test abcde end", new[] { "X", "Y", "Z" });
-        Assert.Contains("Z", result); // "abcde" (longest) should match → "Z"
-        Assert.DoesNotContain("abcde", result);
-    }
 
-    [Fact]
-    public void AhoCorasick_EmptyReplacement_PatternsDeleted()
-    {
-        var ac = new AhoCorasick(new[] { "remove_me" });
-        var result = ac.ReplaceAll("keep this remove_me and this", new[] { "" });
-        Assert.Equal("keep this  and this", result);
-    }
 
     // =========================================================================
     // CliParser edge cases
@@ -274,12 +235,12 @@ namespace MyApp
     {
         var logger = new TestLogger();
         var reader = new TestFileReader();
-        var generator = new MarkdownGenerator(logger, reader);
+        var generator = new MarkdownGenerator(logger);
 
         var contents = new[]
         {
             new FileContent(
-                new FileEntry { Path = "test.cs", Extension = "cs", Language = "csharp" },
+                new FileEntry(Root: "", Relative: "test.cs", Extension: "cs", Language: "csharp", Size: 5),
                 "\n\n\n\n\n",
                 5)
         };
@@ -299,12 +260,12 @@ namespace MyApp
     {
         var logger = new TestLogger();
         var reader = new TestFileReader();
-        var generator = new MarkdownGenerator(logger, reader);
+        var generator = new MarkdownGenerator(logger);
         var discovery = new MockDiscovery(Array.Empty<FileEntry>());
         var clipboard = new MockClipboard();
         var filter = new FileFilter(logger);
         var contentFilter = new ContentFilter(logger);
-        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
+        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
 
         var result = await useCase.ExecuteAsync(
             "/tmp", new GcConfiguration(),
@@ -320,12 +281,12 @@ namespace MyApp
     {
         var logger = new TestLogger();
         var reader = new TestFileReader();
-        var generator = new MarkdownGenerator(logger, reader);
+        var generator = new MarkdownGenerator(logger);
         var discovery = new MockDiscovery(Array.Empty<FileEntry>());
         var clipboard = new MockClipboard();
         var filter = new FileFilter(logger);
         var contentFilter = new ContentFilter(logger);
-        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
+        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
 
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();

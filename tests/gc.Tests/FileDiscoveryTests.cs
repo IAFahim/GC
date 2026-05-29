@@ -73,10 +73,11 @@ public class FileDiscoveryTests : IDisposable
         var result = await discovery.DiscoverFilesAsync(_testDir, config, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(3, result.Value!.Count());
-        Assert.Contains(result.Value!, f => f == "Program.cs");
-        Assert.Contains(result.Value!, f => f == "readme.md");
-        Assert.Contains(result.Value!, f => f == "style.css");
+        var files = result.Value!.ToList();
+        Assert.Equal(3, files.Count);
+        Assert.Contains(files, f => f.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(files, f => f.EndsWith("readme.md", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(files, f => f.EndsWith("style.css", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -100,9 +101,8 @@ public class FileDiscoveryTests : IDisposable
 
         Assert.True(result.IsSuccess);
         var files = result.Value!.ToList();
-        // MaxDepth=1 means depth 0 (root) and depth 1 (a/) — no deeper
-        Assert.Contains(files, f => f == "root.txt");
-        Assert.Contains(files, f => f == "a/level1.txt");
+        Assert.Contains(files, f => f.EndsWith("root.txt", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(files, f => f.EndsWith("a/level1.txt", StringComparison.OrdinalIgnoreCase) || f.EndsWith("a\\level1.txt", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(files, f => f.Contains("level2"));
         Assert.DoesNotContain(files, f => f.Contains("level3"));
     }
@@ -129,7 +129,7 @@ public class FileDiscoveryTests : IDisposable
         Assert.True(result.IsSuccess);
         var files = result.Value!.ToList();
         Assert.Single(files);
-        Assert.Equal("app.js", files[0]);
+        Assert.EndsWith("app.js", files[0], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class FileDiscoveryTests : IDisposable
         Assert.True(result.IsSuccess);
         var files = result.Value!.ToList();
         Assert.Single(files);
-        Assert.Equal("Program.cs", files[0]);
+        Assert.EndsWith("Program.cs", files[0], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public class FileDiscoveryTests : IDisposable
         Assert.True(result.IsSuccess);
         var files = result.Value!.ToList();
         Assert.Single(files);
-        Assert.Equal("main.py", files[0]);
+        Assert.EndsWith("main.py", files[0], StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public class FileDiscoveryTests : IDisposable
         Assert.True(result.IsSuccess);
         var files = result.Value!.ToList();
         Assert.Single(files);
-        Assert.Equal("src.py", files[0]);
+        Assert.EndsWith("src.py", files[0], StringComparison.OrdinalIgnoreCase);
     }
 
     // ─── 3. Nested Directories ─────────────────────────────────────────
@@ -234,9 +234,9 @@ public class FileDiscoveryTests : IDisposable
         var files = result.Value!.ToList();
         Assert.Equal(3, files.Count);
         // All paths should use forward slashes (normalized)
-        Assert.Contains(files, f => f == "src/utils/helper.cs");
-        Assert.Contains(files, f => f == "tests/unit/test.cs");
-        Assert.Contains(files, f => f == "root.md");
+        Assert.Contains(files, f => f.Replace('\\', '/').EndsWith("src/utils/helper.cs", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(files, f => f.Replace('\\', '/').EndsWith("tests/unit/test.cs", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(files, f => f.Replace('\\', '/').EndsWith("root.md", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -429,9 +429,9 @@ public class FileDiscoveryTests : IDisposable
         Assert.True(result.IsSuccess);
         var files = result.Value!.ToList();
         // Should not follow symlink into "link" directory
-        Assert.DoesNotContain(files, f => f.Contains("link"));
-        Assert.Contains(files, f => f == "root.txt");
-        Assert.Contains(files, f => f.Contains("real_file.txt"));
+        Assert.DoesNotContain(files, f => f.Replace('\\', '/').Contains("link/"));
+        Assert.Contains(files, f => f.Replace('\\', '/').EndsWith("root.txt", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(files, f => f.Replace('\\', '/').Contains("real_file.txt"));
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────

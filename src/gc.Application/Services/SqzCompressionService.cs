@@ -39,13 +39,15 @@ public sealed class SqzCompressionService
 
         process.Start();
 
+        // Start reading stdout/stderr BEFORE writing to stdin to avoid deadlock.
+        // If sqz streams output while reading input, its stdout pipe (~64KB) can fill
+        // and block, causing a deadlock if we're not reading yet.
+        var compressedTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+
         await process.StandardInput.WriteAsync(markdownContent);
         await process.StandardInput.FlushAsync();
         process.StandardInput.Close();
-
-        // Read both streams concurrently to avoid deadlock when stderr fills its buffer
-        var compressedTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
 
         await process.WaitForExitAsync();
 

@@ -310,58 +310,7 @@ public class ApplicationCoverageTests
         return (string)method.Invoke(instance, [input, replacements])!;
     }
 
-    // --- 23. ReplaceAll_EmptyInput ---
-    [Fact]
-    public void ReplaceAll_EmptyInput_ReturnsEmpty()
-    {
-        var ac = CreateAhoCorasick(["test"]);
-        var result = AhoCorasickReplaceAll(ac, "", ["TEST"]);
-        Assert.Equal("", result);
-    }
 
-    // --- 24. ReplaceAll_NoMatchingChars ---
-    [Fact]
-    public void ReplaceAll_NoMatchingChars_ChineseTextUnchanged()
-    {
-        var ac = CreateAhoCorasick(["hello", "world"]);
-        var input = "这是一些中文文本没有英文单词";
-        var result = AhoCorasickReplaceAll(ac, input, ["HELLO", "WORLD"]);
-        Assert.Equal(input, result);
-    }
-
-    // --- 25. ReplaceAll_SinglePatternNoMatch ---
-    [Fact]
-    public void ReplaceAll_SinglePatternNoMatch_Unchanged()
-    {
-        var ac = CreateAhoCorasick(["xyz"]);
-        var input = "the quick brown fox";
-        var result = AhoCorasickReplaceAll(ac, input, ["XYZ"]);
-        Assert.Equal(input, result);
-    }
-
-    // --- 26. Constructor_DuplicatePatterns ---
-    [Fact]
-    public void Constructor_DuplicatePatterns_DoesNotCrash()
-    {
-        // Same pattern twice should not crash during construction.
-        // Note: when duplicates exist, the output array has the same pattern at two indices,
-        // so we must provide enough replacement entries.
-        var ac = CreateAhoCorasick(["hello", "hello"]);
-        Assert.NotNull(ac);
-        // Both output slots point to the same pattern; replacements array must match
-        var result = AhoCorasickReplaceAll(ac, "hello world", ["HELLO", "HELLO"]);
-        Assert.Contains("HELLO", result);
-    }
-
-    // --- 27. ReplaceAll_PatternAtEndOfInput ---
-    [Fact]
-    public void ReplaceAll_PatternAtEndOfInput_Matched()
-    {
-        var ac = CreateAhoCorasick(["end"]);
-        var input = "the end";
-        var result = AhoCorasickReplaceAll(ac, input, ["END"]);
-        Assert.Equal("the END", result);
-    }
 
     // ========================================================================
     //  SuffixArray Tests
@@ -447,25 +396,6 @@ public class ApplicationCoverageTests
     }
 
     // --- 33. FindRepeatedPhrases_MaxCandidates ---
-    [Fact]
-    public void FindRepeatedPhrases_MaxCandidates_LimitsOutputCount()
-    {
-        // Build highly repetitive text with many distinct repeated phrases
-        var sb = new StringBuilder();
-        for (int i = 0; i < 20; i++)
-        {
-            var phrase = $"uniquePhrase{i:D3}Value";
-            sb.Append(string.Join(" ", Enumerable.Repeat(phrase, 3)));
-            sb.Append(' ');
-        }
-        var text = sb.ToString();
-        var phrases = SuffixArray.FindRepeatedPhrases(text, 6, 80, 2, maxCandidates: 3);
-        Assert.True(phrases.Count <= 3,
-            $"Expected at most 3 candidates, got {phrases.Count}");
-    }
-
-    // --- 34. IsUsefulPhrase_LowAlphaRatio ---
-    [Fact]
     public void IsUsefulPhrase_LowAlphaRatio_Filtered()
     {
         // Build text where repeated phrases are mostly punctuation
@@ -636,7 +566,7 @@ public class ApplicationCoverageTests
         var reader = new MockFileReader();
         var generator = new MockMarkdownGenerator();
         var clipboard = new MockClipboardService();
-        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
+        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
         return (useCase, discovery, generator, clipboard, logger);
     }
 

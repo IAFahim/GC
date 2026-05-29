@@ -82,16 +82,15 @@ public static class Program
         var discovery = new FileDiscovery(logger);
         var filter = new FileFilter(logger);
         var contentFilter = new ContentFilter(logger);
-        var reader = new FileReader(logger);
-        var generator = new MarkdownGenerator(logger, reader);
+        var generator = new MarkdownGenerator(logger);
         var clipboard = new ClipboardService(logger);
         var validator = new ConfigurationValidator();
         var configService = new ConfigurationService(logger, validator);
 
-        bool needsReporter = cliArgs.Profile || cliArgs.ShowStats || !string.IsNullOrEmpty(cliArgs.StatsOutput);
+        bool needsReporter = cliArgs.Profile || cliArgs.ShowStats || !string.IsNullOrEmpty(cliArgs.StatsOutput) || !string.IsNullOrEmpty(cliArgs.ProfileOutput);
         ProfileReporter? profileReporter = needsReporter ? new ProfileReporter() : null;
 
-        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, reader, generator, clipboard, logger);
+        var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
 
         var exitCode = await ExecuteAsync(Directory.GetCurrentDirectory(), cliArgs, config, useCase, configService, logger, cts.Token, profileReporter);
 
@@ -145,7 +144,11 @@ public static class Program
     internal static async Task<int> ExecuteAsync(string currentDirectory, CliArguments cliArgs, GcConfiguration config, GenerateContextUseCase useCase, ConfigurationService configService, ILogger logger, CancellationToken ct, ProfileReporter? profileReporter = null)
     {
         if (cliArgs.InitConfig) return (await configService.InitializeConfigAsync()).IsSuccess ? 0 : 1;
-        if (cliArgs.ValidateConfig) return configService.ValidateConfig(config).IsSuccess ? 0 : 1;
+        if (cliArgs.ValidateConfig)
+        {
+            var validationResult = configService.ValidateConfig(config);
+            return validationResult.IsSuccess && validationResult.Value?.IsValid == true ? 0 : 1;
+        }
         if (cliArgs.DumpConfig) return configService.DumpConfig(config).IsSuccess ? 0 : 1;
 
         if (cliArgs.Force)
@@ -221,7 +224,7 @@ public static class Program
             var filterResult = filter2.FilterFiles(
                 discoveryResult.Value!, config,
                 cliArgs.Paths, cliArgs.Excludes, cliArgs.Extensions,
-                cliArgs.ExcludePathPatterns, cliArgs.IncludePathPatterns);
+                cliArgs.ExcludePathPatterns, cliArgs.IncludePathPatterns, currentDirectory);
 
             if (!filterResult.IsSuccess)
             {
@@ -230,6 +233,21 @@ public static class Program
             }
 
             var entries = filterResult.Value!.ToList();
+
+            // Shard mode for dry-run: show only the requested shard's files
+            if (cliArgs.ShardInfo != null && cliArgs.ShardInfo.Of > 1)
+            {
+                var splitter = new gc.Application.Services.ShardSplitter();
+                var shardLists = splitter.SplitIntoShards(entries, cliArgs.ShardInfo.Of, cliArgs.ShardInfo.Slice, logger);
+                var shardEntries = shardLists.Count >= cliArgs.ShardInfo.Slice ? shardLists[cliArgs.ShardInfo.Slice - 1] : entries;
+                logger.Info($"Files that would be processed (shard {cliArgs.ShardInfo.Slice}/{cliArgs.ShardInfo.Of}): {shardEntries.Count} of {entries.Count}");
+                foreach (var entry in shardEntries)
+                {
+                    Console.WriteLine(entry.DisplayPath ?? entry.Path);
+                }
+                return 0;
+            }
+
             logger.Info($"Files that would be processed ({entries.Count}):");
             foreach (var entry in entries)
             {
@@ -254,7 +272,7 @@ public static class Program
             var filterResult = filter2.FilterFiles(
                 discoveryResult.Value!, config,
                 cliArgs.Paths, cliArgs.Excludes, cliArgs.Extensions,
-                cliArgs.ExcludePathPatterns, cliArgs.IncludePathPatterns);
+                cliArgs.ExcludePathPatterns, cliArgs.IncludePathPatterns, currentDirectory);
 
             if (!filterResult.IsSuccess)
             {
@@ -350,7 +368,8 @@ public static class Program
                 ct,
                 profileReporter,
                 cliArgs.UnsafeDirectWrite,
-                cliArgs.ChangedSince);
+                cliArgs.ChangedSince,
+                cliArgs.ShardInfo);
 
             if (!result.IsSuccess)
             {
@@ -380,7 +399,8 @@ public static class Program
             ct,
             profileReporter,
             cliArgs.UnsafeDirectWrite,
-            cliArgs.ChangedSince);
+            cliArgs.ChangedSince,
+            cliArgs.ShardInfo);
 
         if (!normalResult.IsSuccess)
         {
@@ -434,6 +454,13 @@ CLUSTER MODE:
     --cluster-dir <path>             Directory to scan for repos (default: CWD)
     --cluster-depth <number>         Max depth to scan for repos (default: 2)
 
+SHARD MODE:
+    --shard <N.M>                    Process shard N of M pieces (e.g. 1.3, 2.3)
+
+    Smart grouping by module/folder, then by file size for balanced shards.
+
+    The file listing at the end always shows all files in the repo.
+
 CONFIGURATION:
     --init-config                    Initialize configuration
     --validate-config                Validate configuration
@@ -453,6 +480,6 @@ OTHER:
     private static void PrintVersion()
     {
         Console.WriteLine("gc version 1.1.0");
-        Console.WriteLine("Git Copy (Elite C# Edition) with Cluster Mode");
+        Console.WriteLine("Git Copy (Elite C# Edition) with Cluster Mode and Shard Mode");
     }
 }

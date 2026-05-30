@@ -28,6 +28,7 @@ public sealed class CliArguments
     public bool Append { get; set; }
     public bool NoSort { get; set; }
     public bool Force { get; set; }
+    public bool NoClipboard { get; set; }
     public int? Depth { get; set; }
     public bool ShowHistory { get; set; }
     public int? HistoryIndex { get; set; }

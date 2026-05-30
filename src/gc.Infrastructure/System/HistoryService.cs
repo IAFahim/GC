@@ -125,8 +125,7 @@ public sealed class HistoryService : IHistoryService
                 await writer.WriteAsync(json);
             }
 
-            File.Delete(_historyFilePath);
-            File.Move(tmpPath, _historyFilePath);
+            File.Move(tmpPath, _historyFilePath, overwrite: true);
         }
         finally
         {

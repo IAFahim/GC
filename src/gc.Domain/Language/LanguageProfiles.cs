@@ -97,6 +97,16 @@ public static class LanguageProfiles
         ["hpp"] = C_Cpp,
         ["hxx"] = C_Cpp,
         ["h++"] = C_Cpp,
+        ["js"] = CSharp,
+        ["javascript"] = CSharp,
+        ["ts"] = CSharp,
+        ["typescript"] = CSharp,
+        ["css"] = CSharp,
+        ["uss"] = CSharp,
+        ["glsl"] = C_Cpp,
+        ["shader"] = C_Cpp,
+        ["cginc"] = C_Cpp,
+        ["hlsl"] = C_Cpp,
 
         // Scripting
         ["py"] = Python,

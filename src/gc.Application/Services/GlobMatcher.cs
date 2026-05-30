@@ -28,10 +28,77 @@ public static class GlobMatcher
     {
         if (pattern.IsEmpty) return path.IsEmpty;
 
-        // No wildcards at all → exact match (case-insensitive)
+        // No wildcards at all
         if (!pattern.ContainsAny('*', '?'))
-            return path.Length == pattern.Length &&
-                   path.Equals(pattern, StringComparison.OrdinalIgnoreCase);
+        {
+            // 1. Suffix/Extension matching (e.g. ".bin")
+            if (pattern[0] == '.')
+            {
+                var lastSep = path.LastIndexOfAny('/', '\\');
+                var fileName = lastSep >= 0 ? path[(lastSep + 1)..] : path;
+                if (fileName.EndsWith(pattern, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            // Check if pattern has internal slash (excluding trailing slash)
+            var patternTrimmed = pattern;
+            if (!patternTrimmed.IsEmpty && (patternTrimmed[^1] == '/' || patternTrimmed[^1] == '\\'))
+            {
+                patternTrimmed = patternTrimmed[..^1];
+            }
+            var hasSlashInternal = patternTrimmed.ContainsAny('/', '\\');
+
+            // 2. Anchored path matching (e.g. "src/generated" or "src/temp/")
+            if (hasSlashInternal)
+            {
+                var endsWithSlash = pattern[^1] == '/' || pattern[^1] == '\\';
+                if (endsWithSlash)
+                {
+                    if (PathStartsWith(path, pattern))
+                        return true;
+                }
+                else
+                {
+                    if (PathEquals(path, pattern))
+                        return true;
+                    if (path.Length > pattern.Length && (path[pattern.Length] == '/' || path[pattern.Length] == '\\') && PathStartsWith(path, pattern))
+                        return true;
+                }
+                return false;
+            }
+
+            // 3. Segment matching (e.g. "generated" or "temp/")
+            var searchPattern = pattern;
+            if (!searchPattern.IsEmpty && (searchPattern[^1] == '/' || searchPattern[^1] == '\\'))
+            {
+                searchPattern = searchPattern[..^1];
+            }
+            var isDirOnly = pattern[^1] == '/' || pattern[^1] == '\\';
+
+            var tempPath = path;
+            while (true)
+            {
+                var slashIdx = tempPath.IndexOfAny('/', '\\');
+                var segment = slashIdx >= 0 ? tempPath.Slice(0, slashIdx) : tempPath;
+                var isDirectorySegment = slashIdx >= 0;
+
+                if (isDirOnly)
+                {
+                    if (isDirectorySegment && PathEquals(segment, searchPattern))
+                        return true;
+                }
+                else
+                {
+                    if (PathEquals(segment, searchPattern))
+                        return true;
+                }
+
+                if (slashIdx < 0) break;
+                tempPath = tempPath.Slice(slashIdx + 1);
+            }
+
+            return false;
+        }
 
         // Pure ** pattern matches everything
         if (pattern.Length == 2 && pattern[0] == '*' && pattern[1] == '*') return true;
@@ -212,5 +279,35 @@ public static class GlobMatcher
         }
 
         return pathIdx == path.Length;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool PathEquals(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern)
+    {
+        if (path.Length != pattern.Length) return false;
+        for (var i = 0; i < path.Length; i++)
+        {
+            var pc = pattern[i];
+            var sc = path[i];
+            if (pc == '\\') pc = '/';
+            if (sc == '\\') sc = '/';
+            if (char.ToLowerInvariant(pc) != char.ToLowerInvariant(sc)) return false;
+        }
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool PathStartsWith(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern)
+    {
+        if (path.Length < pattern.Length) return false;
+        for (var i = 0; i < pattern.Length; i++)
+        {
+            var pc = pattern[i];
+            var sc = path[i];
+            if (pc == '\\') pc = '/';
+            if (sc == '\\') sc = '/';
+            if (char.ToLowerInvariant(pc) != char.ToLowerInvariant(sc)) return false;
+        }
+        return true;
     }
 }

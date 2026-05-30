@@ -9,9 +9,7 @@ namespace gc.Infrastructure.Configuration;
 
 public sealed class ConfigurationLoader
 {
-    private readonly object _cacheLock = new();
     private readonly ILogger _logger;
-    private GcConfiguration? _cachedConfiguration;
 
     public ConfigurationLoader(ILogger logger)
     {
@@ -46,8 +44,6 @@ public sealed class ConfigurationLoader
 
     public async Task<Result<GcConfiguration>> LoadConfigAsync(bool useCache = true)
     {
-        if (useCache && _cachedConfiguration != null) return Result<GcConfiguration>.Success(_cachedConfiguration);
-
         _logger.Debug("Loading configuration...");
 
         var config = BuiltInPresets.GetDefaultConfiguration();
@@ -76,12 +72,6 @@ public sealed class ConfigurationLoader
             if (projectResult.IsSuccess && projectResult.Value != null)
                 config = MergeConfiguration(config, projectResult.Value, "Project");
         }
-
-        if (useCache)
-            lock (_cacheLock)
-            {
-                _cachedConfiguration = config;
-            }
 
         return Result<GcConfiguration>.Success(config);
     }
@@ -157,135 +147,11 @@ public sealed class ConfigurationLoader
     private GcConfiguration MergeConfiguration(GcConfiguration target, GcConfiguration source, string sourceName)
     {
         _logger.Debug($"Merging {sourceName} configuration...");
-
-        return target with
-        {
-            Version = source.Version ?? target.Version,
-            Limits = ConfigurationMerger.MergeLimits(target.Limits, source.Limits),
-            Discovery = ConfigurationMerger.MergeDiscovery(target.Discovery, source.Discovery),
-            Filters = MergeFilters(target.Filters, source.Filters),
-            Presets = ConfigurationMerger.MergePresets(target.Presets, source.Presets),
-            LanguageMappings =
-            ConfigurationMerger.MergeLanguageMappings(target.LanguageMappings, source.LanguageMappings),
-            Markdown = ConfigurationMerger.MergeMarkdown(target.Markdown, source.Markdown),
-            Output = ConfigurationMerger.MergeOutput(target.Output, source.Output),
-            Logging = ConfigurationMerger.MergeLogging(target.Logging, source.Logging),
-            Performance = ConfigurationMerger.MergePerformance(target.Performance, source.Performance)
-        };
-    }
-
-    private LimitsConfiguration MergeLimits(LimitsConfiguration target, LimitsConfiguration source)
-    {
-        return target with
-        {
-            MaxFileSize = source.MaxFileSize ?? target.MaxFileSize,
-            MaxClipboardSize = source.MaxClipboardSize ?? target.MaxClipboardSize,
-            MaxMemoryBytes = source.MaxMemoryBytes ?? target.MaxMemoryBytes,
-            MaxFiles = source.MaxFiles > 0 ? source.MaxFiles : target.MaxFiles
-        };
-    }
-
-    private DiscoveryConfiguration MergeDiscovery(DiscoveryConfiguration target, DiscoveryConfiguration source)
-    {
-        return target with
-        {
-            Mode = source.Mode ?? target.Mode,
-            UseGit = source.UseGit,
-            FollowSymlinks = source.FollowSymlinks,
-            Cluster = MergeCluster(target.Cluster, source.Cluster)
-        };
-    }
-
-    private ClusterConfiguration? MergeCluster(ClusterConfiguration? target, ClusterConfiguration? source)
-    {
-        return ConfigurationMerger.MergeCluster(target, source);
-    }
-
-    private FiltersConfiguration MergeFilters(FiltersConfiguration target, FiltersConfiguration source)
-    {
-        return ConfigurationMerger.MergeFilters(target, source);
-    }
-
-    private IReadOnlyDictionary<string, PresetConfiguration> MergePresets(
-        IReadOnlyDictionary<string, PresetConfiguration> target,
-        IReadOnlyDictionary<string, PresetConfiguration> source)
-    {
-        if (source == null || source.Count == 0) return target;
-
-        var result = new Dictionary<string, PresetConfiguration>(StringComparer.OrdinalIgnoreCase);
-        foreach (var kvp in target) result[kvp.Key] = kvp.Value;
-        foreach (var kvp in source)
-            if (result.TryGetValue(kvp.Key, out var existing))
-            {
-                var mergedExtensions = new HashSet<string>(existing.Extensions, StringComparer.OrdinalIgnoreCase);
-                if (kvp.Value.Extensions != null)
-                    foreach (var ext in kvp.Value.Extensions)
-                        mergedExtensions.Add(ext);
-
-                result[kvp.Key] = existing with
-                {
-                    Extensions = mergedExtensions.ToArray(),
-                    Description = string.IsNullOrWhiteSpace(kvp.Value.Description)
-                        ? existing.Description
-                        : kvp.Value.Description
-                };
-            }
-            else
-            {
-                result[kvp.Key] = kvp.Value;
-            }
-
-        return result;
-    }
-
-    private IReadOnlyDictionary<string, string> MergeLanguageMappings(
-        IReadOnlyDictionary<string, string> target,
-        IReadOnlyDictionary<string, string> source)
-    {
-        if (source == null || source.Count == 0) return target;
-        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var kvp in target) result[kvp.Key] = kvp.Value;
-        foreach (var kvp in source) result[kvp.Key] = kvp.Value;
-        return result;
-    }
-
-    private MarkdownConfiguration MergeMarkdown(MarkdownConfiguration target, MarkdownConfiguration source)
-    {
-        return target with
-        {
-            Fence = source.Fence ?? target.Fence,
-            ProjectStructureHeader = source.ProjectStructureHeader ?? target.ProjectStructureHeader,
-            FileHeaderTemplate = source.FileHeaderTemplate ?? target.FileHeaderTemplate,
-            LanguageDetection = source.LanguageDetection ?? target.LanguageDetection
-        };
-    }
-
-    private OutputConfiguration MergeOutput(OutputConfiguration target, OutputConfiguration source)
-    {
-        return target with
-        {
-            DefaultFormat = source.DefaultFormat ?? target.DefaultFormat,
-            IncludeStats = source.IncludeStats,
-            SortByPath = source.SortByPath
-        };
-    }
-
-    private LoggingConfiguration MergeLogging(LoggingConfiguration target, LoggingConfiguration source)
-    {
-        return target with
-        {
-            Level = source.Level ?? target.Level,
-            IncludeTimestamps = source.IncludeTimestamps
-        };
+        return ConfigurationMerger.Merge(target, source);
     }
 
     public void ClearCache()
     {
-        lock (_cacheLock)
-        {
-            _cachedConfiguration = null;
-        }
-
-        _logger.Debug("Configuration cache cleared");
+        // Stateless loader, caching is not used
     }
 }

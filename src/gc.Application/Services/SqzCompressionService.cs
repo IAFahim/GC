@@ -13,8 +13,7 @@ public sealed class SqzCompressionService
     public bool IsAvailable { get; }
 
     public static string InstallHint =>
-        "sqz not found. Install: curl -fsSL https://raw.githubusercontent.com/ojuschugh1/sqz/main/install.sh | sh" +
-        "\nSee: https://github.com/ojuschugh1/sqz";
+        "sqz not found. Please install sqz from the repository: https://github.com/ojuschugh1/sqz";
 
     public async Task<string> CompressAsync(string markdownContent, bool noCache = false)
     {
@@ -74,8 +73,23 @@ public sealed class SqzCompressionService
                 RedirectStandardError = true,
                 UseShellExecute = false
             });
-            p?.WaitForExit(2000);
-            return p?.ExitCode == 0;
+            if (p != null)
+            {
+                if (!p.WaitForExit(2000))
+                {
+                    try
+                    {
+                        p.Kill();
+                    }
+                    catch
+                    {
+                        // Ignore any exceptions during kill
+                    }
+                    return false;
+                }
+                return p.ExitCode == 0;
+            }
+            return false;
         }
         catch
         {

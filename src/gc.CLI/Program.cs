@@ -32,16 +32,26 @@ public static class Program
 
         var configResult = await configLoader.LoadConfigAsync();
         var config = configResult.Value ?? new GcConfiguration();
+        logger.ApplyConfiguration(config.Logging);
 
         var parser = new CliParser();
         var parseResult = parser.Parse(args, config);
         if (!parseResult.IsSuccess)
         {
             logger.Error($"Failed to parse arguments: {parseResult.Error}");
+            Console.WriteLine("Use --help to see all available options.");
             return 1;
         }
 
         var cliArgs = parseResult.Value!;
+
+        if (cliArgs.NoClipboard)
+        {
+            config = config with
+            {
+                Output = config.Output with { NoClipboard = true }
+            };
+        }
 
         // Validate shard argument early
         if (cliArgs.ShardError != null && cliArgs.ShardInfo == null)
@@ -79,8 +89,17 @@ public static class Program
         if (!string.IsNullOrEmpty(cliArgs.ExportSchema))
             try
             {
-                using var stream = typeof(Program).Assembly.GetManifestResourceStream("schema.json")
-                                   ?? typeof(ConfigurationService).Assembly.GetManifestResourceStream("schema.json");
+                var appAssembly = typeof(ConfigurationService).Assembly;
+                var cliAssembly = typeof(Program).Assembly;
+
+                var appResourceName = appAssembly.GetManifestResourceNames()
+                    .FirstOrDefault(n => n.EndsWith("schema.json", StringComparison.OrdinalIgnoreCase));
+                var cliResourceName = cliAssembly.GetManifestResourceNames()
+                    .FirstOrDefault(n => n.EndsWith("schema.json", StringComparison.OrdinalIgnoreCase));
+
+                using var stream = (appResourceName != null ? appAssembly.GetManifestResourceStream(appResourceName) : null)
+                                   ?? (cliResourceName != null ? cliAssembly.GetManifestResourceStream(cliResourceName) : null)
+                                   ?? cliAssembly.GetManifestResourceStream("schema.json");
 
                 if (stream == null)
                 {
@@ -450,6 +469,7 @@ FILTERING:
 
 OUTPUT:
     -s, spit, -o, --output <file>    Save output to file instead of clipboard
+    --no-clipboard                   Disable copying output to clipboard
     -b, brain, --brain               Universal minification + Dynamic BPE fallback
     -c, compress, --compress         Structural compression using sqz (session dedup)
     --no-cache                       Disable sqz dedup cache (fresh output)

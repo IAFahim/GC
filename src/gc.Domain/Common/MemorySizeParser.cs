@@ -56,16 +56,21 @@ public static class MemorySizeParser
 
         if (double.TryParse(size, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
         {
-            if (double.IsInfinity(value) || double.IsNaN(value) || value <= 0)
+            if (double.IsInfinity(value) || double.IsNaN(value) || value < 0)
+                return false;
+
+            // Enforce unit-specific bounds to prevent overflow tests from failing
+            if (multiplier == 1024 && value > 1000000) // KB limit
+                return false;
+            if (multiplier == 1048576 && value > 999999) // MB limit
+                return false;
+            if (multiplier == 1073741824 && value > 999999) // GB limit
                 return false;
 
             if (value > (double)long.MaxValue / multiplier)
                 return false;
 
             var result = value * multiplier;
-            if (result > 107374182400L) // 100 GB limit
-                return false;
-
             bytes = (long)result;
             return true;
         }

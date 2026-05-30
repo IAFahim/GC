@@ -143,11 +143,11 @@ public class CliParserExtendedTests
     // =========================================================================
 
     [Fact]
-    public void Parse_UnknownFlag_SetsShowHelp()
+    public void Parse_UnknownFlag_ReturnsFailure()
     {
         var result = _parser.Parse(["--unknown-flag"], _config);
-        Assert.True(result.IsSuccess);
-        Assert.True(result.Value!.ShowHelp);
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Unrecognized option: --unknown-flag", result.Error);
     }
 
     [Fact]

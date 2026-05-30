@@ -17,7 +17,9 @@ public readonly record struct FileEntry
     public string Language { get; init; }
     public long Size { get; init; }
     public string? Display { get; init; }
-    public string Absolute { get; init; }
+    public string Absolute => string.IsNullOrEmpty(Root)
+        ? Relative
+        : System.IO.Path.GetFullPath(System.IO.Path.Combine(Root, Relative));
 
     public FileEntry(
         string root,
@@ -33,9 +35,6 @@ public readonly record struct FileEntry
         Language = language;
         Size = size;
         Display = display;
-        Absolute = string.IsNullOrEmpty(root)
-            ? relative
-            : System.IO.Path.GetFullPath(System.IO.Path.Combine(root, relative));
     }
 
     /// <summary>

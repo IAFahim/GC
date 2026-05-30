@@ -109,7 +109,7 @@ public sealed class FileFilter
         foreach (var p in systemIgnored)
         {
             var pNormalized = p.Replace('\\', '/');
-            if (pathNormalized.Contains(pNormalized, StringComparison.OrdinalIgnoreCase))
+            if (GlobMatcher.IsMatch(pathNormalized.AsSpan(), pNormalized.AsSpan()))
             {
                 _logger.Warning($"[EXCLUDED] Matched system ignored pattern: {p}");
                 return;
@@ -349,11 +349,8 @@ public sealed class FileFilter
             pathNormalized = path;
         var normalizedSpan = pathNormalized.AsSpan();
 
-        foreach (var p in systemIgnoredPatterns)
-        {
-            if (pathNormalized.Contains(p, StringComparison.OrdinalIgnoreCase))
-                return false;
-        }
+        if (systemIgnoredPatterns.Length > 0 && GlobMatcher.MatchesAny(pathNormalized, systemIgnoredPatterns))
+            return false;
 
         if (excludePatterns.Length > 0 && GlobMatcher.MatchesAny(pathNormalized, excludePatterns))
             return false;

@@ -44,8 +44,15 @@ public sealed class ConfigurationValidator
             errors.Add(
                 $"Invalid MaxClipboardSize format: '{limits.MaxClipboardSize}'. Expected format: 100MB, 1GB, etc.");
 
-        if (!ValidateMemorySize(limits.MaxMemoryBytes))
+        if (gc.Domain.Common.MemorySizeParser.TryParse(limits.MaxMemoryBytes, out var memBytes))
+        {
+            if (memBytes > 107374182400L) // 100 GB limit
+                errors.Add($"MaxMemoryBytes exceeds the 100 GB limit: '{limits.MaxMemoryBytes}'. Max allowed is 100GB.");
+        }
+        else
+        {
             errors.Add($"Invalid MaxMemoryBytes format: '{limits.MaxMemoryBytes}'. Expected format: 100MB, 1GB, etc.");
+        }
 
         if (limits.MaxFiles < 1)
             errors.Add($"MaxFiles must be at least 1, got: {limits.MaxFiles}");
@@ -230,6 +237,6 @@ public sealed class ConfigurationValidator
     {
         if (string.IsNullOrWhiteSpace(size))
             return false;
-        return gc.Domain.Common.MemorySizeParser.TryParse(size, out _);
+        return gc.Domain.Common.MemorySizeParser.TryParse(size, out var bytes) && bytes > 0;
     }
 }

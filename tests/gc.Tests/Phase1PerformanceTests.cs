@@ -208,7 +208,7 @@ public class Phase1PerformanceTests : IDisposable
         };
 
         var result = filter.FilterFiles(files, _config,
-            Array.Empty<string>(), new[] { "generated" }, Array.Empty<string>());
+            Array.Empty<string>(), new[] { "*generated*" }, Array.Empty<string>());
 
         Assert.True(result.IsSuccess);
         var entries = result.Value!.ToList();

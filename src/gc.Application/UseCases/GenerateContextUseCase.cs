@@ -519,9 +519,10 @@ public sealed class GenerateContextUseCase
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
+            var estimatedTokens = (_generator as MarkdownGenerator)?.LastEstimatedTokens ?? (genResult.Value / 4);
             var action = isAppend ? "Appended to" : "Exported to";
             _logger.Success(
-                $"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+                $"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
             profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         }
         else
@@ -534,8 +535,9 @@ public sealed class GenerateContextUseCase
 
             await SafeFileWriter.WriteAllBytesAsync(outputFile, ms.ToArray(), ct);
 
+            var estimatedTokens = (_generator as MarkdownGenerator)?.LastEstimatedTokens ?? (genResult.Value / 4);
             _logger.Success(
-                $"✔ Exported to {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+                $"✔ Exported to {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
             profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         }
 
@@ -557,17 +559,23 @@ public sealed class GenerateContextUseCase
         Stopwatch sw,
         ProfileReporter? profileReporter)
     {
+        var noClipboard = config.Output.NoClipboard == true;
+
         if (hasPipeline)
         {
             var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
-            using var finalMs = new MemoryStream(finalBytes);
-            finalMs.Position = 0;
-            var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
-            profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
-            if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
+            if (!noClipboard)
+            {
+                using var finalMs = new MemoryStream(finalBytes);
+                finalMs.Position = 0;
+                var clipResult = await _clipboard.CopyToClipboardAsync(finalMs, config.Limits, appendMode, ct);
+                profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
+                if (!clipResult.IsSuccess) return Result.Failure(clipResult.Error!);
+            }
 
+            var prefix = noClipboard ? "✔ [Clipboard Skipped]" : "✔ Copied";
             _logger.Success(
-                $"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{TokenEstimator.EstimateTokens(finalOutput)}");
+                $"{prefix}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{TokenEstimator.EstimateTokens(finalOutput)}");
             profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
             return Result.Success();
         }
@@ -580,13 +588,18 @@ public sealed class GenerateContextUseCase
         profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
         if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-        ms.Position = 0;
-        var clipResult2 = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
-        profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
-        if (!clipResult2.IsSuccess) return Result.Failure(clipResult2.Error!);
+        if (!noClipboard)
+        {
+            ms.Position = 0;
+            var clipResult2 = await _clipboard.CopyToClipboardAsync(ms, config.Limits, appendMode, ct);
+            profileReporter?.RecordStage("Clipboard", sw.ElapsedTicks);
+            if (!clipResult2.IsSuccess) return Result.Failure(clipResult2.Error!);
+        }
 
+        var estimatedTokens = (_generator as MarkdownGenerator)?.LastEstimatedTokens ?? (genResult.Value / 4);
+        var prefix2 = noClipboard ? "✔ [Clipboard Skipped]" : "✔ Copied";
         _logger.Success(
-            $"✔ Copied: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{genResult.Value / 4}");
+            $"{prefix2}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
         profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         return Result.Success();
     }

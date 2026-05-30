@@ -231,6 +231,11 @@
           "type": "boolean",
           "description": "Sort files by path alphabetically",
           "default": true
+        },
+        "noClipboard": {
+          "type": "boolean",
+          "description": "Disable copying output to clipboard",
+          "default": false
         }
       },
       "additionalProperties": false

@@ -24,21 +24,11 @@ public static class ConfigurationMerger
             LanguageMappings = MergeLanguageMappings(target.LanguageMappings, source.LanguageMappings),
             Markdown = MergeMarkdown(target.Markdown, source.Markdown),
             Output = MergeOutput(target.Output, source.Output),
-            Logging = MergeLogging(target.Logging, source.Logging),
-            Performance = MergePerformance(target.Performance, source.Performance)
+            Logging = MergeLogging(target.Logging, source.Logging)
         };
     }
 
-    public static PerformanceConfiguration MergePerformance(PerformanceConfiguration target,
-        PerformanceConfiguration source)
-    {
-        return target with
-        {
-            PrewarmEnabled = source.PrewarmEnabled ?? target.PrewarmEnabled,
-            PrewarmMaxFiles = source.PrewarmMaxFiles > 0 ? source.PrewarmMaxFiles : target.PrewarmMaxFiles,
-            PrewarmMaxBytesPerFile = source.PrewarmMaxBytesPerFile ?? target.PrewarmMaxBytesPerFile
-        };
-    }
+
 
     public static LimitsConfiguration MergeLimits(LimitsConfiguration target, LimitsConfiguration source)
     {
@@ -58,8 +48,8 @@ public static class ConfigurationMerger
         return target with
         {
             Mode = source.Mode ?? target.Mode,
-            UseGit = source.UseGit,
-            FollowSymlinks = source.FollowSymlinks,
+            UseGit = source.UseGit ?? target.UseGit,
+            FollowSymlinks = source.FollowSymlinks ?? target.FollowSymlinks,
             MaxDepth = source.MaxDepth ?? target.MaxDepth,
             Cluster = MergeCluster(target.Cluster, source.Cluster)
         };
@@ -165,8 +155,9 @@ public static class ConfigurationMerger
         return target with
         {
             DefaultFormat = source.DefaultFormat ?? target.DefaultFormat,
-            IncludeStats = source.IncludeStats,
-            SortByPath = source.SortByPath
+            IncludeStats = source.IncludeStats ?? target.IncludeStats,
+            SortByPath = source.SortByPath ?? target.SortByPath,
+            NoClipboard = source.NoClipboard ?? target.NoClipboard
         };
     }
 
@@ -175,7 +166,7 @@ public static class ConfigurationMerger
         return target with
         {
             Level = source.Level ?? target.Level,
-            IncludeTimestamps = source.IncludeTimestamps
+            IncludeTimestamps = source.IncludeTimestamps ?? target.IncludeTimestamps
         };
     }
 

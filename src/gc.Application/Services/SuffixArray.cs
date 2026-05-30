@@ -21,14 +21,8 @@ public static class SuffixArray
 
         for (var k = 1; k < n; k *= 2)
         {
-            Array.Sort(sa, (a, b) =>
-            {
-                var cmp = rank[a].CompareTo(rank[b]);
-                if (cmp != 0) return cmp;
-                var ra = a + k < n ? rank[a + k] : -1;
-                var rb = b + k < n ? rank[b + k] : -1;
-                return ra.CompareTo(rb);
-            });
+            var comparer = new SuffixComparer(rank, k, n);
+            Array.Sort(sa, comparer);
 
             tmp[sa[0]] = 0;
             for (var i = 1; i < n; i++)
@@ -47,6 +41,30 @@ public static class SuffixArray
         }
 
         return sa;
+    }
+
+    private struct SuffixComparer : IComparer<int>
+    {
+        private readonly int[] _rank;
+        private readonly int _k;
+        private readonly int _n;
+
+        public SuffixComparer(int[] rank, int k, int n)
+        {
+            _rank = rank;
+            _k = k;
+            _n = n;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int Compare(int a, int b)
+        {
+            var cmp = _rank[a].CompareTo(_rank[b]);
+            if (cmp != 0) return cmp;
+            var ra = a + _k < _n ? _rank[a + _k] : -1;
+            var rb = b + _k < _n ? _rank[b + _k] : -1;
+            return ra.CompareTo(rb);
+        }
     }
 
     /// <summary>

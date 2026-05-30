@@ -26,7 +26,7 @@ public sealed class BrainCrusher : IBrainCrusher
     {
         if (string.IsNullOrEmpty(code)) return code;
         var stripped = StripComments(code, language ?? _fileExtension);
-        return CollapseWhitespace(stripped);
+        return CollapseWhitespace(stripped, language ?? _fileExtension);
     }
 
     public string Uncrush(string crushed)
@@ -39,17 +39,11 @@ public sealed class BrainCrusher : IBrainCrusher
         return string.Empty;
     }
 
-    // Shell shebang patterns - #! at start of file should be preserved
-    private static bool IsShebangLine(ReadOnlySpan<char> line)
-    {
-        return line.Length >= 2 && line[0] == '#' && line[1] == '!';
-    }
-
     public string Crush(string content)
     {
         if (string.IsNullOrEmpty(content)) return content;
         var stripped = StripComments(content, _fileExtension);
-        return CollapseWhitespace(stripped);
+        return CollapseWhitespace(stripped, _fileExtension);
     }
 
     // =========================================================================
@@ -110,6 +104,18 @@ public sealed class BrainCrusher : IBrainCrusher
 
                 switch (stringMode)
                 {
+                    case StringMode.JsTemplateLiteral:
+                        if (ch == '\\' && i + 1 < len)
+                        {
+                            i++;
+                            sb.Append(span[i]);
+                        }
+                        else if (ch == '`')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
                     case StringMode.NormalDouble:
                         if (ch == '\\' && i + 1 < len)
                         {
@@ -401,6 +407,15 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
+            // JS/TS template literal check
+            if (ch == '`')
+            {
+                stringMode = StringMode.JsTemplateLiteral;
+                sb.Append('`');
+                i++;
+                continue;
+            }
+
             // Standard double quote string
             if (ch == '"')
             {
@@ -430,68 +445,288 @@ public sealed class BrainCrusher : IBrainCrusher
     // =========================================================================
     // Whitespace collapse: multiple spaces → single, blank lines removed
     // =========================================================================
-    internal static string CollapseWhitespace(string stripped)
+    internal static string CollapseWhitespace(string stripped, string? fileExtension = null)
     {
         var result = new StringBuilder(stripped.Length);
+        var span = stripped.AsSpan();
         var i = 0;
-        var len = stripped.Length;
+        var len = span.Length;
         var lastWasSpace = false;
         var lineIsEmpty = true;
-        var inString = false;
-        var inChar = false;
+
+        // Normalize extension (strip leading dot)
+        string? normalizedExt = null;
+        if (!string.IsNullOrEmpty(fileExtension))
+            normalizedExt = fileExtension.StartsWith('.')
+                ? fileExtension.Substring(1)
+                : fileExtension;
+
+        var isCSharp = normalizedExt != null && (normalizedExt.Equals("cs", StringComparison.OrdinalIgnoreCase) || normalizedExt.Equals("csharp", StringComparison.OrdinalIgnoreCase));
+        var isPython = normalizedExt != null && (normalizedExt.Equals("py", StringComparison.OrdinalIgnoreCase) || normalizedExt.Equals("python", StringComparison.OrdinalIgnoreCase));
+
+        var stringMode = StringMode.None;
+        var csharpRawQuoteCount = 0;
 
         while (i < len)
         {
-            var ch = stripped[i];
+            var ch = span[i];
 
-            // Handle string/char state - pass through verbatim
-            if (inString)
+            if (stringMode != StringMode.None)
             {
                 result.Append(ch);
-                if (ch == '\\' && i + 1 < len)
+                lineIsEmpty = false;
+
+                switch (stringMode)
                 {
-                    i++;
-                    result.Append(stripped[i]);
-                }
-                else if (ch == '"')
-                {
-                    inString = false;
+                    case StringMode.JsTemplateLiteral:
+                        if (ch == '\\' && i + 1 < len)
+                        {
+                            i++;
+                            result.Append(span[i]);
+                        }
+                        else if (ch == '`')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.NormalDouble:
+                        if (ch == '\\' && i + 1 < len)
+                        {
+                            i++;
+                            result.Append(span[i]);
+                        }
+                        else if (ch == '"')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.NormalSingle:
+                        if (ch == '\\' && i + 1 < len)
+                        {
+                            i++;
+                            result.Append(span[i]);
+                        }
+                        else if (ch == '\'')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.CSharpVerbatim:
+                        if (ch == '"')
+                        {
+                            if (i + 1 < len && span[i + 1] == '"')
+                            {
+                                result.Append('"');
+                                i++; // Skip the escaped quote
+                            }
+                            else
+                            {
+                                stringMode = StringMode.None;
+                            }
+                        }
+                        break;
+
+                    case StringMode.CSharpRaw:
+                        if (ch == '"')
+                        {
+                            var quotes = 0;
+                            while (i + quotes < len && span[i + quotes] == '"')
+                            {
+                                quotes++;
+                            }
+                            if (quotes >= csharpRawQuoteCount)
+                            {
+                                for (var q = 1; q < quotes; q++) result.Append('"');
+                                i += quotes - 1;
+                                stringMode = StringMode.None;
+                            }
+                        }
+                        break;
+
+                    case StringMode.PythonRawDouble:
+                        if (ch == '\\' && i + 1 < len && span[i + 1] == '"')
+                        {
+                            i++;
+                            result.Append(span[i]);
+                        }
+                        else if (ch == '"')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.PythonRawSingle:
+                        if (ch == '\\' && i + 1 < len && span[i + 1] == '\'')
+                        {
+                            i++;
+                            result.Append(span[i]);
+                        }
+                        else if (ch == '\'')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.TripleQuoteDouble:
+                        if (ch == '\\' && i + 1 < len)
+                        {
+                            i++;
+                            result.Append(span[i]);
+                        }
+                        else if (ch == '"' && i + 2 < len && span[i + 1] == '"' && span[i + 2] == '"')
+                        {
+                            result.Append("\"\"");
+                            i += 2;
+                            stringMode = StringMode.None;
+                        }
+                        break;
+
+                    case StringMode.TripleQuoteSingle:
+                        if (ch == '\\' && i + 1 < len)
+                        {
+                            i++;
+                            result.Append(span[i]);
+                        }
+                        else if (ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
+                        {
+                            result.Append("''");
+                            i += 2;
+                            stringMode = StringMode.None;
+                        }
+                        break;
                 }
 
                 i++;
                 continue;
             }
 
-            if (inChar)
+            // String start checks
+            if (isPython && (ch == 'r' || ch == 'R') && i + 1 < len)
             {
-                result.Append(ch);
-                if (ch == '\\' && i + 1 < len)
+                var next = span[i + 1];
+                if (next == '"')
                 {
-                    i++;
-                    result.Append(stripped[i]);
+                    if (i + 3 < len && span[i + 2] == '"' && span[i + 3] == '"')
+                    {
+                        stringMode = StringMode.TripleQuoteDouble;
+                        result.Append("r\"\"\"");
+                        i += 4;
+                        continue;
+                    }
+                    stringMode = StringMode.PythonRawDouble;
+                    result.Append("r\"");
+                    i += 2;
+                    continue;
                 }
-                else if (ch == '\'')
+                if (next == '\'')
                 {
-                    inChar = false;
+                    if (i + 3 < len && span[i + 2] == '\'' && span[i + 3] == '\'')
+                    {
+                        stringMode = StringMode.TripleQuoteSingle;
+                        result.Append("r'''");
+                        i += 4;
+                        continue;
+                    }
+                    stringMode = StringMode.PythonRawSingle;
+                    result.Append("r'");
+                    i += 2;
+                    continue;
                 }
+            }
 
+            if (isPython && ch == '"' && i + 2 < len && span[i + 1] == '"' && span[i + 2] == '"')
+            {
+                stringMode = StringMode.TripleQuoteDouble;
+                result.Append("\"\"\"");
+                i += 3;
+                continue;
+            }
+            if (isPython && ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
+            {
+                stringMode = StringMode.TripleQuoteSingle;
+                result.Append("'''");
+                i += 3;
+                continue;
+            }
+
+            if (isCSharp && ch == '"')
+            {
+                var quotes = 0;
+                while (i + quotes < len && span[i + quotes] == '"')
+                {
+                    quotes++;
+                }
+                if (quotes >= 3)
+                {
+                    stringMode = StringMode.CSharpRaw;
+                    csharpRawQuoteCount = quotes;
+                    for (var q = 0; q < quotes; q++) result.Append('"');
+                    i += quotes;
+                    continue;
+                }
+            }
+            if (isCSharp && ch == '$' && i + 3 < len && span[i + 1] == '"' && span[i + 2] == '"' && span[i + 3] == '"')
+            {
+                var idxTemp = i + 1;
+                var quotes = 0;
+                while (idxTemp < len && span[idxTemp] == '"')
+                {
+                    quotes++;
+                    idxTemp++;
+                }
+                stringMode = StringMode.CSharpRaw;
+                csharpRawQuoteCount = quotes;
+                result.Append('$');
+                for (var q = 0; q < quotes; q++) result.Append('"');
+                i += 1 + quotes;
+                continue;
+            }
+
+            if (isCSharp && ch == '@' && i + 1 < len && span[i + 1] == '"')
+            {
+                stringMode = StringMode.CSharpVerbatim;
+                result.Append("@\"");
+                i += 2;
+                continue;
+            }
+            if (isCSharp && ch == '$' && i + 2 < len && span[i + 1] == '@' && span[i + 2] == '"')
+            {
+                stringMode = StringMode.CSharpVerbatim;
+                result.Append("$@\"");
+                i += 3;
+                continue;
+            }
+            if (isCSharp && ch == '@' && i + 2 < len && span[i + 1] == '$' && span[i + 2] == '"')
+            {
+                stringMode = StringMode.CSharpVerbatim;
+                result.Append("@$\"");
+                i += 3;
+                continue;
+            }
+
+            if (ch == '`')
+            {
+                stringMode = StringMode.JsTemplateLiteral;
+                result.Append('`');
                 i++;
                 continue;
             }
 
-            // Track string/char start
             if (ch == '"')
             {
-                inString = true;
-                result.Append(ch);
+                stringMode = StringMode.NormalDouble;
+                result.Append('"');
                 i++;
                 continue;
             }
 
             if (ch == '\'')
             {
-                inChar = true;
-                result.Append(ch);
+                stringMode = StringMode.NormalSingle;
+                result.Append('\'');
                 i++;
                 continue;
             }
@@ -499,7 +734,7 @@ public sealed class BrainCrusher : IBrainCrusher
             // Newline handling
             if (ch == '\n' || ch == '\r')
             {
-                if (ch == '\r' && i + 1 < len && stripped[i + 1] == '\n')
+                if (ch == '\r' && i + 1 < len && span[i + 1] == '\n')
                     i++;
 
                 if (!lineIsEmpty)
@@ -517,7 +752,6 @@ public sealed class BrainCrusher : IBrainCrusher
             if (ch == ' ' || ch == '\t')
             {
                 if (lineIsEmpty)
-                    // Preserve leading whitespace for indentation-sensitive languages
                     result.Append(ch);
                 else
                     lastWasSpace = true;
@@ -542,6 +776,7 @@ public sealed class BrainCrusher : IBrainCrusher
     private enum StringMode
     {
         None,
+        JsTemplateLiteral,
         NormalDouble,
         NormalSingle,
         CSharpVerbatim,

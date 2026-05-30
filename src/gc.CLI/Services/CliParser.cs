@@ -52,6 +52,7 @@ public sealed class CliParser
         new(["--no-append"], OptionKind.Flag, (a, _) => a.Append = false),
         new(["--no-sort"], OptionKind.Flag, (a, _) => a.NoSort = true),
         new(["-f", "--force"], OptionKind.Flag, (a, _) => a.Force = true),
+        new(["--no-clipboard"], OptionKind.Flag, (a, _) => a.NoClipboard = true),
         new(["--history"], OptionKind.Flag, (a, _) => a.ShowHistory = true),
         new(["-b", "--brain", "brain"], OptionKind.Flag, (a, _) => a.BrainMode = true),
         new(["-c", "--compress", "compress"], OptionKind.Flag, (a, _) => a.Compress = true),
@@ -207,7 +208,7 @@ public sealed class CliParser
             }
 
             // Unknown token
-            if (arg.StartsWith('-'))
+            if (arg.StartsWith('-') && arg.Length > 1 && !char.IsDigit(arg[1]))
             {
                 unknownFlags.Add(arg);
                 continue;
@@ -230,7 +231,10 @@ public sealed class CliParser
             return Result<CliArguments>.Failure($"Missing value for argument: {flagName}");
         }
 
-        if (unknownFlags.Count > 0) result.ShowHelp = true;
+        if (unknownFlags.Count > 0)
+        {
+            return Result<CliArguments>.Failure($"Unrecognized option: {string.Join(", ", unknownFlags)}");
+        }
 
         return Result<CliArguments>.Success(result);
     }

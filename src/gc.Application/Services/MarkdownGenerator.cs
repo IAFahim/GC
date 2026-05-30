@@ -40,6 +40,10 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             brainCrusher, ct);
     }
 
+    public long LastEstimatedTokens { get; private set; }
+
+
+
     public async Task<Result<long>> GenerateMarkdownStreamingAsync(IEnumerable<FileContent> contents,
         Stream outputStream, GcConfiguration config, CompiledContentPatterns contentFilter,
         IEnumerable<string>? excludeLineIfStart = null, IBrainCrusher? brainCrusher = null,
@@ -47,6 +51,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     {
         try
         {
+            LastEstimatedTokens = 0;
             var pipeOptions = new StreamPipeWriterOptions(leaveOpen: true, minimumBufferSize: 65536);
             var writer = PipeWriter.Create(outputStream, pipeOptions);
 
@@ -64,6 +69,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
             var sortedList = sortedContents.ToList();
 
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var token = cts.Token;
+
             var channel = Channel.CreateBounded<(int Index, byte[]? Buffer, int Length, string? Error)>(
                 new BoundedChannelOptions(maxPendingFiles) { SingleReader = true, SingleWriter = false });
 
@@ -73,13 +81,13 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                 {
                     await Parallel.ForEachAsync(
                         Enumerable.Range(0, sortedList.Count),
-                        new ParallelOptions { MaxDegreeOfParallelism = degreeOfParallelism, CancellationToken = ct },
-                        async (index, token) =>
+                        new ParallelOptions { MaxDegreeOfParallelism = degreeOfParallelism, CancellationToken = token },
+                        async (index, threadToken) =>
                         {
                             var content = sortedList[index];
                             if (content.Content != null)
                             {
-                                await channel.Writer.WriteAsync((index, null, 0, null), token);
+                                await channel.Writer.WriteAsync((index, null, 0, null), threadToken);
                                 return;
                             }
 
@@ -91,7 +99,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     await channel.Writer.WriteAsync(
                                         (index, null, 0,
                                             $"File not found: {content.Entry.DisplayPath ?? content.Entry.RelativePath}"),
-                                        token);
+                                        threadToken);
                                     return;
                                 }
 
@@ -100,7 +108,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     await channel.Writer.WriteAsync(
                                         (index, null, 0,
                                             $"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes)"),
-                                        token);
+                                        threadToken);
                                     return;
                                 }
 
@@ -136,12 +144,12 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         var len = (int)fileLength;
                                         var buffer = ArrayPool<byte>.Shared.Rent(len);
                                         var bytesRead = await RandomAccess.ReadAsync(handle, buffer.AsMemory(0, len), 0,
-                                            token);
-                                        await channel.Writer.WriteAsync((index, buffer, bytesRead, null), token);
+                                            threadToken);
+                                        await channel.Writer.WriteAsync((index, buffer, bytesRead, null), threadToken);
                                     }
                                     else
                                     {
-                                        await channel.Writer.WriteAsync((index, null, -1, null), token);
+                                        await channel.Writer.WriteAsync((index, null, -1, null), threadToken);
                                     }
                                 }
                             }
@@ -150,7 +158,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 _logger.Error(
                                     $"Failed to read file {content.Entry.DisplayPath ?? content.Entry.RelativePath}",
                                     ex);
-                                await channel.Writer.WriteAsync((index, null, 0, ex.Message), token);
+                                await channel.Writer.WriteAsync((index, null, 0, ex.Message), threadToken);
                             }
                         });
                 }
@@ -158,261 +166,316 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                 {
                     channel.Writer.Complete();
                 }
-            }, ct);
+            }, token);
 
             var nextExpectedIndex = 0;
             var outOfOrderBuffer = new Dictionary<int, (byte[]? Buffer, int Length, string? Error)>();
+            long estimatedTokensAccumulator = 0;
 
-            await foreach (var result in channel.Reader.ReadAllAsync(ct))
+            try
             {
-                outOfOrderBuffer[result.Index] = (result.Buffer, result.Length, result.Error);
-
-                while (outOfOrderBuffer.TryGetValue(nextExpectedIndex, out var ready))
+                await foreach (var result in channel.Reader.ReadAllAsync(token))
                 {
-                    outOfOrderBuffer.Remove(nextExpectedIndex);
-                    var content = sortedList[nextExpectedIndex];
-                    nextExpectedIndex++;
+                    outOfOrderBuffer[result.Index] = (result.Buffer, result.Length, result.Error);
 
-                    try
+                    while (outOfOrderBuffer.TryGetValue(nextExpectedIndex, out var ready))
                     {
-                        if (content.Content != null)
+                        outOfOrderBuffer.Remove(nextExpectedIndex);
+                        var content = sortedList[nextExpectedIndex];
+                        nextExpectedIndex++;
+
+                        try
                         {
-                            var actualContent = content.Content;
-                            if (excludeLineIfStart != null && excludeLineIfStart.Any())
+                            if (content.Content != null)
                             {
-                                var excludeArray = excludeLineIfStart.ToArray();
-                                var excludeNewline = excludeArray.Contains("\n");
-
-                                var span = actualContent.AsSpan();
-                                var sb = t_lineExclusionBuilder ??= new StringBuilder(4096);
-                                sb.Clear();
-                                sb.EnsureCapacity(actualContent.Length);
-                                var first = true;
-
-                                foreach (var line in span.EnumerateLines())
+                                var actualContent = content.Content;
+                                if (excludeLineIfStart != null && excludeLineIfStart.Any())
                                 {
-                                    var trimmedLine = line.TrimStart().TrimStart('\uFEFF');
-                                    if (excludeNewline && (trimmedLine.IsEmpty || trimmedLine.IsWhiteSpace()))
-                                        continue;
+                                    var excludeArray = excludeLineIfStart.ToArray();
+                                    var excludeNewline = excludeArray.Contains("\n");
 
-                                    var shouldExclude = false;
-                                    foreach (var startStr in excludeArray)
-                                        if (startStr != "\n" &&
-                                            trimmedLine.StartsWith(startStr, StringComparison.Ordinal))
-                                        {
-                                            shouldExclude = true;
-                                            break;
-                                        }
+                                    var span = actualContent.AsSpan();
+                                    var sb = t_lineExclusionBuilder ??= new StringBuilder(4096);
+                                    sb.Clear();
+                                    sb.EnsureCapacity(actualContent.Length);
+                                    var first = true;
 
-                                    if (shouldExclude)
-                                        continue;
+                                    foreach (var line in span.EnumerateLines())
+                                    {
+                                        var trimmedLine = line.TrimStart().TrimStart('\uFEFF');
+                                        if (excludeNewline && (trimmedLine.IsEmpty || trimmedLine.IsWhiteSpace()))
+                                            continue;
 
-                                    if (!first) sb.Append('\n');
-                                    sb.Append(line);
-                                    first = false;
+                                        var shouldExclude = false;
+                                        foreach (var startStr in excludeArray)
+                                            if (startStr != "\n" &&
+                                                trimmedLine.StartsWith(startStr, StringComparison.Ordinal))
+                                            {
+                                                shouldExclude = true;
+                                                break;
+                                            }
+
+                                        if (shouldExclude)
+                                            continue;
+
+                                        if (!first) sb.Append('\n');
+                                        sb.Append(line);
+                                        first = false;
+                                    }
+
+                                    actualContent = sb.ToString();
                                 }
 
-                                actualContent = sb.ToString();
-                            }
+                                var fence = GetFenceForContent(actualContent);
 
-                            var fence = GetFenceForContent(actualContent);
+                                var header = config.Markdown.FileHeaderTemplate.Replace("{path}",
+                                    content.Entry.DisplayPath ?? content.Entry.RelativePath,
+                                    StringComparison.OrdinalIgnoreCase);
+                                var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
+                                var fenceLine = $"{fence}{content.Entry.Language}";
+                                var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
+                                var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + NewlineByteCount;
+                                var newlineBytes = NewlineByteCount;
 
-                            var header = config.Markdown.FileHeaderTemplate.Replace("{path}",
-                                content.Entry.DisplayPath ?? content.Entry.RelativePath,
-                                StringComparison.OrdinalIgnoreCase);
-                            var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
-                            var fenceLine = $"{fence}{content.Entry.Language}";
-                            var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
-                            var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + NewlineByteCount;
-                            var newlineBytes = NewlineByteCount;
+                                actualContent = actualContent.TrimEnd(' ', '\t', '\r', '\n');
 
-                            actualContent = actualContent.TrimEnd(' ', '\t', '\r', '\n');
+                                if (brainCrusher != null)
+                                    actualContent = brainCrusher.CrushBlock(actualContent, content.Entry.Language);
 
-                            if (brainCrusher != null)
-                                actualContent = brainCrusher.CrushBlock(actualContent, content.Entry.Language);
+                                var contentBytes = Utf8NoBom.GetByteCount(actualContent);
 
-                            var contentBytes = Utf8NoBom.GetByteCount(actualContent);
+                                var needsTrailingNewline = !actualContent.EndsWith('\n');
+                                long entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + closingFenceBytes +
+                                                       newlineBytes;
+                                if (needsTrailingNewline && actualContent.Length > 0) entryTotalBytes += newlineBytes;
 
-                            var needsTrailingNewline = !actualContent.EndsWith('\n');
-                            long entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + closingFenceBytes +
-                                                   newlineBytes;
-                            if (needsTrailingNewline && actualContent.Length > 0) entryTotalBytes += newlineBytes;
-
-                            if (totalBytes + entryTotalBytes > maxMemoryBytes)
-                                return Result<long>.Failure(
-                                    $"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes).");
-
-                            WriteStringLine(writer, header);
-                            WriteStringLine(writer, fenceLine);
-                            WriteStringLine(writer, actualContent);
-                            WriteStringLine(writer, fence);
-                            WriteStringLine(writer, "");
-
-                            fileList.Add(content.Entry.DisplayPath ?? content.Entry.RelativePath);
-                            totalBytes += entryTotalBytes;
-                        }
-                        else
-                        {
-                            if (ready.Error != null)
-                            {
-                                var errorMsg = $"[Error reading file: {ready.Error}]";
-                                WriteStringLine(writer, errorMsg);
-                                totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
-                                continue;
-                            }
-
-                            if (ready.Length == -1)
-                            {
-                                var errorMsg =
-                                    $"[File too large for fast streaming: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
-                                WriteStringLine(writer, errorMsg);
-                                totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
-                                continue;
-                            }
-
-                            var checkLen = Math.Min(ready.Length, 4096);
-                            var isBinary = ready.Buffer!.AsSpan(0, checkLen).ContainsAny(NullByte);
-
-                            if (isBinary)
-                            {
-                                var errorMsg =
-                                    $"[Skipping binary file: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
-                                WriteStringLine(writer, errorMsg);
-                                totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
-                                continue;
-                            }
-
-                            // Apply compiled content filter to preview bytes — fast reject for streaming files.
-                            if (!contentFilter.IsEmpty && !contentFilter.ShouldInclude(ready.Buffer!, ready.Length))
-                            {
-                                var errorMsg =
-                                    $"[Skipped by content filter: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
-                                WriteStringLine(writer, errorMsg);
-                                totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
-                                continue;
-                            }
-
-                            var fence = GetFenceForBytes(ready.Buffer!, ready.Length);
-
-                            var header = config.Markdown.FileHeaderTemplate.Replace("{path}",
-                                content.Entry.DisplayPath ?? content.Entry.RelativePath,
-                                StringComparison.OrdinalIgnoreCase);
-                            var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
-                            var fenceLine = $"{fence}{content.Entry.Language}";
-                            var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
-                            var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + NewlineByteCount;
-                            var newlineBytes = NewlineByteCount;
-
-                            // Pre-calculate entry size BEFORE writing to enforce maxMemoryBytes limit
-                            // (BUG-002 fix: streaming branch was writing partial output before checking limit)
-                            long contentBytesWritten = 0;
-                            byte[]? contentBuffer = null;
-                            string? crushedContent = null;
-
-                            if (brainCrusher != null)
-                            {
-                                var rawText = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length);
-                                crushedContent = brainCrusher.CrushBlock(rawText, content.Entry.Language);
-                                contentBytesWritten = crushedContent.Length > 0
-                                    ? Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount
-                                    : 0;
-                            }
-                            else if (excludeLineIfStart != null && excludeLineIfStart.Any())
-                            {
-                                var excludeArray = excludeLineIfStart.ToArray();
-                                var excludeNewline = excludeArray.Contains("\n");
-                                var sb = new StringBuilder();
-                                var span = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length).AsSpan();
-                                var first = true;
-                                foreach (var line in span.EnumerateLines())
+                                if (totalBytes + entryTotalBytes > maxMemoryBytes)
                                 {
-                                    var trimmedLine = line.TrimStart().TrimStart('\uFEFF');
-                                    if (excludeNewline && (trimmedLine.IsEmpty || trimmedLine.IsWhiteSpace())) continue;
-                                    var shouldExclude = false;
-                                    foreach (var startStr in excludeArray)
-                                        if (startStr != "\n" &&
-                                            trimmedLine.StartsWith(startStr, StringComparison.Ordinal))
-                                        {
-                                            shouldExclude = true;
-                                            break;
-                                        }
-
-                                    if (shouldExclude) continue;
-                                    if (!first) sb.Append('\n');
-                                    sb.Append(line);
-                                    first = false;
+                                    cts.Cancel();
+                                    return Result<long>.Failure(
+                                        $"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes).");
                                 }
 
-                                crushedContent = sb.ToString();
-                                contentBytesWritten = Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount;
+                                WriteStringLine(writer, header);
+                                WriteStringLine(writer, fenceLine);
+                                WriteStringLine(writer, actualContent);
+                                WriteStringLine(writer, fence);
+                                WriteStringLine(writer, "");
+
+                                estimatedTokensAccumulator += TokenEstimator.EstimateTokens(header);
+                                estimatedTokensAccumulator += TokenEstimator.EstimateTokens(fenceLine);
+                                estimatedTokensAccumulator += TokenEstimator.EstimateTokens(actualContent);
+                                estimatedTokensAccumulator += TokenEstimator.EstimateTokens(fence);
+
+                                fileList.Add(content.Entry.DisplayPath ?? content.Entry.RelativePath);
+                                totalBytes += entryTotalBytes;
                             }
                             else
                             {
-                                contentBuffer = ready.Buffer!;
-                                var validLength = ready.Length;
-                                while (validLength > 0)
+                                if (ready.Error != null)
                                 {
-                                    var b = contentBuffer[validLength - 1];
-                                    if (b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n')
-                                        validLength--;
-                                    else
-                                        break;
+                                    var errorMsg = $"[Error reading file: {ready.Error}]";
+                                    WriteStringLine(writer, errorMsg);
+                                    totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
+                                    estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
+                                    continue;
                                 }
 
-                                contentBytesWritten = validLength;
-                            }
-
-                            var needsTrailingNewline = true;
-                            if (crushedContent != null && crushedContent.Length == 0) needsTrailingNewline = false;
-                            if (contentBuffer != null && contentBytesWritten == 0) needsTrailingNewline = false;
-
-                            var entryTotalBytes = headerBytes + fenceLineBytes + contentBytesWritten +
-                                                  closingFenceBytes + newlineBytes;
-                            if (needsTrailingNewline) entryTotalBytes += newlineBytes;
-                            if (totalBytes + entryTotalBytes > maxMemoryBytes)
-                                return Result<long>.Failure(
-                                    $"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes).");
-
-                            // Write now that we've confirmed we have budget
-                            WriteStringLine(writer, header);
-                            WriteStringLine(writer, fenceLine);
-
-                            if (crushedContent != null && crushedContent.Length > 0)
-                            {
-                                WriteStringLine(writer, crushedContent);
-                            }
-                            else if (contentBuffer != null && contentBytesWritten > 0)
-                            {
-                                const int chunkSize = 65536;
-                                var remaining = (int)contentBytesWritten;
-                                var offset = 0;
-                                while (remaining > 0)
+                                if (ready.Length == -1)
                                 {
-                                    var toWrite = Math.Min(remaining, chunkSize);
-                                    var destMemory = writer.GetMemory(toWrite);
-                                    contentBuffer.AsSpan(offset, toWrite).CopyTo(destMemory.Span);
-                                    writer.Advance(toWrite);
-                                    offset += toWrite;
-                                    remaining -= toWrite;
+                                    var errorMsg =
+                                        $"[File too large for fast streaming: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
+                                    WriteStringLine(writer, errorMsg);
+                                    totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
+                                    estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
+                                    continue;
                                 }
+
+                                var checkLen = Math.Min(ready.Length, 4096);
+                                var isBinary = ready.Buffer!.AsSpan(0, checkLen).ContainsAny(NullByte);
+
+                                if (isBinary)
+                                {
+                                    var errorMsg =
+                                        $"[Skipping binary file: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
+                                    WriteStringLine(writer, errorMsg);
+                                    totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
+                                    estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
+                                    continue;
+                                }
+
+                                // Apply compiled content filter to preview bytes — fast reject for streaming files.
+                                if (!contentFilter.IsEmpty && !contentFilter.ShouldInclude(ready.Buffer!, ready.Length))
+                                {
+                                    var errorMsg =
+                                        $"[Skipped by content filter: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
+                                    WriteStringLine(writer, errorMsg);
+                                    totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
+                                    estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
+                                    continue;
+                                }
+
+                                var fence = GetFenceForBytes(ready.Buffer!, ready.Length);
+
+                                var header = config.Markdown.FileHeaderTemplate.Replace("{path}",
+                                    content.Entry.DisplayPath ?? content.Entry.RelativePath,
+                                    StringComparison.OrdinalIgnoreCase);
+                                var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
+                                var fenceLine = $"{fence}{content.Entry.Language}";
+                                var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
+                                var closingFenceBytes = Utf8NoBom.GetByteCount(fence) + NewlineByteCount;
+                                var newlineBytes = NewlineByteCount;
+
+                                // Pre-calculate entry size BEFORE writing to enforce maxMemoryBytes limit
+                                long contentBytesWritten = 0;
+                                byte[]? contentBuffer = null;
+                                string? crushedContent = null;
+
+                                if (brainCrusher != null)
+                                {
+                                    var rawText = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length);
+                                    crushedContent = brainCrusher.CrushBlock(rawText, content.Entry.Language);
+                                    contentBytesWritten = crushedContent.Length > 0
+                                        ? Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount
+                                        : 0;
+                                }
+                                else if (excludeLineIfStart != null && excludeLineIfStart.Any())
+                                {
+                                    var excludeArray = excludeLineIfStart.ToArray();
+                                    var excludeNewline = excludeArray.Contains("\n");
+                                    var sb = new StringBuilder();
+                                    var span = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length).AsSpan();
+                                    var first = true;
+                                    foreach (var line in span.EnumerateLines())
+                                    {
+                                        var trimmedLine = line.TrimStart().TrimStart('\uFEFF');
+                                        if (excludeNewline && (trimmedLine.IsEmpty || trimmedLine.IsWhiteSpace())) continue;
+                                        var shouldExclude = false;
+                                        foreach (var startStr in excludeArray)
+                                            if (startStr != "\n" &&
+                                                trimmedLine.StartsWith(startStr, StringComparison.Ordinal))
+                                            {
+                                                shouldExclude = true;
+                                                break;
+                                            }
+
+                                        if (shouldExclude) continue;
+                                        if (!first) sb.Append('\n');
+                                        sb.Append(line);
+                                        first = false;
+                                    }
+
+                                    crushedContent = sb.ToString();
+                                    contentBytesWritten = Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount;
+                                }
+                                else
+                                {
+                                    contentBuffer = ready.Buffer!;
+                                    var validLength = ready.Length;
+                                    while (validLength > 0)
+                                    {
+                                        var b = contentBuffer[validLength - 1];
+                                        if (b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n')
+                                            validLength--;
+                                        else
+                                            break;
+                                    }
+
+                                    contentBytesWritten = validLength;
+                                }
+
+                                var needsTrailingNewline = true;
+                                if (crushedContent != null && crushedContent.Length == 0) needsTrailingNewline = false;
+                                if (contentBuffer != null && contentBytesWritten == 0) needsTrailingNewline = false;
+
+                                var entryTotalBytes = headerBytes + fenceLineBytes + contentBytesWritten +
+                                                      closingFenceBytes + newlineBytes;
+                                if (needsTrailingNewline) entryTotalBytes += newlineBytes;
+                                if (totalBytes + entryTotalBytes > maxMemoryBytes)
+                                {
+                                    cts.Cancel();
+                                    return Result<long>.Failure(
+                                        $"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes).");
+                                }
+
+                                // Write now that we've confirmed we have budget
+                                WriteStringLine(writer, header);
+                                WriteStringLine(writer, fenceLine);
+
+                                estimatedTokensAccumulator += TokenEstimator.EstimateTokens(header);
+                                estimatedTokensAccumulator += TokenEstimator.EstimateTokens(fenceLine);
+
+                                if (crushedContent != null && crushedContent.Length > 0)
+                                {
+                                    WriteStringLine(writer, crushedContent);
+                                    estimatedTokensAccumulator += TokenEstimator.EstimateTokens(crushedContent);
+                                }
+                                else if (contentBuffer != null && contentBytesWritten > 0)
+                                {
+                                    const int chunkSize = 65536;
+                                    var remaining = (int)contentBytesWritten;
+                                    var offset = 0;
+                                    while (remaining > 0)
+                                    {
+                                        var toWrite = Math.Min(remaining, chunkSize);
+                                        var destMemory = writer.GetMemory(toWrite);
+                                        contentBuffer.AsSpan(offset, toWrite).CopyTo(destMemory.Span);
+                                        writer.Advance(toWrite);
+                                        offset += toWrite;
+                                        remaining -= toWrite;
+                                    }
+                                    var text = Utf8NoBom.GetString(contentBuffer, 0, (int)contentBytesWritten);
+                                    estimatedTokensAccumulator += TokenEstimator.EstimateTokens(text);
+                                }
+
+                                if (needsTrailingNewline) WriteStringLine(writer, "");
+                                WriteStringLine(writer, fence);
+                                WriteStringLine(writer, "");
+
+                                estimatedTokensAccumulator += TokenEstimator.EstimateTokens(fence);
+
+                                fileList.Add(content.Entry.DisplayPath ?? content.Entry.RelativePath);
+                                totalBytes += entryTotalBytes;
                             }
-
-                            if (needsTrailingNewline) WriteStringLine(writer, "");
-                            WriteStringLine(writer, fence);
-                            WriteStringLine(writer, "");
-
-                            fileList.Add(content.Entry.DisplayPath ?? content.Entry.RelativePath);
-                            totalBytes += entryTotalBytes;
                         }
-                    }
-                    finally
-                    {
-                        if (ready.Buffer != null) ArrayPool<byte>.Shared.Return(ready.Buffer);
+                        finally
+                        {
+                            if (ready.Buffer != null) ArrayPool<byte>.Shared.Return(ready.Buffer);
+                        }
                     }
                 }
             }
+            finally
+            {
+                cts.Cancel();
 
-            await generateTask;
+                // Return any remaining buffers in outOfOrderBuffer to ArrayPool
+                foreach (var item in outOfOrderBuffer.Values)
+                {
+                    if (item.Buffer != null)
+                    {
+                        ArrayPool<byte>.Shared.Return(item.Buffer);
+                    }
+                }
+
+                try
+                {
+                    await generateTask;
+                }
+                catch
+                {
+                    // Ignore exceptions from background task during cleanup
+                }
+
+                // Drain any remaining items in the channel
+                while (channel.Reader.TryRead(out var result))
+                {
+                    if (result.Buffer != null)
+                    {
+                        ArrayPool<byte>.Shared.Return(result.Buffer);
+                    }
+                }
+            }
 
             WriteProjectStructure(writer, fileList, config);
             await writer.FlushAsync();
@@ -430,6 +493,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             projectStructureBytes += Utf8NoBom.GetByteCount(config.Markdown.Fence) + NewlineByteCount;
             projectStructureBytes += NewlineByteCount;
             totalBytes += projectStructureBytes;
+
+            LastEstimatedTokens = estimatedTokensAccumulator;
 
             return Result<long>.Success(totalBytes);
         }

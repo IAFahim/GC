@@ -9,7 +9,6 @@ public sealed class AhoCorasick
     private readonly Dictionary<char, int> _charMap;
     private readonly int[] _fail;
     private readonly int[] _gotoFunc;
-    private readonly int _nodeCount;
     private readonly int[] _output;
     private readonly int _root;
 
@@ -26,7 +25,6 @@ public sealed class AhoCorasick
             _fail = new[] { 0 };
             _output = new[] { -1 };
             _root = 0;
-            _nodeCount = 1;
             _charMap = new Dictionary<char, int>();
             return;
         }
@@ -54,7 +52,7 @@ public sealed class AhoCorasick
         Array.Fill(_output, -1);
 
         _root = 0;
-        _nodeCount = 1;
+        var nodeCount = 1;
 
         for (var i = 0; i < validPatterns.Length; i++)
         {
@@ -65,7 +63,7 @@ public sealed class AhoCorasick
                 var next = Goto(currentState, ci);
                 if (next == -1)
                 {
-                    next = _nodeCount++;
+                    next = nodeCount++;
                     SetGoto(currentState, ci, next);
                 }
 

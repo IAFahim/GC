@@ -26,7 +26,7 @@ public class DomainModelTests
         var result = Result<int>.Failure("something broke");
         Assert.False(result.IsSuccess);
         Assert.Equal("something broke", result.Error);
-        Assert.Equal(default, result.Value);
+        Assert.Throws<InvalidOperationException>(() => result.Value);
     }
 
     // ─── Result (non-generic) ─────────────────────────────────────────

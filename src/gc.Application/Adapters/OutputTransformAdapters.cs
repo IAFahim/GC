@@ -7,26 +7,7 @@ using gc.Domain.Interfaces;
 
 namespace gc.Application.Adapters;
 
-/// <summary>
-///     Adapter that wraps BrainCrusher to implement IOutputTransform.
-/// </summary>
-public sealed class BrainCrusherAdapter : IOutputTransform
-{
-    private readonly BrainCrusher _inner;
 
-    public BrainCrusherAdapter(BrainCrusher? inner = null)
-    {
-        _inner = inner ?? new BrainCrusher();
-    }
-
-    public string Name => "BrainCrusher";
-
-    public Task<TransformResult> TransformAsync(string input, CancellationToken ct = default)
-    {
-        var crushed = _inner.Crush(input);
-        return Task.FromResult(new TransformResult(crushed, string.Empty, 0));
-    }
-}
 
 /// <summary>
 ///     Adapter that wraps DynamicCompressor to implement IOutputTransform.

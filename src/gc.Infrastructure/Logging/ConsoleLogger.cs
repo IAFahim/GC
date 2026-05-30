@@ -7,12 +7,23 @@ namespace gc.Infrastructure.Logging;
 public sealed class ConsoleLogger : ILogger
 {
     private readonly IConsole _console;
-    private readonly bool _includeTimestamps;
+    private bool _includeTimestamps;
 
     public ConsoleLogger(LoggingConfiguration? config = null, IConsole? console = null)
     {
         _console = console ?? new SystemConsole();
-        Level = config?.Level switch
+        Level = LogLevel.Success;
+        ApplyConfiguration(config);
+    }
+
+    public void ApplyConfiguration(LoggingConfiguration? config)
+    {
+        if (config == null)
+        {
+            Level = LogLevel.Success;
+            return;
+        }
+        Level = config.Level switch
         {
             "debug" => LogLevel.Debug,
             "verbose" => LogLevel.Info,
@@ -20,7 +31,7 @@ public sealed class ConsoleLogger : ILogger
             "normal" => LogLevel.Success,
             _ => LogLevel.Success
         };
-        _includeTimestamps = config?.IncludeTimestamps ?? false;
+        _includeTimestamps = config.IncludeTimestamps ?? false;
     }
 
     public LogLevel Level { get; set; }

@@ -353,7 +353,7 @@ public class ConfigurationTests
         // Assert - Verify defaults match old Constants values
         Assert.NotNull(config);
         Assert.Equal("```", config.Markdown.Fence); // Constants.MarkdownFence
-        Assert.Equal("_Project Structure:_",
+        Assert.Equal("_Project Structure:_ ",
             config.Markdown.ProjectStructureHeader); // Constants.ProjectStructureHeader
 
         // Verify all built-in presets are available

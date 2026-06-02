@@ -35,7 +35,10 @@ public static class Program
         logger.ApplyConfiguration(config.Logging);
 
         var configDir = configLoader.GetConfigDirectory();
-        var (resolvedArgs, shouldExit, exitCode) = await CliArgumentResolver.ResolveAsync(args, configDir, Directory.GetCurrentDirectory());
+        string[] resolvedArgs;
+        bool shouldExit;
+        int exitCode;
+        (resolvedArgs, shouldExit, exitCode) = await CliArgumentResolver.ResolveAsync(args, configDir, Directory.GetCurrentDirectory());
         if (shouldExit)
         {
             return exitCode;

@@ -75,7 +75,7 @@ public sealed class CliParser
         }),
 
         // ── Single-value options ──
-        new(["-s", "-o", "--output", "spit"], OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
+        new(["-o", "--output", "spit"], OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
         new(["--max-memory"], OptionKind.SingleValue, (a, v) => a.MaxMemoryBytes = MemorySizeParser.Parse(v ?? "")),
         new(["-d", "--depth"], OptionKind.SingleValue, (a, v) =>
         {

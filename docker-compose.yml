@@ -9,11 +9,10 @@ services:
     working_dir: /workspace
 
   gc-test:
-    image: mcr.microsoft.com/dotnet/sdk:10.0
-    volumes:
-      - .:/workspace
-    working_dir: /workspace
-    command: ["dotnet", "test", "tests/gc.Tests/gc.Tests.csproj"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
 
   gc-bash:
     image: mcr.microsoft.com/dotnet/sdk:10.0

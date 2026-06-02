@@ -97,14 +97,35 @@ public sealed class HistoryService : IHistoryService
         if (!File.Exists(_historyFilePath))
             return [];
 
-        await using var fs = new FileStream(_historyFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
-            FileOptions.Asynchronous);
-        using var reader = new StreamReader(fs);
-        var json = await reader.ReadToEndAsync();
-        if (string.IsNullOrWhiteSpace(json))
+        try
+        {
+            await using var fs = new FileStream(_historyFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
+                FileOptions.Asynchronous);
+            using var reader = new StreamReader(fs);
+            var json = await reader.ReadToEndAsync();
+            if (string.IsNullOrWhiteSpace(json))
+                return [];
+            var typeInfo = GcJsonSerializerContext.Default.ListHistoryEntry;
+            return JsonSerializer.Deserialize(json, typeInfo)?.ToList() ?? [];
+        }
+        catch (JsonException ex)
+        {
+            _logger.Debug($"History file is corrupted, resetting. Error: {ex.Message}");
+            try
+            {
+                await SaveToFileAsync([]);
+            }
+            catch
+            {
+                // Ignore failure to write during auto-heal
+            }
             return [];
-        var typeInfo = GcJsonSerializerContext.Default.ListHistoryEntry;
-        return JsonSerializer.Deserialize(json, typeInfo)?.ToList() ?? [];
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug($"Failed to load history: {ex.Message}");
+            return [];
+        }
     }
 
     private async Task SaveToFileAsync(List<HistoryEntry> entries)

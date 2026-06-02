@@ -34,8 +34,15 @@ public static class Program
         var config = configResult.Value ?? new GcConfiguration();
         logger.ApplyConfiguration(config.Logging);
 
+        var configDir = configLoader.GetConfigDirectory();
+        var (resolvedArgs, shouldExit, exitCode) = await CliArgumentResolver.ResolveAsync(args, configDir, Directory.GetCurrentDirectory());
+        if (shouldExit)
+        {
+            return exitCode;
+        }
+
         var parser = new CliParser();
-        var parseResult = parser.Parse(args, config);
+        var parseResult = parser.Parse(resolvedArgs, config);
         if (!parseResult.IsSuccess)
         {
             logger.Error($"Failed to parse arguments: {parseResult.Error}");
@@ -138,7 +145,7 @@ public static class Program
 
         var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
 
-        var exitCode = await ExecuteAsync(Directory.GetCurrentDirectory(), cliArgs, config, useCase, configService,
+        exitCode = await ExecuteAsync(Directory.GetCurrentDirectory(), cliArgs, config, useCase, configService,
             logger, cts.Token, profileReporter);
 
         if (profileReporter != null)
@@ -173,7 +180,7 @@ public static class Program
         if (exitCode == 0)
             await historyService.AddEntryAsync(
                 Directory.GetCurrentDirectory(),
-                args.Where(a => !a.Equals("--history", StringComparison.OrdinalIgnoreCase)).ToArray(),
+                resolvedArgs.Where(a => !a.Equals("--history", StringComparison.OrdinalIgnoreCase)).ToArray(),
                 cts.Token);
 
         return exitCode;
@@ -468,7 +475,7 @@ FILTERING:
     --preset <name>                  Use a built-in preset (web,backend,dotnet,etc)
 
 OUTPUT:
-    -s, spit, -o, --output <file>    Save output to file instead of clipboard
+    -o, spit, --output <file>        Save output to file instead of clipboard
     --no-clipboard                   Disable copying output to clipboard
     -b, brain, --brain               Universal minification + Dynamic BPE fallback
     -c, compress, --compress         Structural compression using sqz (session dedup)
@@ -497,7 +504,12 @@ SHARD MODE:
     The file listing at the end always shows all files in the repo.
 
 CONFIGURATION:
-    --init-config                    Initialize configuration
+    --init-config                    Initialize global configuration
+    init [args...]                   Initialize local configuration (.gc file) in CWD
+    -s, --save                       Save current/merged arguments as the default for CWD
+    --save-profile <name> [args...]  Save the provided arguments as a named profile
+    --profile <name>                 Apply a named profile's arguments
+    --list-profiles                  List all saved profiles
     --validate-config                Validate configuration
     --dump-config                    Show configuration
     --export-schema <file>           Export configuration JSON schema to file

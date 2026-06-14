@@ -1,0 +1,185 @@
+name: Performance Regression Detection
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: write
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  PERFORMANCE_THRESHOLD: 5    # Fail if performance degrades > 5%
+  MEMORY_THRESHOLD: 10        # Fail if allocations increase > 10%
+
+jobs:
+  benchmark:
+    name: Benchmark ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Cache NuGet packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore dependencies
+      run: dotnet restore src/gc.CLI/gc.CLI.csproj
+
+    - name: Restore benchmark dependencies
+      run: dotnet restore benchmarks/gc.Benchmarks/gc.Benchmarks.csproj
+
+    - name: Build benchmarks
+      run: dotnet build benchmarks/gc.Benchmarks/gc.Benchmarks.csproj --configuration Release --no-restore
+
+    - name: Fetch baseline from main
+      if: github.event_name == 'pull_request'
+      run: |
+        git fetch origin main
+        git checkout origin/main -- benchmarks/baseline.json 2>/dev/null || echo "No baseline found on main"
+
+    - name: Download baseline artifact
+      if: github.event_name == 'pull_request'
+      uses: actions/download-artifact@v4
+      with:
+        name: benchmark-baseline-${{ matrix.os }}
+        path: benchmarks/
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+
+    - name: Run benchmarks
+      shell: pwsh
+      run: |
+        cd benchmarks/gc.Benchmarks
+        dotnet run -c Release -- --exporters json --filter "QuickBenchmark*"
+
+    - name: Parse benchmark results
+      shell: pwsh
+      run: |
+        $csvPath = Get-ChildItem -Path "benchmarks/gc.Benchmarks/BenchmarkDotNet.Artifacts/results" -Filter "*.csv" | Select-Object -First 1 -ExpandProperty FullName
+        if (Test-Path $csvPath) {
+          ./scripts/compare-benchmarks.ps1 -ResultsPath $csvPath -BaselinePath "benchmarks/baseline.json" -OutputPath "benchmarks/current-results.json" -Platform "${{ matrix.os }}"
+        } else {
+          Write-Host "No benchmark results found"
+          exit 1
+        }
+
+    - name: Upload current results as artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results-${{ matrix.os }}
+        path: |
+          benchmarks/current-results.json
+          benchmarks/gc.Benchmarks/BenchmarkDotNet.Artifacts/
+        retention-days: 30
+
+    - name: Store results as new baseline (main branch)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        cp benchmarks/current-results.json benchmarks/baseline-${{ matrix.os }}.json
+
+    - name: Upload baseline (main branch)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-baseline-${{ matrix.os }}
+        path: benchmarks/baseline-${{ matrix.os }}.json
+        retention-days: 90
+
+  regression-check:
+    name: Performance Regression Check
+    runs-on: ubuntu-latest
+    needs: benchmark
+    if: github.event_name == 'pull_request'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Download all benchmark results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: benchmark-results-
+        path: results/
+        merge-multiple: true
+
+    - name: Aggregate results
+      run: |
+        python3 scripts/aggregate-benchmarks.py results/ benchmarks/summary.json || true
+
+    - name: Check for regressions
+      id: regression
+      run: |
+        ./scripts/compare-benchmarks.sh results/ benchmarks/baseline.json
+
+    - name: Generate performance summary
+      if: always()
+      run: |
+        ./scripts/compare-benchmarks.sh results/ benchmarks/baseline.json --summary > performance-summary.md
+
+    - name: Comment on PR
+      if: always() && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          let commentBody = '';
+
+          try {
+            commentBody = fs.readFileSync('performance-summary.md', 'utf8');
+          } catch (e) {
+            commentBody = '## Performance Summary\n\nUnable to generate summary. Check logs for details.';
+          }
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment =>
+            comment.user.type === 'Bot' &&
+            comment.body.includes('## Performance Summary')
+          );
+
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo,
+              comment_id: botComment.id,
+              body: commentBody
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo,
+              issue_number: context.issue.number,
+              body: commentBody
+            });
+          }
+
+    - name: Fail on regression
+      if: steps.regression.outputs.has_regression == 'true'
+      run: exit 1

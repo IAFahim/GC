@@ -1,0 +1,84 @@
+{
+  "metadata": {
+    "generated": "2026-06-14T00:00:00Z",
+    "git_commit": "main",
+    "dotnet_version": "10.0",
+    "description": "Baseline performance metrics for gc benchmark suite"
+  },
+  "benchmarks": {
+    "TokenEstimator_Small": {
+      "mean_ns": 3131.4,
+      "error_ns": 193.25,
+      "stddev_ns": 29.90,
+      "allocated_bytes": 0,
+      "gen0_collections": 0,
+      "gen1_collections": 0,
+      "gen2_collections": 0,
+      "operations_per_second": 319211
+    },
+    "TokenEstimator_Medium": {
+      "mean_ns": 370910.9,
+      "error_ns": 25181.61,
+      "stddev_ns": 3896.88,
+      "allocated_bytes": 0,
+      "gen0_collections": 0,
+      "gen1_collections": 0,
+      "gen2_collections": 0,
+      "operations_per_second": 2695
+    },
+    "GlobMatcher_IsMatch": {
+      "mean_ns": 466.2,
+      "error_ns": 11.64,
+      "stddev_ns": 3.02,
+      "allocated_bytes": 0,
+      "gen0_collections": 0,
+      "gen1_collections": 0,
+      "gen2_collections": 0,
+      "operations_per_second": 2145137
+    },
+    "BrainCrusher_Crush_Small": {
+      "mean_ns": 34616.8,
+      "error_ns": 2622.43,
+      "stddev_ns": 405.82,
+      "allocated_bytes": 3584,
+      "gen0_collections": 2.2583,
+      "gen1_collections": 0,
+      "gen2_collections": 0,
+      "operations_per_second": 28881
+    },
+    "BrainCrusher_Crush_Medium": {
+      "mean_ns": 6266119.8,
+      "error_ns": 6900755.20,
+      "stddev_ns": 1792104.21,
+      "allocated_bytes": 323840,
+      "gen0_collections": 93.75,
+      "gen1_collections": 93.75,
+      "gen2_collections": 93.75,
+      "operations_per_second": 159
+    },
+    "SuffixArray_Build_Small": {
+      "mean_ns": 1260777.5,
+      "error_ns": 408401.21,
+      "stddev_ns": 63200.54,
+      "allocated_bytes": 13272,
+      "gen0_collections": 7.8125,
+      "gen1_collections": 0,
+      "gen2_collections": 0,
+      "operations_per_second": 793
+    },
+    "SuffixArray_Build_Medium": {
+      "mean_ns": 276272440.4,
+      "error_ns": 75436776.16,
+      "stddev_ns": 19590691.25,
+      "allocated_bytes": 1201496,
+      "gen0_collections": 0,
+      "gen1_collections": 0,
+      "gen2_collections": 0,
+      "operations_per_second": 3
+    }
+  },
+  "thresholds": {
+    "performance_regression_percent": 5,
+    "memory_regression_percent": 10
+  }
+}

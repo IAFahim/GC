@@ -189,6 +189,10 @@ public sealed class ClipboardService : IClipboardService
 
             return process.ExitCode == 0 ? output.TrimEnd('\r', '\n') : string.Empty;
         }
+        catch (OperationCanceledException)
+        {
+            throw; // Honor cancellation rather than masking it as an empty read.
+        }
         catch
         {
             return string.Empty;
@@ -256,6 +260,12 @@ public sealed class ClipboardService : IClipboardService
 
             await process.WaitForExitAsync(ct);
             return process.ExitCode == 0;
+        }
+        catch (OperationCanceledException)
+        {
+            // Honor cancellation instead of treating it as a tool failure that triggers a fallback.
+            // The `using` disposes the child process, closing its stdin so it drains and exits.
+            throw;
         }
         catch
         {

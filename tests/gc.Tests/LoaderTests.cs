@@ -51,7 +51,7 @@ public class LoaderTests
             Assert.Equal("===", cluster.RepoSeparator);
             Assert.False(cluster.IncludeRepoHeader);
             Assert.Equal(8, cluster.MaxParallelRepos);
-            Assert.Equal(["archive", "old"], cluster.SkipDirectories);
+            Assert.Equal(["archive", "old"], cluster.SkipDirectories!);
             Assert.True(cluster.IncludeRootFiles);
             Assert.True(cluster.FailFast);
         }
@@ -76,12 +76,13 @@ public class LoaderTests
             Assert.True(result.IsSuccess);
             var cluster = result.Value!.Discovery.Cluster;
             Assert.NotNull(cluster);
-            // Empty cluster {} gets CLR defaults from init (STJ uses record init defaults)
+            // An omitted ("{}") cluster leaves every field null so the merger keeps lower config
+            // layers; the concrete defaults are supplied by BuiltInPresets, not the record.
             Assert.Null(cluster.Enabled);
-            Assert.Equal(0, cluster.MaxDepth);
+            Assert.Null(cluster.MaxDepth);
             Assert.Null(cluster.RepoSeparator);
             Assert.Null(cluster.IncludeRepoHeader);
-            Assert.Equal(0, cluster.MaxParallelRepos);
+            Assert.Null(cluster.MaxParallelRepos);
             Assert.Null(cluster.SkipDirectories);
             Assert.Null(cluster.IncludeRootFiles);
             Assert.Null(cluster.FailFast);
@@ -676,7 +677,7 @@ public class LoaderTests
             Assert.Equal("***", c.Discovery.Cluster.RepoSeparator);
             Assert.True(c.Discovery.Cluster.IncludeRepoHeader);
             Assert.Equal(4, c.Discovery.Cluster.MaxParallelRepos);
-            Assert.Equal(["vendor", "node_modules"], c.Discovery.Cluster.SkipDirectories);
+            Assert.Equal(["vendor", "node_modules"], c.Discovery.Cluster.SkipDirectories!);
             Assert.True(c.Discovery.Cluster.IncludeRootFiles);
             Assert.False(c.Discovery.Cluster.FailFast);
 
@@ -908,7 +909,7 @@ public class LoaderTests
             Assert.True(loaded.Discovery.Cluster.Enabled);
             Assert.Equal(7, loaded.Discovery.Cluster.MaxDepth);
             Assert.Equal("|||", loaded.Discovery.Cluster.RepoSeparator);
-            Assert.Equal(["skip1", "skip2"], loaded.Discovery.Cluster.SkipDirectories);
+            Assert.Equal(["skip1", "skip2"], loaded.Discovery.Cluster.SkipDirectories!);
             Assert.Equal("plain", loaded.Output.DefaultFormat);
             Assert.False(loaded.Output.IncludeStats);
             Assert.Equal("debug", loaded.Logging.Level);

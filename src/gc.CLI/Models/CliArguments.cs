@@ -74,4 +74,6 @@ public sealed class CliArguments
     public ShardInfo? ShardInfo { get; set; }
 
     public string? ShardError { get; set; }
+
+    public string? MaxMemoryError { get; set; }
 }

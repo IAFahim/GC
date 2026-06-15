@@ -68,8 +68,9 @@ public sealed class ConfigurationService
     {
         try
         {
-            var options = new JsonSerializerOptions { WriteIndented = true };
-            var json = JsonSerializer.Serialize(config, GcJsonSerializerContext.Default.GcConfiguration);
+            // Use the indented source-gen context so the dump is human-readable AND NativeAOT-safe.
+            // (The previous local JsonSerializerOptions was ignored by the JsonTypeInfo overload.)
+            var json = JsonSerializer.Serialize(config, GcIndentedJsonContext.Default.GcConfiguration);
             _logger.Info(json);
             return Result.Success();
         }

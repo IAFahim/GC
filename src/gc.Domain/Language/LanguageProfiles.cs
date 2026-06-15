@@ -167,7 +167,10 @@ public static class LanguageProfiles
     public static LanguageProfile For(string? languageOrExt)
     {
         if (string.IsNullOrEmpty(languageOrExt)) return Default;
-        var key = languageOrExt.ToLowerInvariant().TrimStart('.');
+        // Map uses OrdinalIgnoreCase, so the lookup is already case-insensitive; ToLowerInvariant
+        // would only add a wasted allocation per call. TrimStart returns the same instance when
+        // there is no leading '.', so the common case is allocation-free.
+        var key = languageOrExt.TrimStart('.');
         return Map.GetValueOrDefault(key, Default);
     }
 }

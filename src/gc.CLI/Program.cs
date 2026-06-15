@@ -70,6 +70,11 @@ public static class Program
             logger.Error($"Invalid --shard value '{cliArgs.ShardError}'. Expected format: N.M where N ≤ M (e.g. 1.3, 2.5)");
             return 1;
         }
+        if (cliArgs.MaxMemoryError != null)
+        {
+            logger.Error($"Invalid --max-memory value '{cliArgs.MaxMemoryError}'. Expected format: 100MB, 1GB, 500B, etc.");
+            return 1;
+        }
         if (cliArgs.Debug) logger.Level = LogLevel.Debug;
         else if (cliArgs.Verbose) logger.Level = LogLevel.Info;
 
@@ -494,7 +499,7 @@ OUTPUT:
     --no-sort                        Do not sort output by file path
     --dry-run, --list                Preview files to be included without generating output
     --count, --tokens-only           Show token count estimate without generating output
-    --profile                        Print stage timing profile after execution
+    --profile-timing                 Print stage timing profile after execution
     --profile-json <file>            Write machine-readable profile JSON to file
     --stats                          Show detailed execution statistics
     --json-stats <file>              Write execution statistics to JSON file

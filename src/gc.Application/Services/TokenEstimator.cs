@@ -136,6 +136,106 @@ public static class TokenEstimator
         return string.IsNullOrEmpty(text) ? 0 : EstimateTokens(text.AsSpan());
     }
 
+    /// <summary>
+    ///     Stateful streaming estimator for content decoded in chunks. Calling
+    ///     <see cref="EstimateTokens(ReadOnlySpan{char})"/> once per chunk over-counts whenever a word
+    ///     straddles a chunk boundary (each side starts a fresh token run). This carries the trailing
+    ///     partial word across chunks and only estimates up to a *safe* boundary — a whitespace or ASCII
+    ///     punctuation char, which always breaks a token run on both sides — so the total matches a
+    ///     single whole-content estimate exactly.
+    /// </summary>
+    public struct StreamingTokenEstimator
+    {
+        // Bound the carried partial word so a pathological boundary-free run cannot grow it without
+        // limit; a run longer than this reverts to the harmless per-chunk behaviour (text never has
+        // 64K-char tokens, so this valve essentially never fires).
+        private const int MaxCarry = 1 << 16;
+
+        private char[]? _carry;
+        private int _carryLen;
+        private int _tokens;
+
+        public readonly int Tokens => _tokens;
+
+        public void Append(ReadOnlySpan<char> chunk)
+        {
+            if (chunk.IsEmpty) return;
+
+            // Index of the last safe boundary (whitespace / ASCII punctuation). Everything after it is
+            // a partial word that may continue into the next chunk, so it is deferred to the carry.
+            var lastBoundary = -1;
+            for (var i = chunk.Length - 1; i >= 0; i--)
+                if (!IsWordChar(chunk[i]))
+                {
+                    lastBoundary = i;
+                    break;
+                }
+
+            if (lastBoundary < 0)
+            {
+                // Whole chunk is one unbroken run: accumulate and wait for a boundary.
+                AppendCarry(chunk);
+                if (_carryLen >= MaxCarry) FlushCarry();
+                return;
+            }
+
+            var head = chunk[..(lastBoundary + 1)];
+            if (_carryLen > 0)
+            {
+                EnsureCarry(_carryLen + head.Length);
+                head.CopyTo(_carry!.AsSpan(_carryLen));
+                _tokens += EstimateTokens(_carry.AsSpan(0, _carryLen + head.Length));
+                _carryLen = 0;
+            }
+            else
+            {
+                _tokens += EstimateTokens(head);
+            }
+
+            AppendCarry(chunk[(lastBoundary + 1)..]);
+        }
+
+        public void Flush() => FlushCarry();
+
+        private void FlushCarry()
+        {
+            if (_carryLen > 0)
+            {
+                _tokens += EstimateTokens(_carry!.AsSpan(0, _carryLen));
+                _carryLen = 0;
+            }
+        }
+
+        private void AppendCarry(ReadOnlySpan<char> span)
+        {
+            if (span.IsEmpty) return;
+            EnsureCarry(_carryLen + span.Length);
+            span.CopyTo(_carry!.AsSpan(_carryLen));
+            _carryLen += span.Length;
+        }
+
+        private void EnsureCarry(int needed)
+        {
+            if (_carry == null)
+            {
+                _carry = new char[Math.Max(needed, 256)];
+            }
+            else if (_carry.Length < needed)
+            {
+                Array.Resize(ref _carry, Math.Max(needed, _carry.Length * 2));
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsWordChar(char c)
+    {
+        // A "word char" is anything that does NOT break a token run: i.e. not whitespace and not
+        // ASCII punctuation. Non-ASCII chars are treated as word characters (absorbed into runs).
+        if (IsWhitespace(c)) return false;
+        return c >= 128 || (Class[c] & (byte)CharClass.Punct) == 0;
+    }
+
     // Combined ASCII classification table: one array load + one mask classifies a char
     // into all categories at once, replacing per-char chains of '||' comparisons.
     // Non-ASCII chars (>= 128) classify as None and are handled by the dedicated run path.

@@ -103,7 +103,11 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                             try
                             {
-                                var fileInfo = new FileInfo(content.Entry.AbsolutePath);
+                                // Compute the absolute path once: FileEntry.AbsolutePath runs
+                                // Path.GetFullPath+Combine on every access, and this hot parallel loop
+                                // would otherwise normalize it 3x per file (FileInfo + two open() calls).
+                                var absolutePath = content.Entry.AbsolutePath;
+                                var fileInfo = new FileInfo(absolutePath);
                                 if (!fileInfo.Exists)
                                 {
                                     await channel.Writer.WriteAsync(
@@ -125,8 +129,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 SafeFileHandle handle;
                                 if (OperatingSystem.IsLinux())
                                 {
-                                    var fd = LinuxFastPath.open(content.Entry.AbsolutePath, 0x40000);
-                                    if (fd < 0) fd = LinuxFastPath.open(content.Entry.AbsolutePath, 0);
+                                    var fd = LinuxFastPath.open(absolutePath, 0x40000);
+                                    if (fd < 0) fd = LinuxFastPath.open(absolutePath, 0);
                                     if (fd >= 0)
                                     {
                                         LinuxFastPath.posix_fadvise(fd, 0, 0, LinuxFastPath.POSIX_FADV_SEQUENTIAL);
@@ -134,14 +138,14 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     }
                                     else
                                     {
-                                        handle = File.OpenHandle(content.Entry.AbsolutePath, FileMode.Open,
+                                        handle = File.OpenHandle(absolutePath, FileMode.Open,
                                             FileAccess.Read, FileShare.ReadWrite,
                                             FileOptions.SequentialScan | FileOptions.Asynchronous);
                                     }
                                 }
                                 else
                                 {
-                                    handle = File.OpenHandle(content.Entry.AbsolutePath, FileMode.Open, FileAccess.Read,
+                                    handle = File.OpenHandle(absolutePath, FileMode.Open, FileAccess.Read,
                                         FileShare.ReadWrite, FileOptions.SequentialScan | FileOptions.Asynchronous);
                                 }
 
@@ -149,7 +153,11 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 {
                                     var fileLength = RandomAccess.GetLength(handle);
 
-                                    if (fileLength <= 10 * 1024 * 1024)
+                                    // The file is already gated by maxFileSize above; read it whole up to the
+                                    // single-buffer ceiling (int.MaxValue). Only genuinely enormous files
+                                    // (>2 GB, unbufferable in one array) fall through to the placeholder, so a
+                                    // user who raises maxFileSize past 10 MB now gets the real content.
+                                    if (fileLength <= int.MaxValue)
                                     {
                                         var len = (int)fileLength;
                                         var buffer = ArrayPool<byte>.Shared.Rent(len);
@@ -209,7 +217,11 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             if (content.Content != null)
                             {
                                 var actualContent = content.Content;
-                                if (hasExclude)
+                                // Synthetic cluster markers (repo separators/headers, Path "[...]") carry
+                                // their own ready-made markdown; never line-filter or brain-crush them, or
+                                // a -z prefix / minifier could mangle the separators.
+                                var isSynthetic = content.Entry.Path.StartsWith('[');
+                                if (hasExclude && !isSynthetic)
                                 {
                                     var span = actualContent.AsSpan();
                                     var sb = t_lineExclusionBuilder ??= new StringBuilder(4096);
@@ -256,7 +268,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                                 actualContent = actualContent.TrimEnd(' ', '\t', '\r', '\n');
 
-                                if (brainCrusher != null)
+                                if (brainCrusher != null && !isSynthetic)
                                     actualContent = brainCrusher.CrushBlock(actualContent, content.Entry.Language);
 
                                 var contentBytes = Utf8NoBom.GetByteCount(actualContent);
@@ -302,7 +314,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 if (ready.Length == -1)
                                 {
                                     var errorMsg =
-                                        $"[File too large for fast streaming: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
+                                        $"[File too large to buffer (>2GB): {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
                                     WriteStringLine(writer, errorMsg);
                                     totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                     estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
@@ -445,6 +457,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     var byteOffset = 0;
                                     const int decodeChunk = 65536;
                                     var charBuf = ArrayPool<char>.Shared.Rent(decodeChunk + 8);
+                                    // Streaming estimator carries the partial word across decode chunks so an
+                                    // identifier split by a 64KB boundary is not counted twice.
+                                    var streamingEstimator = new TokenEstimator.StreamingTokenEstimator();
                                     try
                                     {
                                         while (byteRemaining > 0)
@@ -455,11 +470,12 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                                 contentBuffer.AsSpan(byteOffset, byteCount),
                                                 charBuf.AsSpan(),
                                                 flush);
-                                            estimatedTokensAccumulator +=
-                                                TokenEstimator.EstimateTokens(charBuf.AsSpan(0, charsDecoded));
+                                            streamingEstimator.Append(charBuf.AsSpan(0, charsDecoded));
                                             byteOffset += byteCount;
                                             byteRemaining -= byteCount;
                                         }
+                                        streamingEstimator.Flush();
+                                        estimatedTokensAccumulator += streamingEstimator.Tokens;
                                     }
                                     finally
                                     {

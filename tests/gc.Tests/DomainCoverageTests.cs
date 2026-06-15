@@ -54,14 +54,18 @@ public class FormattingFormatRelativeTimeTests
     [Fact]
     public void Formatting_FormatRelativeTime_Yesterday()
     {
-        // The "yesterday" branch matches when TotalDays is exactly 1.0.
-        // DateTime.Now.AddDays(-1) usually gives ~1.0 days but timing can push it slightly over.
-        // Use DateTime.SpecifyKind to ensure UTC round-trip is exact.
+        // The "yesterday" branch now covers the whole 24h–48h band ({ TotalDays: < 2 }), so any time
+        // ~1 day ago renders exactly "yesterday" — no more ungrammatical "1 days ago".
         var past = DateTime.UtcNow.AddDays(-1);
         var result = Formatting.FormatRelativeTime(past);
-        // With UTC input, TotalDays should be very close to 1.0, so we accept either "yesterday" or "1 days ago"
-        Assert.True(result == "yesterday" || result.Contains("days ago"),
-            $"Expected 'yesterday' or 'N days ago', got: '{result}'");
+        Assert.Equal("yesterday", result);
+    }
+
+    [Fact]
+    public void Formatting_FormatRelativeTime_TwoDays_IsPluralDays()
+    {
+        var result = Formatting.FormatRelativeTime(DateTime.UtcNow.AddDays(-2));
+        Assert.Equal("2 days ago", result);
     }
 
     [Fact]

@@ -125,13 +125,29 @@ public static class SuffixArray
         for (var i = 1; i < n; i++)
             if (lcp[i] >= minLength)
             {
-                var span = text.AsSpan(sa[i], lcp[i]);
+                var start = sa[i];
+                var phraseLen = lcp[i];
+
+                // Trim surrogate-pair splits: the LCP/suffix boundaries are arbitrary UTF-16 code-unit
+                // offsets, so a phrase could begin or end mid-pair. Emitting a lone surrogate would let
+                // a later ordinal Replace orphan its partner and corrupt that code point in the output.
+                if (char.IsLowSurrogate(text[start]))
+                {
+                    start++;
+                    phraseLen--;
+                }
+                if (phraseLen > 0 && char.IsHighSurrogate(text[start + phraseLen - 1]))
+                    phraseLen--;
+                if (phraseLen < minLength)
+                    continue;
+
+                var span = text.AsSpan(start, phraseLen);
 
                 // Skip phrases with newlines BEFORE allocating, to avoid wasted strings
                 if (span.IndexOfAny(NewlineChars) >= 0)
                     continue;
 
-                var phrase = text.Substring(sa[i], lcp[i]);
+                var phrase = text.Substring(start, phraseLen);
                 candidateMap.TryGetValue(phrase, out var count);
                 candidateMap[phrase] = count + 1;
             }

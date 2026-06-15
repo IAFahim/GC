@@ -300,15 +300,25 @@ public class DomainModelTests
     [Fact]
     public void ClusterConfiguration_Defaults()
     {
+        // Every omittable field is null on a bare record so the config merger can distinguish
+        // "omitted" (keep the lower layer) from an explicit value. Concrete defaults live in
+        // BuiltInPresets.GetDefaultConfiguration().
         var cfg = new ClusterConfiguration();
         Assert.Null(cfg.Enabled);
-        Assert.Equal(2, cfg.MaxDepth);
-        Assert.Equal("---", cfg.RepoSeparator);
+        Assert.Null(cfg.MaxDepth);
+        Assert.Null(cfg.RepoSeparator);
         Assert.Null(cfg.IncludeRepoHeader);
-        Assert.Equal(0, cfg.MaxParallelRepos);
-        Assert.Empty(cfg.SkipDirectories);
+        Assert.Null(cfg.MaxParallelRepos);
+        Assert.Null(cfg.SkipDirectories);
         Assert.Null(cfg.IncludeRootFiles);
         Assert.Null(cfg.FailFast);
+
+        // The built-in default preset supplies the concrete cluster defaults.
+        var defaults = gc.Domain.Constants.BuiltInPresets.GetDefaultConfiguration().Discovery.Cluster!;
+        Assert.Equal(2, defaults.MaxDepth);
+        Assert.Equal("---", defaults.RepoSeparator);
+        Assert.Equal(0, defaults.MaxParallelRepos);
+        Assert.Empty(defaults.SkipDirectories!);
     }
 
     [Fact]

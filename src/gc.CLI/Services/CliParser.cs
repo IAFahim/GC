@@ -63,7 +63,9 @@ public sealed class CliParser
         new(["--cluster"], OptionKind.Flag, (a, _) => a.Cluster = true),
         new(["--dry-run", "--list"], OptionKind.Flag, (a, _) => a.DryRun = true),
         new(["--count", "--tokens-only"], OptionKind.Flag, (a, _) => a.CountTokens = true),
-        new(["--profile"], OptionKind.Flag, (a, _) => a.Profile = true),
+        // Timing profiler. NOTE: bare "--profile <name>" is intercepted earlier by CliArgumentResolver
+        // to apply a saved named profile, so the timing flag uses a distinct token to avoid a collision.
+        new(["--profile-timing"], OptionKind.Flag, (a, _) => a.Profile = true),
         new(["--profile-json"], OptionKind.SingleValue, (a, v) =>
         {
             a.Profile = true;
@@ -79,7 +81,14 @@ public sealed class CliParser
 
         // ── Single-value options ──
         new(["-s", "-o", "--output", "spit"], OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
-        new(["--max-memory"], OptionKind.SingleValue, (a, v) => a.MaxMemoryBytes = MemorySizeParser.Parse(v ?? "")),
+        new(["--max-memory"], OptionKind.SingleValue, (a, v) =>
+        {
+            // Fail loud, not open: an unparseable value must not silently clobber the configured
+            // limit with the 100MB default (MemorySizeParser.Parse falls back). Keep the seeded
+            // value and record an error the caller surfaces.
+            if (MemorySizeParser.TryParse(v ?? "", out var bytes)) a.MaxMemoryBytes = bytes;
+            else a.MaxMemoryError = v ?? "(empty)";
+        }),
         new(["-d", "--depth"], OptionKind.SingleValue, (a, v) =>
         {
             if (int.TryParse(v, out var d)) a.Depth = d;

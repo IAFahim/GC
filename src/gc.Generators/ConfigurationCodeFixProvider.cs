@@ -5,7 +5,9 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Immutable;
 using System.Composition;
+using System.Globalization;
 using System.Linq;
+using System.Threading;
 
 namespace gc.Domain.Generators;
 
@@ -70,21 +72,21 @@ public sealed class ConfigurationCodeFixProvider : CodeFixProvider
         context.RegisterCodeFix(
             CodeAction.Create(
                 "Change to '1GB'",
-                ct => FixStringLiteralAsync(context.Document, diagnostic, "1GB"),
+                ct => FixStringLiteralAsync(context.Document, diagnostic, "1GB", ct),
                 "FixMemorySizeTo1GB"),
             diagnostic);
 
         context.RegisterCodeFix(
             CodeAction.Create(
                 "Change to '100MB'",
-                ct => FixStringLiteralAsync(context.Document, diagnostic, "100MB"),
+                ct => FixStringLiteralAsync(context.Document, diagnostic, "100MB", ct),
                 "FixMemorySizeTo100MB"),
             diagnostic);
 
         context.RegisterCodeFix(
             CodeAction.Create(
                 "Change to '10MB'",
-                ct => FixStringLiteralAsync(context.Document, diagnostic, "10MB"),
+                ct => FixStringLiteralAsync(context.Document, diagnostic, "10MB", ct),
                 "FixMemorySizeTo10MB"),
             diagnostic);
     }
@@ -94,21 +96,21 @@ public sealed class ConfigurationCodeFixProvider : CodeFixProvider
         context.RegisterCodeFix(
             CodeAction.Create(
                 "Change to 'auto'",
-                ct => FixStringLiteralAsync(context.Document, diagnostic, "auto"),
+                ct => FixStringLiteralAsync(context.Document, diagnostic, "auto", ct),
                 "FixDiscoveryModeToAuto"),
             diagnostic);
 
         context.RegisterCodeFix(
             CodeAction.Create(
                 "Change to 'git'",
-                ct => FixStringLiteralAsync(context.Document, diagnostic, "git"),
+                ct => FixStringLiteralAsync(context.Document, diagnostic, "git", ct),
                 "FixDiscoveryModeToGit"),
             diagnostic);
 
         context.RegisterCodeFix(
             CodeAction.Create(
                 "Change to 'filesystem'",
-                ct => FixStringLiteralAsync(context.Document, diagnostic, "filesystem"),
+                ct => FixStringLiteralAsync(context.Document, diagnostic, "filesystem", ct),
                 "FixDiscoveryModeToFilesystem"),
             diagnostic);
     }
@@ -122,7 +124,7 @@ public sealed class ConfigurationCodeFixProvider : CodeFixProvider
             context.RegisterCodeFix(
                 CodeAction.Create(
                     $"Change to '{title}'",
-                    ct => FixStringLiteralAsync(context.Document, diagnostic, level),
+                    ct => FixStringLiteralAsync(context.Document, diagnostic, level, ct),
                     $"FixLogLevelTo{title}"),
                 diagnostic);
         }
@@ -137,7 +139,7 @@ public sealed class ConfigurationCodeFixProvider : CodeFixProvider
             context.RegisterCodeFix(
                 CodeAction.Create(
                     $"Change to '{title}'",
-                    ct => FixStringLiteralAsync(context.Document, diagnostic, format),
+                    ct => FixStringLiteralAsync(context.Document, diagnostic, format, ct),
                     $"FixOutputFormatTo{title}"),
                 diagnostic);
         }
@@ -148,7 +150,7 @@ public sealed class ConfigurationCodeFixProvider : CodeFixProvider
         context.RegisterCodeFix(
             CodeAction.Create(
                 "Add '{path}' to template",
-                ct => FixAddPathPlaceholderAsync(context.Document, diagnostic),
+                ct => FixAddPathPlaceholderAsync(context.Document, diagnostic, ct),
                 "AddPathPlaceholder"),
             diagnostic);
     }
@@ -158,14 +160,15 @@ public sealed class ConfigurationCodeFixProvider : CodeFixProvider
         context.RegisterCodeFix(
             CodeAction.Create(
                 "Change to '0'",
-                ct => FixNumericLiteralAsync(context.Document, diagnostic, "0"),
+                ct => FixNumericLiteralAsync(context.Document, diagnostic, "0", ct),
                 "FixToZero"),
             diagnostic);
     }
 
-    private static async Task<Document> FixStringLiteralAsync(Document document, Diagnostic diagnostic, string newValue)
+    private static async Task<Document> FixStringLiteralAsync(Document document, Diagnostic diagnostic, string newValue,
+        CancellationToken ct)
     {
-        var root = await document.GetSyntaxRootAsync();
+        var root = await document.GetSyntaxRootAsync(ct);
         if (root == null) return document;
 
         var node = root.FindNode(diagnostic.Location.SourceSpan);
@@ -174,16 +177,19 @@ public sealed class ConfigurationCodeFixProvider : CodeFixProvider
         var stringLiteral = node.FirstAncestorOrSelf<LiteralExpressionSyntax>();
         if (stringLiteral == null) return document;
 
+        // Single-arg overload: produces a correctly quoted+escaped string-literal token. The
+        // two-arg overload treats the first arg as raw source text and would emit an unquoted token.
         var newLiteral = stringLiteral.WithToken(
-            SyntaxFactory.Literal(newValue, newValue));
+            SyntaxFactory.Literal(newValue));
 
         var newRoot = root.ReplaceNode(stringLiteral, newLiteral);
         return document.WithSyntaxRoot(newRoot);
     }
 
-    private static async Task<Document> FixNumericLiteralAsync(Document document, Diagnostic diagnostic, string newValue)
+    private static async Task<Document> FixNumericLiteralAsync(Document document, Diagnostic diagnostic, string newValue,
+        CancellationToken ct)
     {
-        var root = await document.GetSyntaxRootAsync();
+        var root = await document.GetSyntaxRootAsync(ct);
         if (root == null) return document;
 
         var node = root.FindNode(diagnostic.Location.SourceSpan);
@@ -192,16 +198,19 @@ public sealed class ConfigurationCodeFixProvider : CodeFixProvider
         var numericLiteral = node.FirstAncestorOrSelf<LiteralExpressionSyntax>();
         if (numericLiteral == null) return document;
 
+        // The int overload emits a numeric-literal token; passing the string "0" to the string
+        // overload would emit a "0" string literal and produce a type error on the int property.
         var newLiteral = numericLiteral.WithToken(
-            SyntaxFactory.Literal(newValue));
+            SyntaxFactory.Literal(int.Parse(newValue, CultureInfo.InvariantCulture)));
 
         var newRoot = root.ReplaceNode(numericLiteral, newLiteral);
         return document.WithSyntaxRoot(newRoot);
     }
 
-    private static async Task<Document> FixAddPathPlaceholderAsync(Document document, Diagnostic diagnostic)
+    private static async Task<Document> FixAddPathPlaceholderAsync(Document document, Diagnostic diagnostic,
+        CancellationToken ct)
     {
-        var root = await document.GetSyntaxRootAsync();
+        var root = await document.GetSyntaxRootAsync(ct);
         if (root == null) return document;
 
         var node = root.FindNode(diagnostic.Location.SourceSpan);
@@ -214,7 +223,7 @@ public sealed class ConfigurationCodeFixProvider : CodeFixProvider
         var newValue = currentValue.Contains("{path}") ? currentValue : $"{currentValue.TrimEnd()} {{path}}";
 
         var newLiteral = stringLiteral.WithToken(
-            SyntaxFactory.Literal(newValue, newValue));
+            SyntaxFactory.Literal(newValue));
 
         var newRoot = root.ReplaceNode(stringLiteral, newLiteral);
         return document.WithSyntaxRoot(newRoot);

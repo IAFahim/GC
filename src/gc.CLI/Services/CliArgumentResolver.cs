@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using gc.Domain.Models.Configuration;
 
 namespace gc.CLI.Services;
 
@@ -232,14 +233,14 @@ public static class CliArgumentResolver
             if (File.Exists(path))
             {
                 var json = await File.ReadAllTextAsync(path);
-                var loaded = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
+                var loaded = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
                 if (loaded != null)
                 {
                     profiles = new Dictionary<string, string[]>(loaded, StringComparer.OrdinalIgnoreCase);
                 }
             }
             profiles[name] = args;
-            var newJson = JsonSerializer.Serialize(profiles, new JsonSerializerOptions { WriteIndented = true });
+            var newJson = JsonSerializer.Serialize(profiles, GcIndentedJsonContext.Default.DictionaryStringStringArray);
             await File.WriteAllTextAsync(path, newJson);
             Console.WriteLine($"✓ Profile '{name}' saved successfully.");
             return true;
@@ -258,7 +259,7 @@ public static class CliArgumentResolver
         try
         {
             var json = await File.ReadAllTextAsync(path);
-            var profiles = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
+            var profiles = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
             if (profiles != null && profiles.TryGetValue(name, out var args))
             {
                 return args;
@@ -282,7 +283,7 @@ public static class CliArgumentResolver
         try
         {
             var json = await File.ReadAllTextAsync(path);
-            var profiles = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
+            var profiles = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
             if (profiles == null || profiles.Count == 0)
             {
                 Console.WriteLine("No profiles found.");
@@ -310,14 +311,14 @@ public static class CliArgumentResolver
             if (File.Exists(path))
             {
                 var json = await File.ReadAllTextAsync(path);
-                var loaded = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
+                var loaded = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
                 if (loaded != null)
                 {
                     defaults = new Dictionary<string, string[]>(loaded, PathComparer);
                 }
             }
             defaults[NormalizeDirKey(directory)] = args;
-            var newJson = JsonSerializer.Serialize(defaults, new JsonSerializerOptions { WriteIndented = true });
+            var newJson = JsonSerializer.Serialize(defaults, GcIndentedJsonContext.Default.DictionaryStringStringArray);
             await File.WriteAllTextAsync(path, newJson);
             return true;
         }
@@ -335,7 +336,7 @@ public static class CliArgumentResolver
         try
         {
             var json = await File.ReadAllTextAsync(path);
-            var loaded = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
+            var loaded = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
             if (loaded != null)
             {
                 var defaults = new Dictionary<string, string[]>(loaded, PathComparer);

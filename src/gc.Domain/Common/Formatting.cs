@@ -19,7 +19,9 @@ public static class Formatting
             { TotalSeconds: < 60 } => "just now",
             { TotalMinutes: < 60 } => $"{(int)span.TotalMinutes} min ago",
             { TotalHours: < 24 } => $"{(int)span.TotalHours} hour{(span.TotalHours < 2 ? "" : "s")} ago",
-            { TotalDays: 1 } => "yesterday",
+            // < 2 days (the 24h–48h band) reads as "yesterday"; the exact-equality `TotalDays: 1`
+            // pattern almost never matched a real double, leaving an ungrammatical "1 days ago".
+            { TotalDays: < 2 } => "yesterday",
             { TotalDays: < 30 } => $"{(int)span.TotalDays} days ago",
             { TotalDays: < 365 } => $"{(int)(span.TotalDays / 30)} month{(span.TotalDays / 30 < 2 ? "" : "s")} ago",
             _ => $"{(int)(span.TotalDays / 365)} year{(span.TotalDays / 365 < 2 ? "" : "s")} ago"

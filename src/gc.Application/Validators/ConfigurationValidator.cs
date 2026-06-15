@@ -151,8 +151,13 @@ public sealed class ConfigurationValidator
         var warned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var ext in extensions)
         {
+            // Blank entries are already flagged as "empty"; skip the dedup bookkeeping so a second
+            // blank does not also produce a confusing "duplicate extension: ''" warning.
             if (string.IsNullOrWhiteSpace(ext))
+            {
                 warnings.Add($"Preset '{presetName}' contains empty extension");
+                continue;
+            }
 
             if (!seen.Add(ext) && warned.Add(ext))
                 warnings.Add($"Preset '{presetName}' contains duplicate extension: '{ext}'");

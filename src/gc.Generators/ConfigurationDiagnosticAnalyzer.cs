@@ -2,8 +2,9 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
+using System;
 using System.Collections.Immutable;
-using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace gc.Domain.Generators;
 
@@ -146,6 +147,19 @@ public sealed class ConfigurationDiagnosticAnalyzer : DiagnosticAnalyzer
         if (!optionalValue.HasValue) return;
 
         var value = optionalValue.Value;
+
+        // Integer-typed cluster properties must be handled before the string guard below: a literal
+        // like `MaxDepth = -1` folds to an int constant, not a string, so routing it through the
+        // `is not string` early-return left GC1006/GC1007 permanently unreachable.
+        if (value is int intValue && IsClusterConfiguration(typeName))
+        {
+            if (propertyName == "MaxDepth" && intValue < 0)
+                context.ReportDiagnostic(Diagnostic.Create(NegativeMaxDepth, location, intValue));
+            else if (propertyName == "MaxParallelRepos" && intValue < 0)
+                context.ReportDiagnostic(Diagnostic.Create(NegativeMaxParallelRepos, location, intValue));
+            return;
+        }
+
         if (value is not string stringValue || string.IsNullOrWhiteSpace(stringValue)) return;
 
         ValidateProperty(context, typeName, propertyName, stringValue, location, valueExpression);
@@ -177,25 +191,8 @@ public sealed class ConfigurationDiagnosticAnalyzer : DiagnosticAnalyzer
                 }
                 break;
 
-            case "MaxDepth":
-                if (IsClusterConfiguration(typeName) && int.TryParse(stringValue, out var depth))
-                {
-                    if (depth < 0)
-                    {
-                        context.ReportDiagnostic(Diagnostic.Create(NegativeMaxDepth, location, depth));
-                    }
-                }
-                break;
-
-            case "MaxParallelRepos":
-                if (IsClusterConfiguration(typeName) && int.TryParse(stringValue, out var parallel))
-                {
-                    if (parallel < 0)
-                    {
-                        context.ReportDiagnostic(Diagnostic.Create(NegativeMaxParallelRepos, location, parallel));
-                    }
-                }
-                break;
+            // Note: MaxDepth / MaxParallelRepos are int-typed and validated in AnalyzePropertyAssignment
+            // before the string guard, so they intentionally have no string case here.
 
             case "Level":
                 if (IsLoggingConfiguration(typeName))
@@ -247,16 +244,55 @@ public sealed class ConfigurationDiagnosticAnalyzer : DiagnosticAnalyzer
     private static bool IsMarkdownConfiguration(string typeName) =>
         typeName == "MarkdownConfiguration" || typeName == "MarkdownOptions";
 
+    // Mirrors gc.Domain.Common.MemorySizeParser.TryParse exactly so the compile-time rule cannot
+    // diverge from runtime: accepts a single-char 'B' suffix, has NO 'TB', parses with
+    // InvariantCulture, and enforces the same unit bounds.
     private static bool IsValidMemorySize(string value)
     {
-        var normalized = value.ToUpperInvariant();
-        if (normalized.Length < 2) return false;
+        var size = value.Trim();
+        if (size.Length == 0) return false;
 
-        var suffix = normalized[^2..];
-        if (!suffix.IsMatch("(KB|MB|GB|TB)")) return false;
+        long multiplier = 1;
+        var hasValidUnit = false;
 
-        var numberPart = normalized[..^2];
-        return decimal.TryParse(numberPart, out var number) && number > 0;
+        if (size.EndsWith("KB", StringComparison.OrdinalIgnoreCase))
+        {
+            multiplier = 1024;
+            size = size[..^2];
+            hasValidUnit = true;
+        }
+        else if (size.EndsWith("MB", StringComparison.OrdinalIgnoreCase))
+        {
+            multiplier = 1048576;
+            size = size[..^2];
+            hasValidUnit = true;
+        }
+        else if (size.EndsWith("GB", StringComparison.OrdinalIgnoreCase))
+        {
+            multiplier = 1073741824;
+            size = size[..^2];
+            hasValidUnit = true;
+        }
+        else if (size.EndsWith("B", StringComparison.OrdinalIgnoreCase))
+        {
+            size = size[..^1];
+            hasValidUnit = true;
+        }
+
+        if (!hasValidUnit) return false;
+
+        if (!double.TryParse(
+                size,
+                NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent,
+                CultureInfo.InvariantCulture,
+                out var number))
+            return false;
+
+        if (double.IsInfinity(number) || double.IsNaN(number) || number < 0) return false;
+        if (multiplier == 1024 && number > 1000000) return false;
+        if (multiplier == 1048576 && number > 999999) return false;
+        if (multiplier == 1073741824 && number > 999999) return false;
+        return number <= (double)long.MaxValue / multiplier;
     }
 
     private static bool IsValidDiscoveryMode(string value)
@@ -275,13 +311,5 @@ public sealed class ConfigurationDiagnosticAnalyzer : DiagnosticAnalyzer
     {
         var formats = new[] { "markdown", "plain", "json" };
         return formats.Contains(value.ToLowerInvariant());
-    }
-}
-
-file static class StringExtensions
-{
-    public static bool IsMatch(this string input, string pattern)
-    {
-        return Regex.IsMatch(input, $"^{pattern}$");
     }
 }

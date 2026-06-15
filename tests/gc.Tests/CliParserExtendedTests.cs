@@ -109,6 +109,18 @@ public class CliParserExtendedTests
     }
 
     [Fact]
+    public void Parse_MaxMemoryInvalidValue_FailsLoud_KeepsSeed()
+    {
+        // Regression: a garbage value must not silently clobber the configured limit with the 100MB
+        // default. It records an error and leaves the config-seeded value intact.
+        var seeded = _config.Limits.GetMaxMemoryBytesValue();
+        var result = _parser.Parse(["--max-memory", "garbage"], _config);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("garbage", result.Value!.MaxMemoryError);
+        Assert.Equal(seeded, result.Value!.MaxMemoryBytes);
+    }
+
+    [Fact]
     public void Parse_ExtensionWithLeadingDot_StripsDot()
     {
         var result = _parser.Parse(["-e", ".cs"], _config);

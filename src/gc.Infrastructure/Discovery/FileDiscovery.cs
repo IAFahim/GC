@@ -118,7 +118,7 @@ public sealed class FileDiscovery : IFileDiscovery
                     if (!string.IsNullOrWhiteSpace(skip))
                         skipDirs.Add(skip);
 
-            var maxDepth = clusterConfig.MaxDepth > 0 ? clusterConfig.MaxDepth : 2;
+            var maxDepth = clusterConfig.MaxDepth is > 0 ? clusterConfig.MaxDepth.Value : 2;
             var repos = new List<RepoInfo>();
             var visitedRealPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 

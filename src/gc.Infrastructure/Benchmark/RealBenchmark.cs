@@ -82,8 +82,11 @@ public sealed class RealBenchmark
         {
             Console.WriteLine($"  • Read time:        {streamWatch.ElapsedMilliseconds} ms");
             Console.WriteLine($"  • Total bytes:      {genResult.Value:N0}");
-            var speed = genResult.Value / (streamWatch.ElapsedMilliseconds / 1000.0);
-            Console.WriteLine($"  • Throughput:       {speed / 1024 / 1024:F2} MB/s");
+            // Use the higher-resolution elapsed seconds and guard against a sub-millisecond run
+            // that would otherwise divide by zero and print "Infinity"/"NaN" MB/s.
+            var seconds = streamWatch.Elapsed.TotalSeconds;
+            var throughput = seconds > 0 ? $"{genResult.Value / seconds / 1024 / 1024:F2} MB/s" : "n/a";
+            Console.WriteLine($"  • Throughput:       {throughput}");
             Console.WriteLine(
                 $"  • Total time:       {discoveryWatch.ElapsedMilliseconds + streamWatch.ElapsedMilliseconds} ms");
         }

@@ -5,6 +5,10 @@ namespace gc.Application.Services;
 
 public sealed class SqzCompressionService
 {
+    // BOM-less UTF-8: Encoding.UTF8 emits a 3-byte BOM (EF BB BF) on the first write to the
+    // child's stdin, which would corrupt the very first token of the payload sqz receives.
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
+
     public SqzCompressionService()
     {
         IsAvailable = IsSqzInstalled();
@@ -32,8 +36,8 @@ public sealed class SqzCompressionService
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
-                    StandardInputEncoding = Encoding.UTF8,
-                    StandardOutputEncoding = Encoding.UTF8
+                    StandardInputEncoding = Utf8NoBom,
+                    StandardOutputEncoding = Utf8NoBom
                 }
             };
 
@@ -44,14 +48,15 @@ public sealed class SqzCompressionService
             linked.CancelAfter(TimeSpan.FromSeconds(120));
             var token = linked.Token;
 
+            // Start reading stdout/stderr BEFORE writing to stdin to avoid deadlock.
+            // If sqz streams output while reading input, its stdout pipe (~64KB) can fill
+            // and block, causing a deadlock if we're not reading yet.
+            // Declared outside the try so the cancellation handler can observe them.
+            var compressedTask = process.StandardOutput.ReadToEndAsync(token);
+            var stderrTask = process.StandardError.ReadToEndAsync(token);
+
             try
             {
-                // Start reading stdout/stderr BEFORE writing to stdin to avoid deadlock.
-                // If sqz streams output while reading input, its stdout pipe (~64KB) can fill
-                // and block, causing a deadlock if we're not reading yet.
-                var compressedTask = process.StandardOutput.ReadToEndAsync(token);
-                var stderrTask = process.StandardError.ReadToEndAsync(token);
-
                 try
                 {
                     await process.StandardInput.WriteAsync(markdownContent.AsMemory(), token);
@@ -83,6 +88,10 @@ public sealed class SqzCompressionService
             catch (OperationCanceledException)
             {
                 try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+                // Observe the outstanding stdout/stderr reads before the process (and its streams)
+                // are disposed, so a read that faults against a disposed stream never surfaces as an
+                // UnobservedTaskException.
+                try { await Task.WhenAll(compressedTask, stderrTask); } catch { /* drained */ }
                 // Distinguish caller cancellation (honor the contract) from internal timeout (fail-open).
                 if (ct.IsCancellationRequested) throw;
                 Console.Error.WriteLine("[gc] sqz timed out; using uncompressed output");

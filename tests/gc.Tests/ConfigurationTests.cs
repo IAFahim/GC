@@ -548,4 +548,67 @@ public class ConfigurationTests
         Assert.False(merged!.Cluster!.Enabled);
         Assert.True(merged.Cluster!.IncludeRepoHeader);
     }
+
+    [Fact]
+    public void ConfigurationMerger_Cluster_PreservesLowerLayer_WhenHigherOmitsScalars()
+    {
+        // Regression: an omitted higher-priority MaxDepth/MaxParallelRepos/RepoSeparator/SkipDirectories
+        // must NOT reset the lower layer's explicit values (the pre-nullable ">0"/initializer sentinels
+        // silently clobbered them).
+        var target = new GcConfiguration
+        {
+            Discovery = new DiscoveryConfiguration
+            {
+                Cluster = new ClusterConfiguration
+                {
+                    MaxDepth = 5,
+                    MaxParallelRepos = 8,
+                    RepoSeparator = "===",
+                    SkipDirectories = ["archive"]
+                }
+            }
+        };
+
+        var source = new GcConfiguration
+        {
+            Discovery = new DiscoveryConfiguration
+            {
+                Cluster = new ClusterConfiguration { Enabled = true } // omits the scalars above
+            }
+        };
+
+        var merged = ConfigurationMerger.MergeDiscovery(target.Discovery, source.Discovery);
+
+        Assert.Equal(5, merged!.Cluster!.MaxDepth);
+        Assert.Equal(8, merged.Cluster!.MaxParallelRepos);
+        Assert.Equal("===", merged.Cluster!.RepoSeparator);
+        Assert.Equal(["archive"], merged.Cluster!.SkipDirectories!);
+    }
+
+    [Fact]
+    public void ConfigurationMerger_Cluster_AllowsExplicitZero_ToOverride()
+    {
+        // Regression: an explicit MaxParallelRepos=0 ("auto") from a higher layer must override a
+        // lower layer's positive value — previously impossible with the ">0" sentinel.
+        var target = new GcConfiguration
+        {
+            Discovery = new DiscoveryConfiguration
+            {
+                Cluster = new ClusterConfiguration { MaxParallelRepos = 8, MaxDepth = 5 }
+            }
+        };
+
+        var source = new GcConfiguration
+        {
+            Discovery = new DiscoveryConfiguration
+            {
+                Cluster = new ClusterConfiguration { MaxParallelRepos = 0, MaxDepth = 1 }
+            }
+        };
+
+        var merged = ConfigurationMerger.MergeDiscovery(target.Discovery, source.Discovery);
+
+        Assert.Equal(0, merged!.Cluster!.MaxParallelRepos);
+        Assert.Equal(1, merged.Cluster!.MaxDepth);
+    }
 }

@@ -47,7 +47,7 @@ public sealed class FileReader : IFileReader
             using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
                 true);
 
-            return await ReadDecodedAsync(entry, stream, (int)stream.Length, ct);
+            return await ReadDecodedAsync(entry, stream, stream.Length, ct);
         }
         catch (IOException ex)
         {
@@ -61,19 +61,25 @@ public sealed class FileReader : IFileReader
         }
     }
 
-    private async Task<Result<FileContent>> ReadDecodedAsync(FileEntry entry, Stream stream, int len,
+    private async Task<Result<FileContent>> ReadDecodedAsync(FileEntry entry, Stream stream, long len,
         CancellationToken ct)
     {
         if (len == 0)
             return Result<FileContent>.Success(new FileContent(entry, string.Empty, 0));
 
-        var buffer = ArrayPool<byte>.Shared.Rent(len);
+        // Files are read whole into a single pooled buffer; a >2 GB length would overflow the int
+        // cast (negative -> ArrayPool.Rent throws) or silently truncate, so guard before renting.
+        if (len > int.MaxValue)
+            return Result<FileContent>.Failure($"File too large to read into memory ({len} bytes): {entry.Path}");
+
+        var capacity = (int)len;
+        var buffer = ArrayPool<byte>.Shared.Rent(capacity);
         try
         {
             var read = 0;
-            while (read < len)
+            while (read < capacity)
             {
-                var n = await stream.ReadAsync(buffer.AsMemory(read, len - read), ct);
+                var n = await stream.ReadAsync(buffer.AsMemory(read, capacity - read), ct);
                 if (n == 0) break;
                 read += n;
             }
@@ -85,7 +91,9 @@ public sealed class FileReader : IFileReader
             using var reader = new StreamReader(ms, Utf8NoBom);
             var content = await reader.ReadToEndAsync(ct);
 
-            return Result<FileContent>.Success(new FileContent(entry, content, len));
+            // Report bytes actually read, not the declared length: a concurrent truncation
+            // (FileShare.ReadWrite) can shorten the file between Length capture and read.
+            return Result<FileContent>.Success(new FileContent(entry, content, read));
         }
         finally
         {
@@ -187,7 +195,7 @@ public sealed class FileReader : IFileReader
             using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
                 true);
 
-            return await ReadDecodedAsync(entry, stream, (int)stream.Length, ct);
+            return await ReadDecodedAsync(entry, stream, stream.Length, ct);
         }
         catch (IOException ex)
         {

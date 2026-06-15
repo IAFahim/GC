@@ -141,7 +141,7 @@ public sealed class GenerateContextUseCase
         ShardInfo? shardInfo = null)
     {
         var clusterConfig = config.Discovery?.Cluster ?? new ClusterConfiguration();
-        if (clusterConfig.MaxDepth <= 0) clusterConfig = clusterConfig with { MaxDepth = 2 };
+        if (clusterConfig.MaxDepth is null or <= 0) clusterConfig = clusterConfig with { MaxDepth = 2 };
 
         var sw = Stopwatch.StartNew();
         var reposResult = await _discovery.DiscoverGitReposAsync(clusterRoot, clusterConfig, ct);
@@ -164,7 +164,7 @@ public sealed class GenerateContextUseCase
         var errors = new List<string>();
 
         var lockObj = new object();
-        var maxParallel = clusterConfig.MaxParallelRepos > 0 ? clusterConfig.MaxParallelRepos : 1;
+        var maxParallel = clusterConfig.MaxParallelRepos is > 0 ? clusterConfig.MaxParallelRepos.Value : 1;
         await Parallel.ForEachAsync(repos, new ParallelOptions
         {
             MaxDegreeOfParallelism = maxParallel,
@@ -281,18 +281,19 @@ public sealed class GenerateContextUseCase
         {
             var (repo, entries) = sorted[i];
 
+            var separator = clusterConfig.RepoSeparator ?? "---";
             if (clusterConfig.IncludeRepoHeader == true && i > 0)
             {
-                var separatorContent = $"{clusterConfig.RepoSeparator}\n# {repo.Name}\n{clusterConfig.RepoSeparator}";
+                var separatorContent = $"{separator}\n# {repo.Name}\n{separator}";
                 // Use repo root as the "file" location, with a sentinel-like display path.
                 // This keeps FileEntry honest - no fake absolute paths.
                 var separatorEntry = new FileEntry(
                     repo.RootPath,
-                    $"[{clusterConfig.RepoSeparator}]",
+                    $"[{separator}]",
                     "",
                     "markdown",
                     separatorContent.Length,
-                    $"[{clusterConfig.RepoSeparator}] {repo.RelativePath}");
+                    $"[{separator}] {repo.RelativePath}");
                 yield return new FileContent(separatorEntry, separatorContent, separatorContent.Length);
             }
             else if (clusterConfig.IncludeRepoHeader == true && i == 0)

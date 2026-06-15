@@ -338,6 +338,35 @@ public class ApplicationCoverageTests
         Assert.Equal(sa.Distinct().Count(), sa.Length);
     }
 
+    // --- 31. ExtractMaximalPhrases never emits a lone surrogate ---
+    [Fact]
+    public void ExtractMaximalPhrases_NonBmpContent_NeverSplitsSurrogatePairs()
+    {
+        // Repeated non-BMP code points (😀 = U+1F600, surrogate pair) embedded in a repeated phrase.
+        // Phrase boundaries are arbitrary UTF-16 offsets, so without trimming a candidate could begin
+        // or end mid-pair. Every returned phrase must be well-formed UTF-16 (no lone surrogate).
+        var unit = "alphabeta😀gammadelta😀 ";
+        var sb = new StringBuilder();
+        for (var i = 0; i < 8; i++) sb.Append(unit);
+        var text = sb.ToString();
+
+        var phrases = SuffixArray.ExtractMaximalPhrases(text, minLength: 6, minFrequency: 2);
+
+        foreach (var candidate in phrases)
+        {
+            var p = candidate.Phrase;
+            for (var i = 0; i < p.Length; i++)
+            {
+                if (char.IsHighSurrogate(p[i]))
+                    Assert.True(i + 1 < p.Length && char.IsLowSurrogate(p[i + 1]),
+                        $"Lone high surrogate at {i} in '{p}'");
+                else if (char.IsLowSurrogate(p[i]))
+                    Assert.True(i > 0 && char.IsHighSurrogate(p[i - 1]),
+                        $"Lone low surrogate at {i} in '{p}'");
+            }
+        }
+    }
+
     private static (GenerateContextUseCase UseCase, MockFileDiscovery Discovery,
         MockMarkdownGenerator Generator, MockClipboardService Clipboard, MockLogger Logger)
         CreateUseCase()

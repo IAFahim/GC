@@ -62,23 +62,19 @@ public static class ConfigurationMerger
 
     public static ClusterConfiguration? MergeCluster(ClusterConfiguration? target, ClusterConfiguration? source)
     {
-        // If source is null or all fields are default, keep target
         if (source == null) return target;
-        if (AllDefaults(source)) return target;
+        if (target == null) return source;
 
-        return MergeClusterNonDefault(target ?? new ClusterConfiguration(), source);
-    }
-
-    private static ClusterConfiguration MergeClusterNonDefault(ClusterConfiguration target, ClusterConfiguration source)
-    {
-        // Apply only non-null values from source, keep target defaults otherwise.
+        // Every omittable field is nullable, so `?? target` keeps the lower-priority layer for any
+        // field the higher-priority layer omitted, while still allowing an explicit value (including
+        // an explicit 0) to override it. No "all-defaults" short-circuit is needed.
         return target with
         {
             Enabled = source.Enabled ?? target.Enabled,
-            MaxDepth = source.MaxDepth > 0 ? source.MaxDepth : target.MaxDepth,
+            MaxDepth = source.MaxDepth ?? target.MaxDepth,
             RepoSeparator = source.RepoSeparator ?? target.RepoSeparator,
             IncludeRepoHeader = source.IncludeRepoHeader ?? target.IncludeRepoHeader,
-            MaxParallelRepos = source.MaxParallelRepos > 0 ? source.MaxParallelRepos : target.MaxParallelRepos,
+            MaxParallelRepos = source.MaxParallelRepos ?? target.MaxParallelRepos,
             SkipDirectories = source.SkipDirectories ?? target.SkipDirectories,
             IncludeRootFiles = source.IncludeRootFiles ?? target.IncludeRootFiles,
             FailFast = source.FailFast ?? target.FailFast
@@ -173,12 +169,5 @@ public static class ConfigurationMerger
             Level = source.Level ?? target.Level,
             IncludeTimestamps = source.IncludeTimestamps ?? target.IncludeTimestamps
         };
-    }
-
-    private static bool AllDefaults(ClusterConfiguration c)
-    {
-        return c.Enabled == null && c.RepoSeparator == null &&
-               c.IncludeRepoHeader == null && c.SkipDirectories == null &&
-               c.IncludeRootFiles == null && c.FailFast == null;
     }
 }

@@ -26,6 +26,15 @@ public static class GlobMatcher
     public static bool IsMatch(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern,
         int maxBacktrackIterations = DefaultMaxBacktrackIterations)
     {
+        var budget = maxBacktrackIterations;
+        return IsMatchInternal(path, pattern, ref budget);
+    }
+
+    // Single backtracking budget threaded through the whole match — the segment loop, the "**/"
+    // recursion, and the final MatchInternal all share and decrement one counter, so total work is
+    // capped once rather than reset to the full budget per segment/branch (the documented DoS bound).
+    private static bool IsMatchInternal(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern, ref int budget)
+    {
         if (pattern.IsEmpty) return path.IsEmpty;
 
         // No wildcards at all
@@ -141,7 +150,6 @@ public static class GlobMatcher
                 var slashIdx = tempPath.IndexOf('/');
                 var segment = slashIdx >= 0 ? tempPath.Slice(0, slashIdx) : tempPath;
 
-                var budget = maxBacktrackIterations;
                 if (MatchInternal(segment, pattern, ref budget))
                     return true;
 
@@ -157,13 +165,11 @@ public static class GlobMatcher
         if (pattern.Length >= 3 && pattern[0] == '*' && pattern[1] == '*' && pattern[2] == '/')
         {
             var remaining = pattern.Slice(3);
-            var budget = maxBacktrackIterations;
-            if (IsMatch(path, remaining, budget))
+            if (IsMatchInternal(path, remaining, ref budget))
                 return true;
         }
 
-        var finalBudget = maxBacktrackIterations;
-        return MatchInternal(path, pattern, ref finalBudget);
+        return MatchInternal(path, pattern, ref budget);
     }
 
     /// <summary>

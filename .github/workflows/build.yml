@@ -84,7 +84,7 @@ jobs:
 
       - name: Run gc against its own repo
         run: |
-          dotnet run --project src/gc.CLI/gc.CLI.csproj --no-build -- --dry-run 2>&1 | tee smoke_output.txt
+          dotnet run --project src/gc.CLI/gc.CLI.csproj --configuration Release --no-build -- --dry-run 2>&1 | tee smoke_output.txt
           echo "---SMOKE TEST OUTPUT---"
           cat smoke_output.txt
 
@@ -100,5 +100,5 @@ jobs:
 
       - name: Run with --count
         run: |
-          dotnet run --project src/gc.CLI/gc.CLI.csproj --no-build -- --count 2>&1 | tee count_output.txt
+          dotnet run --project src/gc.CLI/gc.CLI.csproj --configuration Release --no-build -- --count 2>&1 | tee count_output.txt
           grep -q "Estimated token count" count_output.txt && echo "Token count functionality verified"

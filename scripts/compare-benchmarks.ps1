@@ -22,10 +22,29 @@ param(
     [double]$MemoryThreshold = 10.0,
 
     [Parameter(Mandatory = $false)]
-    [switch]$Summary
+    [switch]$Summary,
+
+    # When set, exit 1 if regressions are detected. Off by default: the benchmark job records results
+    # (and, on push to main, a new baseline); PR gating is the dedicated regression-check job's job.
+    [Parameter(Mandatory = $false)]
+    [switch]$FailOnRegression
 )
 
 $ErrorActionPreference = "Stop"
+
+# BenchmarkDotNet leaves empty numeric cells as "-" (and may omit columns entirely). A raw [double]
+# cast on those throws, so normalize them to 0 here.
+function ConvertTo-DoubleSafe {
+    param($Value)
+    if ([string]::IsNullOrWhiteSpace([string]$Value)) { return 0.0 }
+    $s = ([string]$Value).Trim()
+    if ($s -in @('-', 'Default', 'NA', 'N/A')) { return 0.0 }
+    $parsed = 0.0
+    if ([double]::TryParse($s, [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
+        return $parsed
+    }
+    return 0.0
+}
 
 # Function to parse BenchmarkDotNet CSV
 function Get-BenchmarkResults {
@@ -75,10 +94,10 @@ function Get-BenchmarkResults {
             $allocatedBytes = 0
         }
 
-        # Parse GC collections
-        $gen0 = if ($row.Gen0 -eq 'Default' -or $row.Gen0 -eq '') { 0 } else { [double]$row.Gen0 }
-        $gen1 = if ($row.Gen1 -eq 'Default' -or $row.Gen1 -eq '') { 0 } else { [double]$row.Gen1 }
-        $gen2 = if ($row.Gen2 -eq 'Default' -or $row.Gen2 -eq '') { 0 } else { [double]$row.Gen2 }
+        # Parse GC collections (cells may be "-", blank, or absent)
+        $gen0 = ConvertTo-DoubleSafe $row.Gen0
+        $gen1 = ConvertTo-DoubleSafe $row.Gen1
+        $gen2 = ConvertTo-DoubleSafe $row.Gen2
 
         $results[$methodName] = @{
             mean_ns            = $meanNs
@@ -103,7 +122,12 @@ function Get-Baseline {
         return @{}
     }
 
-    $json = Get-Content -Path $JsonPath -Raw | ConvertFrom-Json
+    # -AsHashtable (PowerShell 6+) is required: plain ConvertFrom-Json yields a PSCustomObject, which
+    # cannot bind to Compare-Results' [hashtable]$Baseline parameter or expose .ContainsKey().
+    $json = Get-Content -Path $JsonPath -Raw | ConvertFrom-Json -AsHashtable
+    if ($null -eq $json -or $null -eq $json.benchmarks) {
+        return @{}
+    }
     return $json.benchmarks
 }
 
@@ -233,14 +257,20 @@ try {
         }
     }
 
-    # Set environment variable for GitHub Actions
+    # Record the regression flag for GitHub Actions (guarded so local runs don't crash on a null var).
+    if ($env:GITHUB_OUTPUT) {
+        $flag = if ($comparison.regressions.Count -gt 0) { "true" } else { "false" }
+        "has_regression=$flag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+    }
+
     if ($comparison.regressions.Count -gt 0) {
-        Write-Host "`nhas_regression=true" >> $env:GITHUB_OUTPUT
-        exit 1
-    } else {
-        Write-Host "`n✅ No performance regressions detected"
+        if ($FailOnRegression) { exit 1 }
+        Write-Host "`n(Regressions recorded; not failing the build — gating is handled by the regression-check job.)"
         exit 0
     }
+
+    Write-Host "`n✅ No performance regressions detected"
+    exit 0
 
 } catch {
     Write-Host "Error: $_" -ForegroundColor Red

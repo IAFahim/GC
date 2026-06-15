@@ -230,6 +230,7 @@ public static class GlobMatcher
                 // Optimization: if next character in pattern is not a wildcard, we can scan for it
                 var nextChar = nextPattern[0];
                 var nextIsWildcard = nextChar == '*' || nextChar == '?';
+                var nextLower = !nextIsWildcard ? char.ToLowerInvariant(nextChar) : '\0';
 
                 for (var i = pathIdx; i <= path.Length; i++)
                 {
@@ -241,7 +242,7 @@ public static class GlobMatcher
 
                     // Optimization: if next char is not wildcard, skip paths that don't match nextChar
                     if (!nextIsWildcard && i < path.Length)
-                        if (char.ToLowerInvariant(path[i]) != char.ToLowerInvariant(nextChar))
+                        if (char.ToLowerInvariant(path[i]) != nextLower)
                             continue;
 
                     var remainingPath = path.Slice(i);

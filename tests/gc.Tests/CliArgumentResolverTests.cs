@@ -76,10 +76,13 @@ public class CliArgumentResolverTests
             var (resolvedArgs, shouldExit, exitCode) = await CliArgumentResolver.ResolveAsync(originalArgs, configDir, subDir);
 
             Assert.False(shouldExit);
-            Assert.Equal(3, resolvedArgs.Length);
+            // Local .gc args (base) are merged with explicit command-line args.
+            Assert.Equal(5, resolvedArgs.Length);
             Assert.Equal("--verbose", resolvedArgs[0]);
             Assert.Equal("--extension", resolvedArgs[1]);
             Assert.Equal("cs", resolvedArgs[2]);
+            Assert.Equal("--output", resolvedArgs[3]);
+            Assert.Equal("out.md", resolvedArgs[4]);
         }
         finally
         {
@@ -126,12 +129,13 @@ public class CliArgumentResolverTests
         {
             var configDir = Path.Combine(tempDir, "config");
 
-            // 1. Save directory default using -s
-            var saveArgs = new[] { "--extension", "rs", "-s" };
+            // 1. Save directory default using --save
+            var saveArgs = new[] { "--extension", "rs", "--save" };
             var (resolvedArgs1, shouldExit1, exitCode1) = await CliArgumentResolver.ResolveAsync(saveArgs, configDir, tempDir);
             Assert.False(shouldExit1);
-            Assert.Single(resolvedArgs1);
-            Assert.Equal("--extension", resolvedArgs1[0]); // -s flag is stripped
+            Assert.Equal(2, resolvedArgs1.Length);
+            Assert.Equal("--extension", resolvedArgs1[0]); // --save flag is stripped, value kept
+            Assert.Equal("rs", resolvedArgs1[1]);
 
             // 2. Run gc in same directory with no arguments - should load default
             var (resolvedArgs2, shouldExit2, exitCode2) = await CliArgumentResolver.ResolveAsync(Array.Empty<string>(), configDir, tempDir);

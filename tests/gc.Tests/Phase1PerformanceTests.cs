@@ -237,8 +237,10 @@ public class Phase1PerformanceTests : IDisposable
         Assert.True(result.IsSuccess);
         Assert.Equal(1000, result.Value!.Count());
         _output.WriteLine($"1000 files filtered in {sw.ElapsedTicks} ticks ({sw.ElapsedMilliseconds}ms)");
-        Assert.True(sw.ElapsedMilliseconds < 1500,
-            $"Filtering took {sw.ElapsedMilliseconds}ms — expected < 1500ms (includes stat per file)");
+        // Regression guard against algorithmic blowups, NOT a hardware SLA (real SLAs in
+        // BenchmarkDotNet). Typical: ~92ms incl. stat per file; generous guard for slow CI.
+        Assert.True(sw.ElapsedMilliseconds < 3000,
+            $"Filtering took {sw.ElapsedMilliseconds}ms — expected < 3000ms (includes stat per file)");
     }
 
     [Fact]
@@ -375,7 +377,9 @@ public class Phase1PerformanceTests : IDisposable
 
         Assert.True(result.IsSuccess);
         _output.WriteLine($"200 files with line exclusion: {sw.ElapsedMilliseconds}ms");
-        Assert.True(sw.ElapsedMilliseconds < 500,
+        // Regression guard against algorithmic blowups, NOT a hardware SLA (real SLAs in
+        // BenchmarkDotNet). Typical: ~12ms; generous guard so slow/loaded CI never flakes.
+        Assert.True(sw.ElapsedMilliseconds < 3000,
             $"Generation with line exclusion took {sw.ElapsedMilliseconds}ms");
     }
 

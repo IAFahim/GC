@@ -54,29 +54,35 @@ public sealed class FileDiscovery : IFileDiscovery
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(reference) || reference.StartsWith('-'))
+                return Result<IEnumerable<string>>.Failure($"Invalid git reference: '{reference}'");
+
             var psi = new ProcessStartInfo
             {
                 FileName = "git",
-                Arguments = $"diff --name-only {reference}",
                 WorkingDirectory = rootPath,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            psi.ArgumentList.Add("diff");
+            psi.ArgumentList.Add("--name-only");
+            psi.ArgumentList.Add(reference);
+            psi.ArgumentList.Add("--");
 
             using var process = Process.Start(psi);
             if (process == null) return Result<IEnumerable<string>>.Failure("Failed to start git process");
 
             var files = new List<string>();
-            var output = await process.StandardOutput.ReadToEndAsync(ct);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = process.StandardError.ReadToEndAsync(ct);
             await process.WaitForExitAsync(ct);
+            var output = await stdoutTask;
+            var error = await stderrTask;
 
             if (process.ExitCode != 0)
-            {
-                var error = await process.StandardError.ReadToEndAsync(ct);
                 return Result<IEnumerable<string>>.Failure($"Git diff failed: {error}");
-            }
 
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
@@ -248,9 +254,8 @@ public sealed class FileDiscovery : IFileDiscovery
 
             if (skipDirs.Contains(dirName)) continue;
 
-            if (dirName.StartsWith('.') && dirName != ".github")
-                if (dirName.Length > 1 && !dirName.Equals(".github", StringComparison.OrdinalIgnoreCase))
-                    continue;
+            if (dirName.StartsWith('.') && !dirName.Equals(".github", StringComparison.OrdinalIgnoreCase))
+                continue;
 
             try
             {
@@ -301,6 +306,8 @@ public sealed class FileDiscovery : IFileDiscovery
             using var process = Process.Start(psi);
             if (process == null) return Result<IEnumerable<string>>.Failure("Failed to start git process");
 
+            var stderrTask = process.StandardError.ReadToEndAsync(ct);
+
             var files = new List<string>(256);
             var stream = process.StandardOutput.BaseStream;
             var buffer = ArrayPool<byte>.Shared.Rent(65536);
@@ -314,29 +321,25 @@ public sealed class FileDiscovery : IFileDiscovery
                 {
                     var totalBytes = position + bytesRead;
                     var start = 0;
-
-                    for (var i = 0; i < totalBytes; i++)
-                        if (buffer[i] == 0)
+                    var slice = buffer.AsSpan(0, totalBytes);
+                    int nul;
+                    while ((nul = slice[start..].IndexOf((byte)0)) >= 0)
+                    {
+                        var span = slice.Slice(start, nul);
+                        if (span.Length > 0)
                         {
-                            var span = buffer.AsSpan(start, i - start);
-                            if (span.Length > 0)
+                            var shouldAdd = true;
+                            if (config.MaxDepth.HasValue)
                             {
-                                var shouldAdd = true;
-                                if (config.MaxDepth.HasValue)
-                                {
-                                    var depth = 0;
-                                    foreach (var b in span)
-                                        if (b == (byte)'/' || b == (byte)'\\')
-                                            depth++;
-
-                                    if (depth > config.MaxDepth.Value) shouldAdd = false;
-                                }
-
-                                if (shouldAdd) files.Add(Encoding.UTF8.GetString(span));
+                                var depth = span.Count((byte)'/');
+                                if (depth > config.MaxDepth.Value) shouldAdd = false;
                             }
 
-                            start = i + 1;
+                            if (shouldAdd) files.Add(Encoding.UTF8.GetString(span));
                         }
+
+                        start += nul + 1;
+                    }
 
                     if (start < totalBytes)
                     {
@@ -371,11 +374,9 @@ public sealed class FileDiscovery : IFileDiscovery
             }
 
             await process.WaitForExitAsync(ct);
+            var error = await stderrTask;
             if (process.ExitCode != 0)
-            {
-                var error = await process.StandardError.ReadToEndAsync(ct);
                 return Result<IEnumerable<string>>.Failure($"Git command failed: {error}");
-            }
 
             return Result<IEnumerable<string>>.Success(files);
         }
@@ -430,29 +431,28 @@ public sealed class FileDiscovery : IFileDiscovery
 
             try
             {
-                foreach (var entry in Directory.EnumerateFileSystemEntries(currentDir, "*",
-                             SearchOption.TopDirectoryOnly))
+                var di = new DirectoryInfo(currentDir);
+                foreach (var info in di.EnumerateFileSystemInfos())
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    var attr = File.GetAttributes(entry);
-                    if ((attr & FileAttributes.Directory) == FileAttributes.Directory)
+                    if ((info.Attributes & FileAttributes.Directory) == FileAttributes.Directory)
                     {
                         if (!config.MaxDepth.HasValue || depth < config.MaxDepth.Value)
                         {
-                            var dirName = Path.GetFileName(entry);
-                            if (!ignoredDirs.Contains(dirName))
+                            if (!ignoredDirs.Contains(info.Name))
                             {
                                 if (!config.FollowSymlinks.GetValueOrDefault() &&
-                                    (attr & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint) continue;
+                                    (info.Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint)
+                                    continue;
 
-                                queue.Enqueue((entry, depth + 1));
+                                queue.Enqueue((info.FullName, depth + 1));
                             }
                         }
                     }
                     else
                     {
-                        files.Add(Path.GetFullPath(entry).Replace('\\', '/'));
+                        files.Add(info.FullName.Replace('\\', '/'));
                     }
                 }
             }

@@ -7,14 +7,14 @@ public static class MemorySizeParser
 {
     private const long DefaultMemoryBytes = 104857600; // 100 MB
 
-    public static long Parse(string sizeString)
+    public static long Parse(string? sizeString)
     {
         if (TryParse(sizeString, out var bytes))
             return bytes;
         return DefaultMemoryBytes;
     }
 
-    public static bool TryParse(string sizeString, out long bytes)
+    public static bool TryParse(string? sizeString, out long bytes)
     {
         bytes = 0;
         if (string.IsNullOrWhiteSpace(sizeString))
@@ -54,7 +54,11 @@ public static class MemorySizeParser
         if (!hasValidUnit)
             return false;
 
-        if (double.TryParse(size, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
+        if (double.TryParse(
+                size,
+                NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent,
+                CultureInfo.InvariantCulture,
+                out var value))
         {
             if (double.IsInfinity(value) || double.IsNaN(value) || value < 0)
                 return false;

@@ -49,7 +49,7 @@ public sealed class SqzCompressionAdapter : IOutputTransform
 
     public async Task<TransformResult> TransformAsync(string input, CancellationToken ct = default)
     {
-        var compressed = await _inner.CompressAsync(input, _noCache);
+        var compressed = await _inner.CompressAsync(input, _noCache, ct);
         return new TransformResult(compressed, string.Empty, 0);
     }
 }

@@ -260,9 +260,11 @@ public class HistoryServiceTests
             var service = CreateService(tempDir);
             var result = await service.GetHistoryAsync(CancellationToken.None);
 
-            // Should return failure due to deserialization exception
-            Assert.False(result.IsSuccess);
-            Assert.NotNull(result.Error);
+            // A corrupt history file must never break the tool: it self-heals by
+            // resetting the file and returning an empty list (success).
+            Assert.True(result.IsSuccess);
+            Assert.NotNull(result.Value);
+            Assert.Empty(result.Value);
         }
         finally
         {

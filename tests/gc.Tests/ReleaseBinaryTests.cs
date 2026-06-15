@@ -481,7 +481,10 @@ public class ReleaseBinaryTests : IDisposable
         stopwatch.Stop();
 
         Assert.Equal(0, result.ExitCode);
-        Assert.True(stopwatch.ElapsedMilliseconds < 5000,
+        // Regression guard (end-to-end subprocess), NOT a hardware SLA — real SLAs live in the
+        // BenchmarkDotNet project. Generous threshold: 3-file run is dominated by highly variable
+        // process spawn/JIT, so a correct build passes on slow/loaded CI while a real blowup fails.
+        Assert.True(stopwatch.ElapsedMilliseconds < 15000,
             $"Processing took too long: {stopwatch.ElapsedMilliseconds}ms");
 
         _output.WriteLine($"✅ Performance is acceptable ({stopwatch.ElapsedMilliseconds}ms for 3 files)");

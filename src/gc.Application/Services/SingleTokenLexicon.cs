@@ -6,12 +6,13 @@ namespace gc.Application.Services;
 ///     Unicode standard to never represent any real character, so they CANNOT collide with
 ///     source code — unlike Greek/Cyrillic which are valid identifiers in C#, Rust, Python, etc.
 ///     Symbol categories (in order):
-///     0–19  : Basic PUA block (U+E000–U+E013)
-///     20–39  : Supplemental PUA (U+E014–U+E027)
-///     40–59  : Extended PUA-A (U+E028–U+E03B)
-///     60–79  : Supplementary PUA-A (U+E04C–U+E05B)
-///     80–99  : Ideographic Symbols (U+E080–U+E093)
-///     100–119 : Variation Selectors (U+E100–U+E113)
+///     0–19   : Basic PUA block (U+E000–U+E013, 20 symbols)
+///     20–39  : Supplemental PUA (U+E014–U+E027, 20 symbols)
+///     40–59  : Extended PUA-A (U+E028–U+E03B, 20 symbols)
+///     60–75  : Supplementary PUA-A (U+E04C–U+E05B, 16 symbols)
+///     76–95  : Ideographic Symbols (U+E080–U+E093, 20 symbols)
+///     96–115 : Variation Selectors (U+E100–U+E113, 20 symbols)
+///     Total = 116 symbols.
 ///     WARNING: Do NOT use Greek (Α-Ω), Cyrillic (А-Я), or other Unicode letters that are
 ///     valid in programming language identifiers — compression will corrupt source code
 ///     that contains those characters as identifiers.

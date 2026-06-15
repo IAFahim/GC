@@ -15,6 +15,8 @@ namespace gc.Application.Services;
 
 public sealed class FileFilter
 {
+    private static readonly SearchValues<char> PathSeparators = SearchValues.Create("/\\");
+
     private readonly ILogger _logger;
 
     public FileFilter(ILogger logger)
@@ -34,24 +36,30 @@ public sealed class FileFilter
         string? absoluteRootPath = null)
     {
         var activeExtensions = ResolveActiveExtensions(extensionFilters);
+        var extensionLookup = activeExtensions.GetAlternateLookup<ReadOnlySpan<char>>();
 
         var systemIgnored = config.Filters?.SystemIgnoredPatterns ?? Array.Empty<string>();
         var systemIgnoredNormalized = systemIgnored.Select(p => p.Replace('\\', '/')).ToArray();
         var excludePatternsNormalized = excludePatterns.Select(p => p.Replace('\\', '/')).ToArray();
 
         var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToArray();
+        var searchPathContainsForms = new string[normalizedSearchPaths.Length];
+        for (var i = 0; i < normalizedSearchPaths.Length; i++)
+            searchPathContainsForms[i] = "/" + normalizedSearchPaths[i] + "/";
 
         // Merge CLI and config path patterns
         var mergedExcludePath = MergePatterns(excludePathPatterns, config.Filters?.ExcludePathPatterns);
         var mergedIncludePath = MergePatterns(includePathPatterns, config.Filters?.IncludePathPatterns);
 
-        var filtered = rawFiles
-            .Where(path => IsValidPath(path, normalizedSearchPaths, systemIgnoredNormalized, excludePatternsNormalized, activeExtensions,
-                mergedExcludePath, mergedIncludePath))
-            .Select(path => CreateFileEntry(path, config, rootPath, absoluteRootPath))
-            .Where(entry => entry != null)
-            .Cast<FileEntry>()
-            .ToList();
+        var filtered = new List<FileEntry>();
+        foreach (var path in rawFiles)
+        {
+            if (!IsValidPath(path, normalizedSearchPaths, searchPathContainsForms, systemIgnoredNormalized,
+                    excludePatternsNormalized, activeExtensions, extensionLookup, mergedExcludePath, mergedIncludePath))
+                continue;
+            if (TryCreateFileEntry(path, config, rootPath, absoluteRootPath, out var entry))
+                filtered.Add(entry);
+        }
 
         var maxFiles = config.Limits.MaxFiles;
         if (maxFiles > 0 && filtered.Count > maxFiles)
@@ -208,8 +216,8 @@ public sealed class FileFilter
         return list.ToArray();
     }
 
-    private FileEntry? CreateFileEntry(string path, GcConfiguration config, string? rootPath = null,
-        string? absoluteRootPath = null)
+    private bool TryCreateFileEntry(string path, GcConfiguration config, string? rootPath,
+        string? absoluteRootPath, out FileEntry entry)
     {
         try
         {
@@ -260,17 +268,19 @@ public sealed class FileFilter
                 _logger.Debug($"Failed to get file size for {path}: {ex.Message}");
             }
 
-            return new FileEntry(
+            entry = new FileEntry(
                 root,
                 relative,
                 extension,
                 language,
                 size);
+            return true;
         }
         catch (Exception ex)
         {
             _logger.Error($"Unexpected error creating file entry for {path}", ex);
-            return null;
+            entry = default;
+            return false;
         }
     }
 
@@ -283,7 +293,7 @@ public sealed class FileFilter
 
         var afterDot = span[(dotIdx + 1)..];
         if (afterDot.IsEmpty) return string.Empty;
-        if (afterDot.Contains('/') || afterDot.Contains('\\')) return string.Empty;
+        if (afterDot.ContainsAny(PathSeparators)) return string.Empty;
 
         return string.Create(afterDot.Length, (path, dotIdx + 1), static (dest, state) =>
         {
@@ -315,8 +325,9 @@ public sealed class FileFilter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsValidPath(string path, string[] normalizedSearchPaths,
-        string[] systemIgnoredPatterns, string[] excludePatterns, FrozenSet<string> extensions, string[] excludePathPatterns,
+    private static bool IsValidPath(string path, string[] normalizedSearchPaths, string[] searchPathContainsForms,
+        string[] systemIgnoredPatterns, string[] excludePatterns, FrozenSet<string> extensions,
+        FrozenSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, string[] excludePathPatterns,
         string[] includePathPatterns)
     {
         var pathSpan = path.AsSpan();
@@ -326,8 +337,6 @@ public sealed class FileFilter
             var fileNameSpan = GetFileNameSpan(pathSpan);
             var dotIdx = fileNameSpan.LastIndexOf('.');
             var matchesExtension = false;
-
-            var lookup = extensions.GetAlternateLookup<ReadOnlySpan<char>>();
 
             if (lookup.Contains(fileNameSpan))
             {
@@ -365,12 +374,14 @@ public sealed class FileFilter
         if (normalizedSearchPaths.Length > 0)
         {
             var matchesSearchPath = false;
-            foreach (var searchPath in normalizedSearchPaths)
+            for (var i = 0; i < normalizedSearchPaths.Length; i++)
             {
-                var searchSpan = searchPath.AsSpan();
+                var searchSpan = normalizedSearchPaths[i].AsSpan();
                 if (normalizedSpan.Equals(searchSpan, StringComparison.OrdinalIgnoreCase) ||
-                    normalizedSpan.StartsWith(searchPath + "/", StringComparison.OrdinalIgnoreCase) ||
-                    normalizedSpan.Contains(("/" + searchPath + "/").AsSpan(), StringComparison.OrdinalIgnoreCase))
+                    (normalizedSpan.Length > searchSpan.Length &&
+                     normalizedSpan[searchSpan.Length] == '/' &&
+                     normalizedSpan.StartsWith(searchSpan, StringComparison.OrdinalIgnoreCase)) ||
+                    normalizedSpan.Contains(searchPathContainsForms[i].AsSpan(), StringComparison.OrdinalIgnoreCase))
                 {
                     matchesSearchPath = true;
                     break;

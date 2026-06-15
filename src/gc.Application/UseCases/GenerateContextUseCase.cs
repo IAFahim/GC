@@ -89,7 +89,7 @@ public sealed class GenerateContextUseCase
         if (!filterResult.IsSuccess) return Result.Failure(filterResult.Error!);
 
         var entries = filterResult.Value!.ToList();
-        if (!entries.Any())
+        if (entries.Count == 0)
         {
             _logger.Success("No files match the specified filters.");
             return Result.Success();
@@ -411,9 +411,13 @@ public sealed class GenerateContextUseCase
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-            ms.Position = 0;
-            using var reader = new StreamReader(ms, Encoding.UTF8);
-            rawOutput = await reader.ReadToEndAsync(ct);
+            // Generator emits UTF-8 without BOM, so GetString over the buffer is byte-identical
+            // to StreamReader but avoids the StreamReader allocation + intermediate char-buffer copy.
+            rawOutput = Encoding.UTF8.GetString(ms.GetBuffer(), 0, (int)ms.Length);
+
+            // Use the authoritative count of files actually emitted (content-pattern filtering
+            // happens inside the generator for streaming entries), not the pre-filter candidate count.
+            actualFileCount = (_generator as MarkdownGenerator)?.LastEmittedFileCount ?? actualFileCount;
         }
 
         // ── 4. Apply pipeline ──
@@ -520,9 +524,10 @@ public sealed class GenerateContextUseCase
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
             var estimatedTokens = (_generator as MarkdownGenerator)?.LastEstimatedTokens ?? (genResult.Value / 4);
+            var emittedCount = (_generator as MarkdownGenerator)?.LastEmittedFileCount ?? actualFileCount;
             var action = isAppend ? "Appended to" : "Exported to";
             _logger.Success(
-                $"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
+                $"✔ {action} {outputFile}: {emittedCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
             profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         }
         else
@@ -533,11 +538,12 @@ public sealed class GenerateContextUseCase
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
 
-            await SafeFileWriter.WriteAllBytesAsync(outputFile, ms.ToArray(), ct);
+            await SafeFileWriter.WriteAllBytesAsync(outputFile, ms.GetBuffer().AsMemory(0, (int)ms.Length), ct);
 
             var estimatedTokens = (_generator as MarkdownGenerator)?.LastEstimatedTokens ?? (genResult.Value / 4);
+            var emittedCount = (_generator as MarkdownGenerator)?.LastEmittedFileCount ?? actualFileCount;
             _logger.Success(
-                $"✔ Exported to {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
+                $"✔ Exported to {outputFile}: {emittedCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
             profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         }
 
@@ -597,9 +603,10 @@ public sealed class GenerateContextUseCase
         }
 
         var estimatedTokens = (_generator as MarkdownGenerator)?.LastEstimatedTokens ?? (genResult.Value / 4);
+        var emittedCount = (_generator as MarkdownGenerator)?.LastEmittedFileCount ?? actualFileCount;
         var prefix2 = noClipboard ? "✔ [Clipboard Skipped]" : "✔ Copied";
         _logger.Success(
-            $"{prefix2}: {actualFileCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
+            $"{prefix2}: {emittedCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
         profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         return Result.Success();
     }

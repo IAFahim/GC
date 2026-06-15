@@ -47,15 +47,7 @@ public sealed class FileReader : IFileReader
             using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
                 true);
 
-            // Check if binary using the opened stream
-            if (await IsBinaryStreamAsync(stream, ct))
-                return Result<FileContent>.Failure($"Skipping binary file: {entry.Path}");
-
-            stream.Position = 0;
-            using var reader = new StreamReader(stream, Utf8NoBom);
-            var content = await reader.ReadToEndAsync(ct);
-
-            return Result<FileContent>.Success(new FileContent(entry, content, stream.Length));
+            return await ReadDecodedAsync(entry, stream, (int)stream.Length, ct);
         }
         catch (IOException ex)
         {
@@ -69,6 +61,38 @@ public sealed class FileReader : IFileReader
         }
     }
 
+    private async Task<Result<FileContent>> ReadDecodedAsync(FileEntry entry, Stream stream, int len,
+        CancellationToken ct)
+    {
+        if (len == 0)
+            return Result<FileContent>.Success(new FileContent(entry, string.Empty, 0));
+
+        var buffer = ArrayPool<byte>.Shared.Rent(len);
+        try
+        {
+            var read = 0;
+            while (read < len)
+            {
+                var n = await stream.ReadAsync(buffer.AsMemory(read, len - read), ct);
+                if (n == 0) break;
+                read += n;
+            }
+
+            if (IsBinaryBytes(buffer.AsSpan(0, read)))
+                return Result<FileContent>.Failure($"Skipping binary file: {entry.Path}");
+
+            using var ms = new MemoryStream(buffer, 0, read, false);
+            using var reader = new StreamReader(ms, Utf8NoBom);
+            var content = await reader.ReadToEndAsync(ct);
+
+            return Result<FileContent>.Success(new FileContent(entry, content, len));
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
     public async Task<bool> IsBinaryFileAsync(string path, CancellationToken ct)
     {
         try
@@ -77,32 +101,30 @@ public sealed class FileReader : IFileReader
             var length = (int)Math.Min(4096, stream.Length);
             if (length == 0) return false;
 
-            var buffer = new byte[length];
-            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, length), ct);
-
-            var consecutiveNulls = 0;
-            var nonPrintableCount = 0;
-
-            for (var i = 0; i < bytesRead; i++)
+            var buffer = ArrayPool<byte>.Shared.Rent(length);
+            try
             {
-                var b = buffer[i];
+                var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, length), ct);
 
-                if (b == 0x00)
+                var nonPrintableCount = 0;
+
+                for (var i = 0; i < bytesRead; i++)
                 {
-                    consecutiveNulls++;
-                    if (consecutiveNulls >= 3) return true;
-                }
-                else
-                {
-                    consecutiveNulls = 0;
+                    var b = buffer[i];
+
+                    if (b == 0x00) return true;
+
+                    if (b < 32 && b != 9 && b != 10 && b != 13) nonPrintableCount++;
                 }
 
-                if (b < 32 && b != 9 && b != 10 && b != 13 && b != 0x00) nonPrintableCount++;
+                if (bytesRead > 0 && (double)nonPrintableCount / bytesRead > 0.1) return true;
+
+                return false;
             }
-
-            if (bytesRead > 0 && (double)nonPrintableCount / bytesRead > 0.1) return true;
-
-            return false;
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
         catch (IOException ex)
         {
@@ -165,15 +187,7 @@ public sealed class FileReader : IFileReader
             using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
                 true);
 
-            // Check if binary using the opened stream
-            if (await IsBinaryStreamAsync(stream, ct))
-                return Result<FileContent>.Failure($"Skipping binary file: {entry.Path}");
-
-            stream.Position = 0;
-            using var reader = new StreamReader(stream, Utf8NoBom);
-            var content = await reader.ReadToEndAsync(ct);
-
-            return Result<FileContent>.Success(new FileContent(entry, content, stream.Length));
+            return await ReadDecodedAsync(entry, stream, (int)stream.Length, ct);
         }
         catch (IOException ex)
         {
@@ -187,50 +201,24 @@ public sealed class FileReader : IFileReader
         }
     }
 
-    private async Task<bool> IsBinaryStreamAsync(Stream stream, CancellationToken ct)
+    private static bool IsBinaryBytes(ReadOnlySpan<byte> bytes)
     {
-        try
+        var window = bytes.Length > 4096 ? bytes[..4096] : bytes;
+        if (window.Length == 0) return false;
+
+        var nonPrintableCount = 0;
+
+        for (var i = 0; i < window.Length; i++)
         {
-            var length = (int)Math.Min(4096, stream.Length);
-            if (length == 0) return false;
+            var b = window[i];
 
-            var buffer = ArrayPool<byte>.Shared.Rent(length);
-            try
-            {
-                var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, length), ct);
+            if (b == 0x00) return true;
 
-                var consecutiveNulls = 0;
-                var nonPrintableCount = 0;
-
-                for (var i = 0; i < bytesRead; i++)
-                {
-                    var b = buffer[i];
-
-                    if (b == 0x00)
-                    {
-                        consecutiveNulls++;
-                        if (consecutiveNulls >= 3) return true;
-                    }
-                    else
-                    {
-                        consecutiveNulls = 0;
-                    }
-
-                    if (b < 32 && b != 9 && b != 10 && b != 13 && b != 0x00) nonPrintableCount++;
-                }
-
-                if (bytesRead > 0 && (double)nonPrintableCount / bytesRead > 0.1) return true;
-
-                return false;
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer);
-            }
+            if (b < 32 && b != 9 && b != 10 && b != 13) nonPrintableCount++;
         }
-        catch
-        {
-            return false;
-        }
+
+        if ((double)nonPrintableCount / window.Length > 0.1) return true;
+
+        return false;
     }
 }

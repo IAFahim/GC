@@ -42,14 +42,14 @@ public sealed class DynamicCompressor
             count += c.Frequency;
         }
 
-        var finalCandidates = new List<(string Phrase, int Frequency, bool IsIdent)>();
+        var finalCandidates = new List<(string Phrase, int Frequency, bool IsIdent, int Tokens)>();
         var symbolMap = new Dictionary<string, string>(StringComparer.Ordinal);
         var symbolIndex = 0;
 
         // Sort by (length * frequency) descending, then by key for determinism.
         // Dictionary enumeration order is implementation-defined, so we must sort
         // before iterating to ensure byte-identical output across runtimes.
-        foreach (var kvp in refinedMap.OrderByDescending(k => k.Key.Length * k.Value)
+        foreach (var kvp in refinedMap.OrderByDescending(k => (long)k.Key.Length * k.Value)
                      .ThenBy(k => k.Key, StringComparer.Ordinal))
         {
             var phrase = kvp.Key;
@@ -68,7 +68,7 @@ public sealed class DynamicCompressor
             if (nts <= 0) continue;
 
             var isIdent = IsIdentifier(phrase);
-            finalCandidates.Add((phrase, freq, isIdent));
+            finalCandidates.Add((phrase, freq, isIdent, tokens));
             symbolMap[phrase] = SingleTokenLexicon.GetSymbol(symbolIndex++);
 
             if (symbolIndex >= SingleTokenLexicon.Count || symbolIndex >= maxReplacements)
@@ -82,18 +82,17 @@ public sealed class DynamicCompressor
         var output = ReplaceInCodeBlocks(text, finalCandidates, symbolMap);
         var legend = BuildLegend(symbolMap);
 
-        var totalSaved = finalCandidates.Sum(c =>
-        {
-            var tokens = TokenEstimator.EstimateTokens(c.Phrase);
-            return tokens * c.Frequency - (3 + tokens + c.Frequency);
-        });
+        var totalSaved = finalCandidates.Sum(c => c.Tokens * c.Frequency - (3 + c.Tokens + c.Frequency));
 
         return new CompressResult(output, legend, totalSaved, finalCandidates.Count);
     }
 
     private static bool IsIdentifier(string s)
     {
-        return s.All(c => char.IsLetterOrDigit(c) || c == '_');
+        foreach (var c in s)
+            if (!(char.IsLetterOrDigit(c) || c == '_'))
+                return false;
+        return true;
     }
 
     private static string ExtractCodeOnly(string text)
@@ -145,7 +144,8 @@ public sealed class DynamicCompressor
     }
 
     private static string ReplaceInCodeBlocks(string text,
-        List<(string Phrase, int Frequency, bool IsIdent)> candidates, Dictionary<string, string> symbolMap)
+        List<(string Phrase, int Frequency, bool IsIdent, int Tokens)> candidates,
+        Dictionary<string, string> symbolMap)
     {
         if (!text.Contains("```"))
         {

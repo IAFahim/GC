@@ -125,15 +125,20 @@ public sealed class ConfigurationLoader
 
         try
         {
-            string json;
-            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, true))
-            using (var reader = new StreamReader(fs))
-            {
-                json = await reader.ReadToEndAsync();
-            }
+            // Hardcoded guard: the configurable MaxFileSize lives inside the very config being loaded,
+            // so using it here would be circular. 4 MiB is far above any sane config.json.
+            const long maxConfigBytes = 4L * 1024 * 1024;
+            var length = new FileInfo(filePath).Length;
+            if (length > maxConfigBytes)
+                return Result<GcConfiguration>.Failure(
+                    $"Configuration file '{filePath}' is too large ({length} bytes); max {maxConfigBytes} bytes.");
+
+            // Deserialize UTF-8 directly from the stream: no intermediate string, no UTF-16 transcode.
+            await using var fs = new FileStream(
+                filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, true);
 
             var typeInfo = GcJsonSerializerContext.Default.GcConfiguration;
-            var config = JsonSerializer.Deserialize(json, typeInfo);
+            var config = await JsonSerializer.DeserializeAsync(fs, typeInfo);
             return config != null
                 ? Result<GcConfiguration>.Success(config)
                 : Result<GcConfiguration>.Failure($"Failed to deserialize configuration from {filePath}");

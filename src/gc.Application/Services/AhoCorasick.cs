@@ -6,11 +6,17 @@ public sealed class AhoCorasick
 {
     private readonly int _alphabetSize;
 
+    private readonly int[] _asciiMap; // length 128, -1 = not in alphabet
     private readonly Dictionary<char, int> _charMap;
     private readonly int[] _fail;
     private readonly int[] _gotoFunc;
     private readonly int[] _output;
     private readonly int _root;
+
+    /// <summary>
+    ///     True when every character across all patterns is ASCII (&lt; 128).
+    /// </summary>
+    public bool IsAsciiOnly { get; }
 
     public AhoCorasick(string[] patterns)
     {
@@ -26,6 +32,9 @@ public sealed class AhoCorasick
             _output = new[] { -1 };
             _root = 0;
             _charMap = new Dictionary<char, int>();
+            _asciiMap = new int[128];
+            Array.Fill(_asciiMap, -1);
+            IsAsciiOnly = true;
             return;
         }
 
@@ -44,8 +53,29 @@ public sealed class AhoCorasick
 
         _alphabetSize = chars.Count;
 
+        _asciiMap = new int[128];
+        Array.Fill(_asciiMap, -1);
+        var asciiOnly = true;
+        foreach (var kvp in _charMap)
+            if (kvp.Key < 128) _asciiMap[kvp.Key] = kvp.Value;
+            else asciiOnly = false;
+        IsAsciiOnly = asciiOnly;
+
         var maxNodes = validPatterns.Sum(p => p.Length) + 1;
-        _gotoFunc = new int[maxNodes * _alphabetSize];
+
+        // Dense transition table is O(nodes x alphabet). Compute in long to avoid
+        // silent Int32 overflow on large pattern sets / large Unicode alphabets,
+        // and reject sizes that would otherwise overflow or exhaust memory.
+        const long MaxTransitionTableEntries = 256L * 1024 * 1024; // 256M ints = 1 GiB cap
+        var tableSize = (long)maxNodes * _alphabetSize;
+        if (tableSize > MaxTransitionTableEntries)
+            throw new ArgumentException(
+                $"Aho-Corasick transition table too large: {maxNodes} nodes x {_alphabetSize} distinct chars " +
+                $"= {tableSize} entries (limit {MaxTransitionTableEntries}). " +
+                "Reduce the number/length of content patterns or the distinct-character set.",
+                nameof(patterns));
+
+        _gotoFunc = new int[(int)tableSize];
         Array.Fill(_gotoFunc, -1);
         _fail = new int[maxNodes];
         _output = new int[maxNodes];
@@ -129,6 +159,12 @@ public sealed class AhoCorasick
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetCharIndex(char c, out int index)
     {
+        if (c < 128)
+        {
+            index = _asciiMap[c];
+            return index >= 0;
+        }
+
         return _charMap.TryGetValue(c, out index);
     }
 

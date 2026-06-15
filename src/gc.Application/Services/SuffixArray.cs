@@ -1,9 +1,18 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 
 namespace gc.Application.Services;
 
 public static class SuffixArray
 {
+    // NASA Power-of-Ten Rule 2: bound external input. Above this the suffix-array
+    // build (O(n log^2 n)) and sum-of-LCP substring extraction degrade; phrase
+    // mining yields negligible value on inputs this large. ~4M chars is far above
+    // any real concatenated repo context.
+    private const int MaxSuffixArrayLength = 4_000_000;
+
+    private static readonly SearchValues<char> NewlineChars = SearchValues.Create("\n\r");
+
     public static int[] Build(string text)
     {
         var n = text.Length;
@@ -104,7 +113,7 @@ public static class SuffixArray
         int maxCandidates = 50)
     {
         var n = text.Length;
-        if (n < minLength * 2)
+        if (n < minLength * 2 || n > MaxSuffixArrayLength)
             return [];
 
         var sa = Build(text);
@@ -116,12 +125,13 @@ public static class SuffixArray
         for (var i = 1; i < n; i++)
             if (lcp[i] >= minLength)
             {
-                var phrase = text.Substring(sa[i], lcp[i]);
+                var span = text.AsSpan(sa[i], lcp[i]);
 
-                // Skip phrases with newlines to avoid breaking the legend format
-                if (phrase.Contains('\n') || phrase.Contains('\r'))
+                // Skip phrases with newlines BEFORE allocating, to avoid wasted strings
+                if (span.IndexOfAny(NewlineChars) >= 0)
                     continue;
 
+                var phrase = text.Substring(sa[i], lcp[i]);
                 candidateMap.TryGetValue(phrase, out var count);
                 candidateMap[phrase] = count + 1;
             }

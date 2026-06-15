@@ -14,17 +14,22 @@ public static class ConfigurationMerger
     /// </summary>
     public static GcConfiguration Merge(GcConfiguration target, GcConfiguration source)
     {
+        // A null source section means the higher-priority config omitted it entirely
+        // (System.Text.Json source-gen leaves omitted reference members null). Treat that as
+        // "not provided -> keep target", which also avoids dereferencing a null section (NRE on startup).
         return target with
         {
             Version = source.Version ?? target.Version,
-            Limits = MergeLimits(target.Limits, source.Limits),
-            Discovery = MergeDiscovery(target.Discovery, source.Discovery),
-            Filters = MergeFilters(target.Filters, source.Filters),
-            Presets = MergePresets(target.Presets, source.Presets),
-            LanguageMappings = MergeLanguageMappings(target.LanguageMappings, source.LanguageMappings),
-            Markdown = MergeMarkdown(target.Markdown, source.Markdown),
-            Output = MergeOutput(target.Output, source.Output),
-            Logging = MergeLogging(target.Logging, source.Logging)
+            Limits = source.Limits is null ? target.Limits : MergeLimits(target.Limits, source.Limits),
+            Discovery = source.Discovery is null ? target.Discovery : MergeDiscovery(target.Discovery, source.Discovery),
+            Filters = source.Filters is null ? target.Filters : MergeFilters(target.Filters, source.Filters),
+            Presets = source.Presets is null ? target.Presets : MergePresets(target.Presets, source.Presets),
+            LanguageMappings = source.LanguageMappings is null
+                ? target.LanguageMappings
+                : MergeLanguageMappings(target.LanguageMappings, source.LanguageMappings),
+            Markdown = source.Markdown is null ? target.Markdown : MergeMarkdown(target.Markdown, source.Markdown),
+            Output = source.Output is null ? target.Output : MergeOutput(target.Output, source.Output),
+            Logging = source.Logging is null ? target.Logging : MergeLogging(target.Logging, source.Logging)
         };
     }
 

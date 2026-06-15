@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace gc.Application.Services;
@@ -30,19 +31,33 @@ public static class TokenEstimator
         while (i < length)
         {
             var c = text[i];
+            var k = Classify(c);
 
             // Whitespace: skip, acts as a boundary separator
-            if (IsWhitespace(c))
+            if ((k & (byte)CharClass.Whitespace) != 0)
             {
                 i++;
                 continue;
             }
 
             // Punctuation: each punctuation character is its own token (e.g., '<', '>', ',', '.', '(', ')')
-            if (IsPunctuation(c))
+            if ((k & (byte)CharClass.Punct) != 0)
             {
                 tokens++;
                 i++;
+                continue;
+            }
+
+            // Non-ASCII text (CJK, accented Latin, etc.): the ASCII classifiers cannot detect
+            // boundaries within such a run, so approximate BPE granularity (~1.5 chars/token)
+            // instead of collapsing the entire run into a single token.
+            if (!IsAscii(c))
+            {
+                var start = i;
+                while (i < length && !IsAscii(text[i]) && !IsWhitespace(text[i]))
+                    i++;
+                var runLen = i - start;
+                tokens += (runLen * 2 + 2) / 3; // ceil(runLen / 1.5), at least 1 for a non-empty run
                 continue;
             }
 
@@ -53,9 +68,10 @@ public static class TokenEstimator
             while (i < length)
             {
                 var current = text[i];
+                var ck = Classify(current);
 
                 // Stop at whitespace or punctuation
-                if (IsWhitespace(current) || IsPunctuation(current))
+                if ((ck & (byte)(CharClass.Whitespace | CharClass.Punct)) != 0)
                     break;
 
                 // Underscore acts as a boundary separator
@@ -66,36 +82,41 @@ public static class TokenEstimator
                 }
 
                 // CamelCase transition: lowercase-to-uppercase or digit-to-alpha or alpha-to-digit
-                if (i > 0)
+                Debug.Assert(i > 0);
+                var pk = Classify(text[i - 1]);
+
+                const byte upper = (byte)CharClass.Upper;
+                const byte alpha = (byte)(CharClass.Upper | CharClass.Lower);
+                const byte digit = (byte)CharClass.Digit;
+
+                var currentUpper = (ck & upper) != 0;
+                var prevUpper = (pk & upper) != 0;
+
+                // lowercase/digit followed by uppercase => new token boundary
+                // e.g., "configurationValidator" — the 'V' after 'n' triggers a new token
+                if (currentUpper && !prevUpper)
                 {
-                    var prev = text[i - 1];
+                    tokens++;
+                    i++;
+                    continue;
+                }
 
-                    // lowercase/digit followed by uppercase => new token boundary
-                    // e.g., "configurationValidator" — the 'V' after 'n' triggers a new token
-                    if (IsUpper(current) && !IsUpper(prev))
-                    {
-                        tokens++;
-                        i++;
-                        continue;
-                    }
+                // Two uppercase letters followed by a lowercase => the second uppercase starts a new token
+                // e.g., "XMLParser" — the 'P' after 'M' with 'L' before triggers a new token
+                // We peek ahead to confirm
+                if (currentUpper && prevUpper && i + 1 < length && (Classify(text[i + 1]) & (byte)CharClass.Lower) != 0)
+                {
+                    tokens++;
+                    i++;
+                    continue;
+                }
 
-                    // Two uppercase letters followed by a lowercase => the second uppercase starts a new token
-                    // e.g., "XMLParser" — the 'P' after 'M' with 'L' before triggers a new token
-                    // We peek ahead to confirm
-                    if (IsUpper(current) && IsUpper(prev) && i + 1 < length && IsLower(text[i + 1]))
-                    {
-                        tokens++;
-                        i++;
-                        continue;
-                    }
-
-                    // alpha-to-digit or digit-to-alpha transition
-                    if ((IsAlpha(current) && IsDigit(prev)) || (IsDigit(current) && IsAlpha(prev)))
-                    {
-                        tokens++;
-                        i++;
-                        continue;
-                    }
+                // alpha-to-digit or digit-to-alpha transition
+                if (((ck & alpha) != 0 && (pk & digit) != 0) || ((ck & digit) != 0 && (pk & alpha) != 0))
+                {
+                    tokens++;
+                    i++;
+                    continue;
                 }
 
                 i++;
@@ -115,7 +136,55 @@ public static class TokenEstimator
         return string.IsNullOrEmpty(text) ? 0 : EstimateTokens(text.AsSpan());
     }
 
+    // Combined ASCII classification table: one array load + one mask classifies a char
+    // into all categories at once, replacing per-char chains of '||' comparisons.
+    // Non-ASCII chars (>= 128) classify as None and are handled by the dedicated run path.
+
+    [Flags]
+    private enum CharClass : byte
+    {
+        None = 0,
+        Whitespace = 1,
+        Punct = 2,
+        Upper = 4,
+        Lower = 8,
+        Digit = 16
+    }
+
+    private static readonly byte[] Class = BuildTable();
+
+    private static byte[] BuildTable()
+    {
+        var t = new byte[128];
+        for (var c = 0; c < 128; c++)
+        {
+            byte k = 0;
+            var ch = (char)c;
+            if (IsWhitespace(ch)) k |= (byte)CharClass.Whitespace;
+            if (IsPunctuation(ch)) k |= (byte)CharClass.Punct;
+            if (IsUpper(ch)) k |= (byte)CharClass.Upper;
+            if (IsLower(ch)) k |= (byte)CharClass.Lower;
+            if (IsDigit(ch)) k |= (byte)CharClass.Digit;
+            t[c] = k;
+        }
+
+        return t;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static byte Classify(char c)
+    {
+        return c < 128 ? Class[c] : (byte)0;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsAscii(char c)
+    {
+        return c < 128;
+    }
+
     // Range-check based char classification for speed (avoids char.IsXyz virtual calls)
+    // Retained as the source of truth used to build the combined Class table above.
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsUpper(char c)

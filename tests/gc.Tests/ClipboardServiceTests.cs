@@ -26,7 +26,6 @@ public class ClipboardServiceTests
         var service = new ClipboardService(_logger);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var result = await service.CopyToClipboardAsync("hello world", cts.Token);
-        Assert.NotNull(result);
     }
 
     [Fact]
@@ -35,7 +34,6 @@ public class ClipboardServiceTests
         var service = new ClipboardService(_logger);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var result = await service.CopyToClipboardAsync("", cts.Token);
-        Assert.NotNull(result);
     }
 
     [Fact]
@@ -45,7 +43,6 @@ public class ClipboardServiceTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var unicode = "Hello 🌍 こんにちは Привет مرحبا";
         var result = await service.CopyToClipboardAsync(unicode, cts.Token);
-        Assert.NotNull(result);
     }
 
     [Fact]
@@ -56,7 +53,6 @@ public class ClipboardServiceTests
         // 100 KB of content
         var largeContent = new string('A', 1024 * 100);
         var result = await service.CopyToClipboardAsync(largeContent, cts.Token);
-        Assert.NotNull(result);
     }
 
     // ─── CopyToClipboardAsync with Limits ────────────────────────────────
@@ -69,7 +65,6 @@ public class ClipboardServiceTests
         var limits = new LimitsConfiguration { MaxClipboardSize = "1MB" };
         var content = new string('B', 100);
         var result = await service.CopyToClipboardAsync(content, limits, false, cts.Token);
-        Assert.NotNull(result);
     }
 
     [Fact]
@@ -92,7 +87,6 @@ public class ClipboardServiceTests
         var limits = new LimitsConfiguration { MaxClipboardSize = "100B" };
         var content = new string('D', 100);
         var result = await service.CopyToClipboardAsync(content, limits, false, cts.Token);
-        Assert.NotNull(result);
     }
 
     // ─── CopyToClipboardAsync (Stream) ───────────────────────────────────
@@ -104,7 +98,6 @@ public class ClipboardServiceTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes("stream content"));
         var result = await service.CopyToClipboardAsync(stream, cts.Token);
-        Assert.NotNull(result);
     }
 
     [Fact]
@@ -141,7 +134,6 @@ public class ClipboardServiceTests
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var multiline = "line1\nline2\nline3\r\nline4";
         var result = await service.CopyToClipboardAsync(multiline, cts.Token);
-        Assert.NotNull(result);
     }
 
     [Fact]
@@ -152,7 +144,6 @@ public class ClipboardServiceTests
         var limits = new LimitsConfiguration { MaxClipboardSize = "1KB" };
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes("small stream content"));
         var result = await service.CopyToClipboardAsync(stream, limits, false, cts.Token);
-        Assert.NotNull(result);
     }
 
     [Fact]
@@ -163,7 +154,6 @@ public class ClipboardServiceTests
         var limits = new LimitsConfiguration { MaxClipboardSize = "100MB" };
         var content = "modest content";
         var result = await service.CopyToClipboardAsync(content, limits, false, cts.Token);
-        Assert.NotNull(result);
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────

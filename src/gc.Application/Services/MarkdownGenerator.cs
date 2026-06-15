@@ -42,6 +42,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
     public long LastEstimatedTokens { get; private set; }
 
+    public int LastEmittedFileCount { get; private set; }
+
 
 
     public async Task<Result<long>> GenerateMarkdownStreamingAsync(IEnumerable<FileContent> contents,
@@ -52,6 +54,14 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         try
         {
             LastEstimatedTokens = 0;
+            LastEmittedFileCount = 0;
+
+            string[] excludeArray = excludeLineIfStart as string[]
+                ?? excludeLineIfStart?.ToArray()
+                ?? Array.Empty<string>();
+            bool hasExclude = excludeArray.Length > 0;
+            bool excludeNewline = Array.IndexOf(excludeArray, "\n") >= 0;
+
             var pipeOptions = new StreamPipeWriterOptions(leaveOpen: true, minimumBufferSize: 65536);
             var writer = PipeWriter.Create(outputStream, pipeOptions);
 
@@ -143,9 +153,19 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     {
                                         var len = (int)fileLength;
                                         var buffer = ArrayPool<byte>.Shared.Rent(len);
-                                        var bytesRead = await RandomAccess.ReadAsync(handle, buffer.AsMemory(0, len), 0,
-                                            threadToken);
-                                        await channel.Writer.WriteAsync((index, buffer, bytesRead, null), threadToken);
+                                        var deposited = false;
+                                        try
+                                        {
+                                            var bytesRead = await RandomAccess.ReadAsync(handle, buffer.AsMemory(0, len),
+                                                0, threadToken);
+                                            await channel.Writer.WriteAsync((index, buffer, bytesRead, null),
+                                                threadToken);
+                                            deposited = true;
+                                        }
+                                        finally
+                                        {
+                                            if (!deposited) ArrayPool<byte>.Shared.Return(buffer);
+                                        }
                                     }
                                     else
                                     {
@@ -189,11 +209,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             if (content.Content != null)
                             {
                                 var actualContent = content.Content;
-                                if (excludeLineIfStart != null && excludeLineIfStart.Any())
+                                if (hasExclude)
                                 {
-                                    var excludeArray = excludeLineIfStart.ToArray();
-                                    var excludeNewline = excludeArray.Contains("\n");
-
                                     var span = actualContent.AsSpan();
                                     var sb = t_lineExclusionBuilder ??= new StringBuilder(4096);
                                     sb.Clear();
@@ -228,9 +245,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                                 var fence = GetFenceForContent(actualContent);
 
-                                var header = config.Markdown.FileHeaderTemplate.Replace("{path}",
+                                var header = (config.Markdown.FileHeaderTemplate ?? "## File: {path}").Replace("{path}",
                                     content.Entry.DisplayPath ?? content.Entry.RelativePath,
-                                    StringComparison.OrdinalIgnoreCase);
+                                    StringComparison.Ordinal);
                                 var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
                                 var fenceLine = $"{fence}{content.Entry.Language}";
                                 var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
@@ -269,6 +286,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                                 fileList.Add(content.Entry.DisplayPath ?? content.Entry.RelativePath);
                                 totalBytes += entryTotalBytes;
+                                if (!content.Entry.Path.StartsWith('[')) LastEmittedFileCount++;
                             }
                             else
                             {
@@ -317,9 +335,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                                 var fence = GetFenceForBytes(ready.Buffer!, ready.Length);
 
-                                var header = config.Markdown.FileHeaderTemplate.Replace("{path}",
+                                var header = (config.Markdown.FileHeaderTemplate ?? "## File: {path}").Replace("{path}",
                                     content.Entry.DisplayPath ?? content.Entry.RelativePath,
-                                    StringComparison.OrdinalIgnoreCase);
+                                    StringComparison.Ordinal);
                                 var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
                                 var fenceLine = $"{fence}{content.Entry.Language}";
                                 var fenceLineBytes = Utf8NoBom.GetByteCount(fenceLine) + NewlineByteCount;
@@ -339,10 +357,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         ? Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount
                                         : 0;
                                 }
-                                else if (excludeLineIfStart != null && excludeLineIfStart.Any())
+                                else if (hasExclude)
                                 {
-                                    var excludeArray = excludeLineIfStart.ToArray();
-                                    var excludeNewline = excludeArray.Contains("\n");
                                     var sb = new StringBuilder();
                                     var span = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length).AsSpan();
                                     var first = true;
@@ -424,8 +440,31 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         offset += toWrite;
                                         remaining -= toWrite;
                                     }
-                                    var text = Utf8NoBom.GetString(contentBuffer, 0, (int)contentBytesWritten);
-                                    estimatedTokensAccumulator += TokenEstimator.EstimateTokens(text);
+                                    var decoder = Utf8NoBom.GetDecoder();
+                                    var byteRemaining = (int)contentBytesWritten;
+                                    var byteOffset = 0;
+                                    const int decodeChunk = 65536;
+                                    var charBuf = ArrayPool<char>.Shared.Rent(decodeChunk + 8);
+                                    try
+                                    {
+                                        while (byteRemaining > 0)
+                                        {
+                                            var byteCount = Math.Min(byteRemaining, decodeChunk);
+                                            var flush = byteCount == byteRemaining;
+                                            var charsDecoded = decoder.GetChars(
+                                                contentBuffer.AsSpan(byteOffset, byteCount),
+                                                charBuf.AsSpan(),
+                                                flush);
+                                            estimatedTokensAccumulator +=
+                                                TokenEstimator.EstimateTokens(charBuf.AsSpan(0, charsDecoded));
+                                            byteOffset += byteCount;
+                                            byteRemaining -= byteCount;
+                                        }
+                                    }
+                                    finally
+                                    {
+                                        ArrayPool<char>.Shared.Return(charBuf);
+                                    }
                                 }
 
                                 if (needsTrailingNewline) WriteStringLine(writer, "");
@@ -436,6 +475,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                                 fileList.Add(content.Entry.DisplayPath ?? content.Entry.RelativePath);
                                 totalBytes += entryTotalBytes;
+                                if (!content.Entry.Path.StartsWith('[')) LastEmittedFileCount++;
                             }
                         }
                         finally
@@ -481,16 +521,18 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             await writer.FlushAsync();
             await writer.CompleteAsync();
 
+            var structureHeader = config.Markdown.ProjectStructureHeader ?? "_Project Structure:_ ";
+            var structureFence = config.Markdown.Fence ?? "```";
             var projectStructureBytes =
-                Utf8NoBom.GetByteCount(config.Markdown.ProjectStructureHeader) + NewlineByteCount;
-            projectStructureBytes += Utf8NoBom.GetByteCount($"{config.Markdown.Fence}text") + NewlineByteCount;
+                Utf8NoBom.GetByteCount(structureHeader) + NewlineByteCount;
+            projectStructureBytes += Utf8NoBom.GetByteCount($"{structureFence}text") + NewlineByteCount;
             foreach (var path in fileList)
             {
                 if (path.StartsWith('[')) continue;
                 projectStructureBytes += Utf8NoBom.GetByteCount(path) + NewlineByteCount;
             }
 
-            projectStructureBytes += Utf8NoBom.GetByteCount(config.Markdown.Fence) + NewlineByteCount;
+            projectStructureBytes += Utf8NoBom.GetByteCount(structureFence) + NewlineByteCount;
             projectStructureBytes += NewlineByteCount;
             totalBytes += projectStructureBytes;
 
@@ -552,8 +594,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
     private void WriteProjectStructure(PipeWriter writer, IEnumerable<string> filePaths, GcConfiguration config)
     {
-        WriteStringLine(writer, config.Markdown.ProjectStructureHeader);
-        WriteStringLine(writer, $"{config.Markdown.Fence}text");
+        var structureFence = config.Markdown.Fence ?? "```";
+        WriteStringLine(writer, config.Markdown.ProjectStructureHeader ?? "_Project Structure:_ ");
+        WriteStringLine(writer, $"{structureFence}text");
 
         foreach (var path in filePaths)
         {
@@ -561,7 +604,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             WriteStringLine(writer, path);
         }
 
-        WriteStringLine(writer, config.Markdown.Fence);
+        WriteStringLine(writer, structureFence);
         WriteStringLine(writer, "");
     }
 
@@ -604,54 +647,5 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             }
 
         return new string('`', longestRun + 1);
-    }
-
-    private void ProcessLineSequence(ReadOnlySequence<byte> lineSequence, string[] excludeArray, bool excludeNewline,
-        PipeWriter writer, ref long contentBytesWritten, int newlineBytes)
-    {
-        var length = (int)lineSequence.Length;
-        if (length == 0)
-        {
-            if (!excludeNewline)
-            {
-                var newlineSpan = writer.GetSpan(NewlineBytes.Length);
-                NewlineBytes.CopyTo(newlineSpan);
-                writer.Advance(NewlineBytes.Length);
-                contentBytesWritten += newlineBytes;
-            }
-
-            return;
-        }
-
-        if (length > 0)
-        {
-            var lastByte = lineSequence.Slice(length - 1).FirstSpan[0];
-            if (lastByte == '\r')
-            {
-                lineSequence = lineSequence.Slice(0, length - 1);
-                length--;
-            }
-        }
-
-        if (length == 0 && excludeNewline) return;
-
-        var lineStr = Utf8NoBom.GetString(lineSequence);
-        var trimmedLine = lineStr.TrimStart().TrimStart('\uFEFF');
-
-        if (excludeNewline && (string.IsNullOrEmpty(lineStr) || string.IsNullOrWhiteSpace(lineStr))) return;
-
-        var shouldExclude = false;
-        foreach (var startStr in excludeArray)
-            if (startStr != "\n" && trimmedLine.StartsWith(startStr, StringComparison.Ordinal))
-            {
-                shouldExclude = true;
-                break;
-            }
-
-        if (!shouldExclude)
-        {
-            WriteStringLine(writer, lineStr);
-            contentBytesWritten += Utf8NoBom.GetByteCount(lineStr) + newlineBytes;
-        }
     }
 }

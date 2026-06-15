@@ -36,7 +36,10 @@ internal enum OptionKind
 public sealed class CliParser
 {
     // ── The single source of truth for all options ──
-    private readonly OptionSpec[] _options =
+    // Static: the table, its delegates, and the token map are immutable and
+    // identical for every parser, so build them once per process rather than
+    // per `new CliParser()`.
+    private static readonly OptionSpec[] Options =
     [
         // ── Flags ──
         new(["-h", "--help"], OptionKind.Flag, (a, _) => a.ShowHelp = true),
@@ -75,7 +78,7 @@ public sealed class CliParser
         }),
 
         // ── Single-value options ──
-        new(["-o", "--output", "spit"], OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
+        new(["-s", "-o", "--output", "spit"], OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
         new(["--max-memory"], OptionKind.SingleValue, (a, v) => a.MaxMemoryBytes = MemorySizeParser.Parse(v ?? "")),
         new(["-d", "--depth"], OptionKind.SingleValue, (a, v) =>
         {
@@ -122,14 +125,15 @@ public sealed class CliParser
         new(["horde"], OptionKind.Flag, (a, _) => a.Cluster = true)
     ];
 
-    private readonly Dictionary<string, OptionSpec> _tokenMap;
+    private static readonly Dictionary<string, OptionSpec> TokenMap = BuildTokenMap();
 
-    public CliParser()
+    private static Dictionary<string, OptionSpec> BuildTokenMap()
     {
-        _tokenMap = new Dictionary<string, OptionSpec>(StringComparer.OrdinalIgnoreCase);
-        foreach (var spec in _options)
+        var map = new Dictionary<string, OptionSpec>(StringComparer.OrdinalIgnoreCase);
+        foreach (var spec in Options)
             foreach (var token in spec.Tokens)
-                _tokenMap[token] = spec;
+                map[token] = spec;
+        return map;
     }
 
     public Result<CliArguments> Parse(string[] args, GcConfiguration configuration)
@@ -137,7 +141,7 @@ public sealed class CliParser
         var result = new CliArguments
         {
             Configuration = configuration,
-            MaxMemoryBytes = MemorySizeParser.Parse(configuration.Limits.MaxMemoryBytes),
+            MaxMemoryBytes = configuration.Limits.GetMaxMemoryBytesValue(),
             Depth = configuration.Discovery.MaxDepth
         };
 
@@ -166,7 +170,7 @@ public sealed class CliParser
             {
                 // If the next arg looks like a known flag but we expected a value,
                 // that's an error.
-                if (arg.StartsWith('-') && _tokenMap.TryGetValue(arg, out var flagSpec) &&
+                if (arg.StartsWith('-') && TokenMap.TryGetValue(arg, out var flagSpec) &&
                     flagSpec.Kind == OptionKind.Flag)
                 {
                     var flagName = pendingSingleValue.Value.Tokens.First();
@@ -180,7 +184,7 @@ public sealed class CliParser
             }
 
             // Table lookup
-            if (_tokenMap.TryGetValue(arg, out var spec))
+            if (TokenMap.TryGetValue(arg, out var spec))
             {
                 switch (spec.Kind)
                 {

@@ -2,7 +2,7 @@ namespace gc.Domain.Models.Configuration;
 
 public sealed record GcConfiguration
 {
-    public string Version { get; init; } = "1.0.0";
+    public string? Version { get; init; }
     public LimitsConfiguration Limits { get; init; } = new();
     public DiscoveryConfiguration Discovery { get; init; } = new();
     public FiltersConfiguration Filters { get; init; } = new();

@@ -204,7 +204,6 @@ namespace MyApp
     {
         var parser = new CliParser();
         var result = parser.Parse(new[] { "" }, new GcConfiguration());
-        Assert.NotNull(result);
     }
 
     [Fact]
@@ -212,7 +211,6 @@ namespace MyApp
     {
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--" }, new GcConfiguration());
-        Assert.NotNull(result);
     }
 
     [Fact]
@@ -221,7 +219,6 @@ namespace MyApp
         var longArg = new string('x', 10000);
         var parser = new CliParser();
         var result = parser.Parse(new[] { longArg }, new GcConfiguration());
-        Assert.NotNull(result);
     }
 
     // =========================================================================
@@ -295,7 +292,6 @@ namespace MyApp
             null, false, null, false, false, false,
             null, null, null, null,
             cts.Token);
-        Assert.NotNull(result);
     }
 
     // =========================================================================
@@ -467,7 +463,6 @@ namespace MyApp
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--history", "-1" }, new GcConfiguration());
         Assert.True(result.IsSuccess);
-        Assert.NotNull(result);
     }
 
     // =========================================================================

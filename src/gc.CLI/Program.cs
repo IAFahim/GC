@@ -35,10 +35,11 @@ public static class Program
         logger.ApplyConfiguration(config.Logging);
 
         var configDir = configLoader.GetConfigDirectory();
+        var currentDirectory = Directory.GetCurrentDirectory();
         string[] resolvedArgs;
         bool shouldExit;
         int exitCode;
-        (resolvedArgs, shouldExit, exitCode) = await CliArgumentResolver.ResolveAsync(args, configDir, Directory.GetCurrentDirectory());
+        (resolvedArgs, shouldExit, exitCode) = await CliArgumentResolver.ResolveAsync(args, configDir, currentDirectory);
         if (shouldExit)
         {
             return exitCode;
@@ -128,7 +129,7 @@ public static class Program
                 return 1;
             }
 
-        var historyService = new HistoryService(configLoader.GetConfigDirectory(), logger);
+        var historyService = new HistoryService(configDir, logger);
 
         if (cliArgs.ShowHistory)
             return await HistoryMenu.ShowAsync(historyService, parser, config, cliArgs.HistoryIndex, console,
@@ -148,7 +149,7 @@ public static class Program
 
         var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
 
-        exitCode = await ExecuteAsync(Directory.GetCurrentDirectory(), cliArgs, config, useCase, configService,
+        exitCode = await ExecuteAsync(currentDirectory, cliArgs, config, useCase, configService,
             logger, cts.Token, profileReporter);
 
         if (profileReporter != null)
@@ -157,32 +158,37 @@ public static class Program
 
             if (cliArgs.Profile || cliArgs.ShowStats) logger.Info("\n" + profileReporter.ToMarkdown());
 
-            if (!string.IsNullOrEmpty(cliArgs.ProfileOutput))
-                try
-                {
-                    File.WriteAllText(cliArgs.ProfileOutput, profileReporter.ToJson());
-                    logger.Info($"Profile JSON written to {cliArgs.ProfileOutput}");
-                }
-                catch (Exception ex)
-                {
-                    logger.Error($"Failed to write profile JSON: {ex.Message}");
-                }
+            if (!string.IsNullOrEmpty(cliArgs.ProfileOutput) || !string.IsNullOrEmpty(cliArgs.StatsOutput))
+            {
+                var reportJson = profileReporter.ToJson();
 
-            if (!string.IsNullOrEmpty(cliArgs.StatsOutput))
-                try
-                {
-                    File.WriteAllText(cliArgs.StatsOutput, profileReporter.ToJson());
-                    logger.Info($"Stats JSON written to {cliArgs.StatsOutput}");
-                }
-                catch (Exception ex)
-                {
-                    logger.Error($"Failed to write stats JSON: {ex.Message}");
-                }
+                if (!string.IsNullOrEmpty(cliArgs.ProfileOutput))
+                    try
+                    {
+                        await File.WriteAllTextAsync(cliArgs.ProfileOutput, reportJson, cts.Token);
+                        logger.Info($"Profile JSON written to {cliArgs.ProfileOutput}");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error($"Failed to write profile JSON: {ex.Message}");
+                    }
+
+                if (!string.IsNullOrEmpty(cliArgs.StatsOutput))
+                    try
+                    {
+                        await File.WriteAllTextAsync(cliArgs.StatsOutput, reportJson, cts.Token);
+                        logger.Info($"Stats JSON written to {cliArgs.StatsOutput}");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error($"Failed to write stats JSON: {ex.Message}");
+                    }
+            }
         }
 
         if (exitCode == 0)
             await historyService.AddEntryAsync(
-                Directory.GetCurrentDirectory(),
+                currentDirectory,
                 resolvedArgs.Where(a => !a.Equals("--history", StringComparison.OrdinalIgnoreCase)).ToArray(),
                 cts.Token);
 
@@ -478,7 +484,7 @@ FILTERING:
     --preset <name>                  Use a built-in preset (web,backend,dotnet,etc)
 
 OUTPUT:
-    -o, spit, --output <file>        Save output to file instead of clipboard
+    -s, -o, spit, --output <file>    Save output to file instead of clipboard
     --no-clipboard                   Disable copying output to clipboard
     -b, brain, --brain               Universal minification + Dynamic BPE fallback
     -c, compress, --compress         Structural compression using sqz (session dedup)
@@ -509,7 +515,7 @@ SHARD MODE:
 CONFIGURATION:
     --init-config                    Initialize global configuration
     init [args...]                   Initialize local configuration (.gc file) in CWD
-    -s, --save                       Save current/merged arguments as the default for CWD
+    --save                           Save current/merged arguments as the default for CWD
     --save-profile <name> [args...]  Save the provided arguments as a named profile
     --profile <name>                 Apply a named profile's arguments
     --list-profiles                  List all saved profiles

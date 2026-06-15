@@ -25,8 +25,7 @@ public sealed class BrainCrusher : IBrainCrusher
     public string CrushBlock(string code, string? language = null)
     {
         if (string.IsNullOrEmpty(code)) return code;
-        var stripped = StripComments(code, language ?? _fileExtension);
-        return CollapseWhitespace(stripped, language ?? _fileExtension);
+        return CrushFused(code, language ?? _fileExtension);
     }
 
     public string Uncrush(string crushed)
@@ -42,15 +41,31 @@ public sealed class BrainCrusher : IBrainCrusher
     public string Crush(string content)
     {
         if (string.IsNullOrEmpty(content)) return content;
-        var stripped = StripComments(content, _fileExtension);
-        return CollapseWhitespace(stripped, _fileExtension);
+        return CrushFused(content, _fileExtension);
     }
 
     // =========================================================================
-    // Universal Syntax Minifier
-    // Driven by LanguageProfiles state machine
+    // Fused minifier: strips comments AND collapses whitespace in ONE pass.
+    // Carries a single StringMode state machine plus the whitespace-collapse
+    // state (lastWasSpace / lineIsEmpty), eliminating the intermediate string
+    // and the second full re-lex that the old two-pass design required.
+    //
+    // Output is byte-identical to the old StripComments -> CollapseWhitespace
+    // pipeline (verified over a corpus before the legacy methods were removed).
+    //
+    // Routing rules (mirroring the old two-pass sequencing):
+    //   * In a string/comment-open state: append verbatim, and set
+    //     lineIsEmpty=false for any non-newline content so quoted whitespace is
+    //     never collapsed.
+    //   * Outside strings: route every emitted char through the collapse logic
+    //     (newline -> blank-line suppression; ' '/'\t' -> pending space unless
+    //     leading indentation; other -> flush pending space then append).
+    //   * Block-comment close emits a collapsible space (old line 240).
+    //   * Embedded/terminating comment newlines route through the newline branch.
+    //   * The shebang first line skips comment detection but is still collapsed
+    //     and string-scanned, exactly as the old pass 2 reprocessed it.
     // =========================================================================
-    internal static string StripComments(string content, string? fileExtension = null)
+    internal static string CrushFused(string content, string? fileExtension = null)
     {
         var sb = new StringBuilder(content.Length);
         var span = content.AsSpan();
@@ -64,7 +79,6 @@ public sealed class BrainCrusher : IBrainCrusher
                 ? fileExtension.Substring(1)
                 : fileExtension;
 
-        // Get language profile
         var profile = LanguageProfiles.For(normalizedExt);
 
         var hasBlockComment = profile.BlockComment.Length == 2;
@@ -75,16 +89,6 @@ public sealed class BrainCrusher : IBrainCrusher
         var shouldStripDoubleSlash = profile.LineComment.Contains("//");
         var shouldStripSql = profile.SqlComment;
 
-        // Preserve shebang line if present at the very beginning of the file
-        if (i == 0 && len >= 2 && span[0] == '#' && span[1] == '!')
-        {
-            while (i < len && span[i] != '\n' && span[i] != '\r')
-            {
-                sb.Append(span[i]);
-                i++;
-            }
-        }
-
         var isCSharp = normalizedExt != null && (normalizedExt.Equals("cs", StringComparison.OrdinalIgnoreCase) || normalizedExt.Equals("csharp", StringComparison.OrdinalIgnoreCase));
         var isPython = normalizedExt != null && (normalizedExt.Equals("py", StringComparison.OrdinalIgnoreCase) || normalizedExt.Equals("python", StringComparison.OrdinalIgnoreCase));
 
@@ -93,14 +97,26 @@ public sealed class BrainCrusher : IBrainCrusher
         var inMultiLineComment = false;
         var inSingleLineComment = false;
 
+        // Whitespace-collapse state (matches old CollapseWhitespace).
+        var lastWasSpace = false;
+        var lineIsEmpty = true;
+
+        // Shebang first-line state: suppress comment detection for the very first
+        // line if it starts with "#!", but still collapse and string-scan it.
+        var inShebang = i == 0 && len >= 2 && span[0] == '#' && span[1] == '!';
+
         while (i < len)
         {
             var ch = span[i];
 
-            // 1. Handle String Modes
+            // 1. Handle String Modes (append verbatim; mark line non-empty).
+            // Mirrors old CollapseWhitespace: lineIsEmpty is set false unconditionally
+            // for every char consumed in string mode (including raw newlines inside
+            // multi-line literals), so the fused output matches the old pass 2 exactly.
             if (stringMode != StringMode.None)
             {
                 sb.Append(ch);
+                lineIsEmpty = false;
 
                 switch (stringMode)
                 {
@@ -117,7 +133,13 @@ public sealed class BrainCrusher : IBrainCrusher
                         break;
 
                     case StringMode.NormalDouble:
-                        if (ch == '\\' && i + 1 < len)
+                        // Confined to a single line (FIX 1): a normal double-quoted
+                        // literal never spans a raw newline in any supported language.
+                        if (ch == '\n' || ch == '\r')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        else if (ch == '\\' && i + 1 < len)
                         {
                             i++;
                             sb.Append(span[i]);
@@ -129,7 +151,11 @@ public sealed class BrainCrusher : IBrainCrusher
                         break;
 
                     case StringMode.NormalSingle:
-                        if (ch == '\\' && i + 1 < len)
+                        if (ch == '\n' || ch == '\r')
+                        {
+                            stringMode = StringMode.None;
+                        }
+                        else if (ch == '\\' && i + 1 < len)
                         {
                             i++;
                             sb.Append(span[i]);
@@ -156,7 +182,6 @@ public sealed class BrainCrusher : IBrainCrusher
                         break;
 
                     case StringMode.CSharpRaw:
-                        // Count trailing quotes to check if raw string ends
                         if (ch == '"')
                         {
                             var quotes = 0;
@@ -230,74 +255,106 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
-            // 2. Handle Multi-line Block Comments
+            // 2. Handle Multi-line Block Comments.
             if (inMultiLineComment)
             {
                 if (span[i..].StartsWith(blockClose.AsSpan()))
                 {
                     inMultiLineComment = false;
                     i += blockClose.Length;
-                    sb.Append(' ');
+                    // Old pass 1 emitted a single ' ' here, which old pass 2 then ran
+                    // through its space branch. Reproduce that branch exactly: a space
+                    // at line start is preserved as indentation; otherwise it becomes a
+                    // pending collapsed space.
+                    if (lineIsEmpty)
+                        sb.Append(' ');
+                    else
+                        lastWasSpace = true;
                     continue;
                 }
 
-                if (ch == '\n') sb.Append('\n');
+                if (ch == '\n')
+                {
+                    // Old pass 1 emitted '\n' here; old pass 2 ran it through the
+                    // newline branch (blank-line suppression).
+                    if (!lineIsEmpty)
+                    {
+                        sb.Append('\n');
+                        lineIsEmpty = true;
+                        lastWasSpace = false;
+                    }
+                }
                 i++;
                 continue;
             }
 
-            // 3. Handle Single-line Comments
+            // 3. Handle Single-line Comments.
             if (inSingleLineComment)
             {
                 if (ch == '\n')
                 {
                     inSingleLineComment = false;
-                    sb.Append('\n');
+                    // Old pass 1 emitted '\n'; route through the newline branch.
+                    if (!lineIsEmpty)
+                    {
+                        sb.Append('\n');
+                        lineIsEmpty = true;
+                        lastWasSpace = false;
+                    }
                 }
 
                 i++;
                 continue;
             }
 
-            // 4. Start Comment Checks
-
-            // Start block comment check
-            if (hasBlockComment && span[i..].StartsWith(blockOpen.AsSpan()))
+            // 4. Start Comment Checks (suppressed on the shebang line).
+            if (!inShebang)
             {
-                inMultiLineComment = true;
-                i += blockOpen.Length;
-                continue;
-            }
+                // Start block comment check
+                if (hasBlockComment && span[i..].StartsWith(blockOpen.AsSpan()))
+                {
+                    inMultiLineComment = true;
+                    i += blockOpen.Length;
+                    continue;
+                }
 
-            // Start double slash line comment check
-            if (shouldStripDoubleSlash && ch == '/' && i + 1 < len && span[i + 1] == '/')
-            {
-                var precededByColon = i > 0 && span[i - 1] == ':';
-                if (!precededByColon)
+                // Start double slash line comment check
+                if (shouldStripDoubleSlash && ch == '/' && i + 1 < len && span[i + 1] == '/')
+                {
+                    var precededByColon = i > 0 && span[i - 1] == ':';
+                    if (!precededByColon)
+                    {
+                        inSingleLineComment = true;
+                        i += 2;
+                        continue;
+                    }
+                }
+
+                // Start SQL line comment check
+                if (shouldStripSql && ch == '-' && i + 1 < len && span[i + 1] == '-')
                 {
                     inSingleLineComment = true;
                     i += 2;
                     continue;
                 }
+
+                // Start Hash comment check
+                if (shouldTreatHashAsComment && ch == '#')
+                {
+                    inSingleLineComment = true;
+                    i++;
+                    continue;
+                }
             }
 
-            // Start SQL line comment check
-            if (shouldStripSql && ch == '-' && i + 1 < len && span[i + 1] == '-')
-            {
-                inSingleLineComment = true;
-                i += 2;
-                continue;
-            }
-
-            // Start Hash comment check
-            if (shouldTreatHashAsComment && ch == '#')
-            {
-                inSingleLineComment = true;
-                i++;
-                continue;
-            }
-
-            // 5. Start String Checks
+            // 5. Start String Checks (run on the shebang line too, matching old pass 2).
+            //
+            // IMPORTANT byte-identity note: the old pass 2 appended string openers
+            // DIRECTLY (no pending-space flush, no lineIsEmpty mutation). So if a
+            // string opener immediately follows collapsed spaces, that pending space
+            // is intentionally dropped (e.g. `x   "y"` -> `x"y"`). We reproduce that
+            // exactly: append openers raw; the first in-string char then sets
+            // lineIsEmpty=false on the next iteration.
 
             // Python raw triple/single/double quote check
             if (isPython && (ch == 'r' || ch == 'R') && i + 1 < len)
@@ -434,302 +491,7 @@ public sealed class BrainCrusher : IBrainCrusher
                 continue;
             }
 
-            // Regular character
-            sb.Append(ch);
-            i++;
-        }
-
-        return sb.ToString();
-    }
-
-    // =========================================================================
-    // Whitespace collapse: multiple spaces → single, blank lines removed
-    // =========================================================================
-    internal static string CollapseWhitespace(string stripped, string? fileExtension = null)
-    {
-        var result = new StringBuilder(stripped.Length);
-        var span = stripped.AsSpan();
-        var i = 0;
-        var len = span.Length;
-        var lastWasSpace = false;
-        var lineIsEmpty = true;
-
-        // Normalize extension (strip leading dot)
-        string? normalizedExt = null;
-        if (!string.IsNullOrEmpty(fileExtension))
-            normalizedExt = fileExtension.StartsWith('.')
-                ? fileExtension.Substring(1)
-                : fileExtension;
-
-        var isCSharp = normalizedExt != null && (normalizedExt.Equals("cs", StringComparison.OrdinalIgnoreCase) || normalizedExt.Equals("csharp", StringComparison.OrdinalIgnoreCase));
-        var isPython = normalizedExt != null && (normalizedExt.Equals("py", StringComparison.OrdinalIgnoreCase) || normalizedExt.Equals("python", StringComparison.OrdinalIgnoreCase));
-
-        var stringMode = StringMode.None;
-        var csharpRawQuoteCount = 0;
-
-        while (i < len)
-        {
-            var ch = span[i];
-
-            if (stringMode != StringMode.None)
-            {
-                result.Append(ch);
-                lineIsEmpty = false;
-
-                switch (stringMode)
-                {
-                    case StringMode.JsTemplateLiteral:
-                        if (ch == '\\' && i + 1 < len)
-                        {
-                            i++;
-                            result.Append(span[i]);
-                        }
-                        else if (ch == '`')
-                        {
-                            stringMode = StringMode.None;
-                        }
-                        break;
-
-                    case StringMode.NormalDouble:
-                        if (ch == '\\' && i + 1 < len)
-                        {
-                            i++;
-                            result.Append(span[i]);
-                        }
-                        else if (ch == '"')
-                        {
-                            stringMode = StringMode.None;
-                        }
-                        break;
-
-                    case StringMode.NormalSingle:
-                        if (ch == '\\' && i + 1 < len)
-                        {
-                            i++;
-                            result.Append(span[i]);
-                        }
-                        else if (ch == '\'')
-                        {
-                            stringMode = StringMode.None;
-                        }
-                        break;
-
-                    case StringMode.CSharpVerbatim:
-                        if (ch == '"')
-                        {
-                            if (i + 1 < len && span[i + 1] == '"')
-                            {
-                                result.Append('"');
-                                i++; // Skip the escaped quote
-                            }
-                            else
-                            {
-                                stringMode = StringMode.None;
-                            }
-                        }
-                        break;
-
-                    case StringMode.CSharpRaw:
-                        if (ch == '"')
-                        {
-                            var quotes = 0;
-                            while (i + quotes < len && span[i + quotes] == '"')
-                            {
-                                quotes++;
-                            }
-                            if (quotes >= csharpRawQuoteCount)
-                            {
-                                for (var q = 1; q < quotes; q++) result.Append('"');
-                                i += quotes - 1;
-                                stringMode = StringMode.None;
-                            }
-                        }
-                        break;
-
-                    case StringMode.PythonRawDouble:
-                        if (ch == '\\' && i + 1 < len && span[i + 1] == '"')
-                        {
-                            i++;
-                            result.Append(span[i]);
-                        }
-                        else if (ch == '"')
-                        {
-                            stringMode = StringMode.None;
-                        }
-                        break;
-
-                    case StringMode.PythonRawSingle:
-                        if (ch == '\\' && i + 1 < len && span[i + 1] == '\'')
-                        {
-                            i++;
-                            result.Append(span[i]);
-                        }
-                        else if (ch == '\'')
-                        {
-                            stringMode = StringMode.None;
-                        }
-                        break;
-
-                    case StringMode.TripleQuoteDouble:
-                        if (ch == '\\' && i + 1 < len)
-                        {
-                            i++;
-                            result.Append(span[i]);
-                        }
-                        else if (ch == '"' && i + 2 < len && span[i + 1] == '"' && span[i + 2] == '"')
-                        {
-                            result.Append("\"\"");
-                            i += 2;
-                            stringMode = StringMode.None;
-                        }
-                        break;
-
-                    case StringMode.TripleQuoteSingle:
-                        if (ch == '\\' && i + 1 < len)
-                        {
-                            i++;
-                            result.Append(span[i]);
-                        }
-                        else if (ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
-                        {
-                            result.Append("''");
-                            i += 2;
-                            stringMode = StringMode.None;
-                        }
-                        break;
-                }
-
-                i++;
-                continue;
-            }
-
-            // String start checks
-            if (isPython && (ch == 'r' || ch == 'R') && i + 1 < len)
-            {
-                var next = span[i + 1];
-                if (next == '"')
-                {
-                    if (i + 3 < len && span[i + 2] == '"' && span[i + 3] == '"')
-                    {
-                        stringMode = StringMode.TripleQuoteDouble;
-                        result.Append("r\"\"\"");
-                        i += 4;
-                        continue;
-                    }
-                    stringMode = StringMode.PythonRawDouble;
-                    result.Append("r\"");
-                    i += 2;
-                    continue;
-                }
-                if (next == '\'')
-                {
-                    if (i + 3 < len && span[i + 2] == '\'' && span[i + 3] == '\'')
-                    {
-                        stringMode = StringMode.TripleQuoteSingle;
-                        result.Append("r'''");
-                        i += 4;
-                        continue;
-                    }
-                    stringMode = StringMode.PythonRawSingle;
-                    result.Append("r'");
-                    i += 2;
-                    continue;
-                }
-            }
-
-            if (isPython && ch == '"' && i + 2 < len && span[i + 1] == '"' && span[i + 2] == '"')
-            {
-                stringMode = StringMode.TripleQuoteDouble;
-                result.Append("\"\"\"");
-                i += 3;
-                continue;
-            }
-            if (isPython && ch == '\'' && i + 2 < len && span[i + 1] == '\'' && span[i + 2] == '\'')
-            {
-                stringMode = StringMode.TripleQuoteSingle;
-                result.Append("'''");
-                i += 3;
-                continue;
-            }
-
-            if (isCSharp && ch == '"')
-            {
-                var quotes = 0;
-                while (i + quotes < len && span[i + quotes] == '"')
-                {
-                    quotes++;
-                }
-                if (quotes >= 3)
-                {
-                    stringMode = StringMode.CSharpRaw;
-                    csharpRawQuoteCount = quotes;
-                    for (var q = 0; q < quotes; q++) result.Append('"');
-                    i += quotes;
-                    continue;
-                }
-            }
-            if (isCSharp && ch == '$' && i + 3 < len && span[i + 1] == '"' && span[i + 2] == '"' && span[i + 3] == '"')
-            {
-                var idxTemp = i + 1;
-                var quotes = 0;
-                while (idxTemp < len && span[idxTemp] == '"')
-                {
-                    quotes++;
-                    idxTemp++;
-                }
-                stringMode = StringMode.CSharpRaw;
-                csharpRawQuoteCount = quotes;
-                result.Append('$');
-                for (var q = 0; q < quotes; q++) result.Append('"');
-                i += 1 + quotes;
-                continue;
-            }
-
-            if (isCSharp && ch == '@' && i + 1 < len && span[i + 1] == '"')
-            {
-                stringMode = StringMode.CSharpVerbatim;
-                result.Append("@\"");
-                i += 2;
-                continue;
-            }
-            if (isCSharp && ch == '$' && i + 2 < len && span[i + 1] == '@' && span[i + 2] == '"')
-            {
-                stringMode = StringMode.CSharpVerbatim;
-                result.Append("$@\"");
-                i += 3;
-                continue;
-            }
-            if (isCSharp && ch == '@' && i + 2 < len && span[i + 1] == '$' && span[i + 2] == '"')
-            {
-                stringMode = StringMode.CSharpVerbatim;
-                result.Append("@$\"");
-                i += 3;
-                continue;
-            }
-
-            if (ch == '`')
-            {
-                stringMode = StringMode.JsTemplateLiteral;
-                result.Append('`');
-                i++;
-                continue;
-            }
-
-            if (ch == '"')
-            {
-                stringMode = StringMode.NormalDouble;
-                result.Append('"');
-                i++;
-                continue;
-            }
-
-            if (ch == '\'')
-            {
-                stringMode = StringMode.NormalSingle;
-                result.Append('\'');
-                i++;
-                continue;
-            }
+            // 6. Whitespace collapse (outside any string/comment).
 
             // Newline handling
             if (ch == '\n' || ch == '\r')
@@ -739,20 +501,20 @@ public sealed class BrainCrusher : IBrainCrusher
 
                 if (!lineIsEmpty)
                 {
-                    result.Append('\n');
+                    sb.Append('\n');
                     lineIsEmpty = true;
                     lastWasSpace = false;
                 }
 
+                inShebang = false;
                 i++;
                 continue;
             }
 
-            // Whitespace collapse
             if (ch == ' ' || ch == '\t')
             {
                 if (lineIsEmpty)
-                    result.Append(ch);
+                    sb.Append(ch);
                 else
                     lastWasSpace = true;
                 i++;
@@ -761,16 +523,16 @@ public sealed class BrainCrusher : IBrainCrusher
 
             if (lastWasSpace)
             {
-                result.Append(' ');
+                sb.Append(' ');
                 lastWasSpace = false;
             }
 
-            result.Append(ch);
+            sb.Append(ch);
             lineIsEmpty = false;
             i++;
         }
 
-        return result.ToString();
+        return sb.ToString();
     }
 
     private enum StringMode

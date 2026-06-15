@@ -885,7 +885,6 @@ public class BugFixTests
 
         var discoveryResult = await discovery.DiscoverFilesAsync("/invalid/path", config, CancellationToken.None);
         // Discovery might succeed with empty results or fail gracefully
-        Assert.NotNull(discoveryResult);
     }
 
     #endregion

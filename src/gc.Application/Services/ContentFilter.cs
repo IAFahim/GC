@@ -38,6 +38,10 @@ public sealed class ContentFilter
         var exAc = excludeAc;
         var inAc = includeAc;
 
+        // A null automaton means "no patterns of this kind" -> treat as ASCII-safe.
+        var excludeAscii = exAc?.IsAsciiOnly ?? true;
+        var includeAscii = inAc?.IsAsciiOnly ?? true;
+
         bool shouldIncludeText(string content)
         {
             // Exclude check
@@ -54,8 +58,19 @@ public sealed class ContentFilter
 
         bool shouldIncludeBytes(byte[] buffer, int length)
         {
-            var text = Encoding.UTF8.GetString(buffer, 0, length);
-            return shouldIncludeText(text);
+            // Allocation-free fast path: when every pattern char is ASCII, each ASCII
+            // byte equals its UTF-16 char, so we can scan the raw bytes directly.
+            if (excludeAscii && includeAscii)
+            {
+                var span = buffer.AsSpan(0, length);
+                if (exAc != null && AhoCorasickContainsAnyAscii(exAc, span))
+                    return false;
+                if (inAc == null) return true;
+                return AhoCorasickContainsAnyAscii(inAc, span);
+            }
+
+            // Fallback preserves exact behavior for non-ASCII patterns.
+            return shouldIncludeText(Encoding.UTF8.GetString(buffer, 0, length));
         }
 
         return new CompiledContentPatterns(shouldIncludeText, shouldIncludeBytes);
@@ -72,6 +87,45 @@ public sealed class ContentFilter
         for (var i = 0; i < content.Length; i++)
         {
             if (!ac.TryGetCharIndex(content[i], out var ci))
+            {
+                state = 0;
+                continue;
+            }
+
+            while (true)
+            {
+                var next = ac.GetGoto(state, ci);
+                if (next != -1)
+                {
+                    state = next;
+                    break;
+                }
+
+                if (state == 0) break;
+                state = ac.GetFail(state);
+            }
+
+            // Check output chain
+            if (ac.GetOutput(state) != -1) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    ///     ASCII-only variant of <see cref="AhoCorasickContainsAny" /> that scans raw bytes
+    ///     directly, avoiding a per-file string allocation. Safe ONLY when every pattern char
+    ///     is ASCII: any byte >= 128 is a UTF-8 lead/continuation byte that no ASCII pattern
+    ///     can match, so it is treated as a non-matching boundary (state reset).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool AhoCorasickContainsAnyAscii(AhoCorasick ac, ReadOnlySpan<byte> bytes)
+    {
+        var state = 0;
+        for (var i = 0; i < bytes.Length; i++)
+        {
+            var b = bytes[i];
+            if (b >= 128 || !ac.TryGetCharIndex((char)b, out var ci))
             {
                 state = 0;
                 continue;

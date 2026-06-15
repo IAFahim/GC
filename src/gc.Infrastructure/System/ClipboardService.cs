@@ -68,7 +68,15 @@ public sealed class ClipboardService : IClipboardService
             }
 
             // Read new content first
-            if (stream.CanSeek) stream.Position = 0;
+            if (stream.CanSeek)
+            {
+                // New content alone exceeding the cap guarantees the combined (existing + new) does too,
+                // so reject before buffering the whole stream into a managed string.
+                if (stream.Length > maxClipboardSize)
+                    return Result.Failure(
+                        $"Content size ({stream.Length} bytes) exceeds maximum clipboard size ({maxClipboardSize} bytes)");
+                stream.Position = 0;
+            }
             string newContent;
             using (var reader = new StreamReader(stream, Utf8NoBom, true, -1, true))
             {
@@ -192,7 +200,8 @@ public sealed class ClipboardService : IClipboardService
         // Prefer PowerShell's Set-Clipboard for UTF-8/UTF-16 safe handling.
         // clip.exe truncates/garbles non-ANSI text (including PUA symbols from brain mode).
         var success = await RunClipboardProcessAsync("powershell.exe",
-            "-Command \"$input | Out-String | Set-Clipboard\"", stream, ct);
+            "-NoProfile -Command \"[Console]::InputEncoding=[System.Text.UTF8Encoding]::new($false); Set-Clipboard -Value ([Console]::In.ReadToEnd())\"",
+            stream, ct);
         if (success) return true;
 
         // Fallback to clip.exe only if PowerShell fails
@@ -232,8 +241,8 @@ public sealed class ClipboardService : IClipboardService
                 FileName = fileName,
                 Arguments = arguments,
                 RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };

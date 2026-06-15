@@ -12,6 +12,12 @@ public static class CliArgumentResolver
     private static readonly string ProfileFile = "profiles.json";
     private static readonly string DirDefaultsFile = "directory_defaults.json";
 
+    private static StringComparer PathComparer =>
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private static string NormalizeDirKey(string directory) =>
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+
     public static string[] SplitArguments(string commandLine)
     {
         var args = new List<string>();
@@ -68,7 +74,13 @@ public static class CliArgumentResolver
         if (originalArgs.Length > 0 && originalArgs[0].Equals("init", StringComparison.OrdinalIgnoreCase))
         {
             var localGcPath = Path.Combine(currentDirectory, ".gc");
-            var content = string.Join(" ", originalArgs.Skip(1).Select(a => a.Contains(' ') ? $"\"{a}\"" : a));
+            static string EscapeArg(string a)
+            {
+                var esc = a.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                var needsQuote = a.Length == 0 || a.AsSpan().IndexOfAny(" \t\"'".AsSpan()) >= 0;
+                return needsQuote ? $"\"{esc}\"" : esc;
+            }
+            var content = string.Join(" ", originalArgs.Skip(1).Select(EscapeArg));
             try
             {
                 await File.WriteAllTextAsync(localGcPath, content);
@@ -132,13 +144,13 @@ public static class CliArgumentResolver
             }
         }
 
-        // Check if saving directory default (flag "-s" or "--save")
+        // Check if saving directory default (flag "--save").
+        // Note: "-s" is the short form of "spit"/--output and must NOT be treated as save.
         var saveDirDefault = false;
         var cleanedArgs = new List<string>();
         foreach (var arg in finalArgs)
         {
-            if (arg.Equals("-s", StringComparison.OrdinalIgnoreCase) ||
-                arg.Equals("--save", StringComparison.OrdinalIgnoreCase))
+            if (arg.Equals("--save", StringComparison.OrdinalIgnoreCase))
             {
                 saveDirDefault = true;
             }
@@ -294,17 +306,17 @@ public static class CliArgumentResolver
         {
             Directory.CreateDirectory(configDir);
             var path = Path.Combine(configDir, DirDefaultsFile);
-            var defaults = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            var defaults = new Dictionary<string, string[]>(PathComparer);
             if (File.Exists(path))
             {
                 var json = await File.ReadAllTextAsync(path);
                 var loaded = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
                 if (loaded != null)
                 {
-                    defaults = new Dictionary<string, string[]>(loaded, StringComparer.OrdinalIgnoreCase);
+                    defaults = new Dictionary<string, string[]>(loaded, PathComparer);
                 }
             }
-            defaults[directory] = args;
+            defaults[NormalizeDirKey(directory)] = args;
             var newJson = JsonSerializer.Serialize(defaults, new JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(path, newJson);
             return true;
@@ -323,10 +335,14 @@ public static class CliArgumentResolver
         try
         {
             var json = await File.ReadAllTextAsync(path);
-            var defaults = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
-            if (defaults != null && defaults.TryGetValue(directory, out var args))
+            var loaded = JsonSerializer.Deserialize<Dictionary<string, string[]>>(json);
+            if (loaded != null)
             {
-                return args;
+                var defaults = new Dictionary<string, string[]>(loaded, PathComparer);
+                if (defaults.TryGetValue(NormalizeDirKey(directory), out var args))
+                {
+                    return args;
+                }
             }
         }
         catch (Exception ex)

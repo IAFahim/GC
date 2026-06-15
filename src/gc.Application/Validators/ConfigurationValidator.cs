@@ -37,21 +37,27 @@ public sealed class ConfigurationValidator
             return;
         }
 
-        if (!ValidateMemorySize(limits.MaxFileSize))
+        // A null value means "omitted" -> the concrete default from BuiltInPresets applies, so it is
+        // valid. Only validate values the user actually provided.
+        if (limits.MaxFileSize != null && !ValidateMemorySize(limits.MaxFileSize))
             errors.Add($"Invalid MaxFileSize format: '{limits.MaxFileSize}'. Expected format: 100MB, 1GB, etc.");
 
-        if (!ValidateMemorySize(limits.MaxClipboardSize))
+        if (limits.MaxClipboardSize != null && !ValidateMemorySize(limits.MaxClipboardSize))
             errors.Add(
                 $"Invalid MaxClipboardSize format: '{limits.MaxClipboardSize}'. Expected format: 100MB, 1GB, etc.");
 
-        if (gc.Domain.Common.MemorySizeParser.TryParse(limits.MaxMemoryBytes, out var memBytes))
+        if (limits.MaxMemoryBytes != null)
         {
-            if (memBytes > 107374182400L) // 100 GB limit
-                errors.Add($"MaxMemoryBytes exceeds the 100 GB limit: '{limits.MaxMemoryBytes}'. Max allowed is 100GB.");
-        }
-        else
-        {
-            errors.Add($"Invalid MaxMemoryBytes format: '{limits.MaxMemoryBytes}'. Expected format: 100MB, 1GB, etc.");
+            if (gc.Domain.Common.MemorySizeParser.TryParse(limits.MaxMemoryBytes, out var memBytes))
+            {
+                if (memBytes > 107374182400L) // 100 GB limit
+                    errors.Add(
+                        $"MaxMemoryBytes exceeds the 100 GB limit: '{limits.MaxMemoryBytes}'. Max allowed is 100GB.");
+            }
+            else
+            {
+                errors.Add($"Invalid MaxMemoryBytes format: '{limits.MaxMemoryBytes}'. Expected format: 100MB, 1GB, etc.");
+            }
         }
 
         if (limits.MaxFiles < 1)
@@ -139,17 +145,18 @@ public sealed class ConfigurationValidator
 
     private static void ValidatePresetExtensions(string presetName, string[] extensions, List<string> warnings)
     {
+        // Single pass: emit one warning per duplicate key (case-insensitive), in
+        // first-occurrence order, without allocating LINQ's Lookup/grouping objects.
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var warned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var ext in extensions)
+        {
             if (string.IsNullOrWhiteSpace(ext))
                 warnings.Add($"Preset '{presetName}' contains empty extension");
 
-        var duplicates = extensions
-            .GroupBy(e => e, StringComparer.OrdinalIgnoreCase)
-            .Where(g => g.Count() > 1)
-            .Select(g => g.Key);
-
-        foreach (var duplicate in duplicates)
-            warnings.Add($"Preset '{presetName}' contains duplicate extension: '{duplicate}'");
+            if (!seen.Add(ext) && warned.Add(ext))
+                warnings.Add($"Preset '{presetName}' contains duplicate extension: '{ext}'");
+        }
     }
 
     private static void ValidateLanguageMappings(IReadOnlyDictionary<string, string>? mappings, List<string> errors,
@@ -179,7 +186,8 @@ public sealed class ConfigurationValidator
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(markdown.Fence))
+        // null Fence == omitted -> default applies (valid). Only an explicitly blank fence is invalid.
+        if (markdown.Fence != null && string.IsNullOrWhiteSpace(markdown.Fence))
             errors.Add("Markdown fence cannot be empty");
 
         if (markdown.ProjectStructureHeader != null && markdown.ProjectStructureHeader.Length > 200)

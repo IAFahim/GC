@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using gc.Domain.Models.Configuration;
@@ -71,7 +72,7 @@ public sealed class ProfileReporter
         {
             var (name, ticks) = _stages[i];
             var ms = (double)ticks * 1000 / Stopwatch.Frequency;
-            sb.AppendLine($"| {name} | {ms:F1}ms |");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"| {name} | {ms:F1}ms |");
         }
 
         sb.AppendLine($"| **Total** | {_totalSw.ElapsedMilliseconds}ms |");

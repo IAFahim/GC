@@ -558,8 +558,8 @@ public class LoaderTests
 
             Assert.True(result.IsSuccess);
             var filters = result.Value!.Filters;
-            Assert.Equal(["*.log", "tmp/"], filters.SystemIgnoredPatterns);
-            Assert.Equal(["xyz", "qrs"], filters.AdditionalExtensions);
+            Assert.Equal(["*.log", "tmp/"], filters.SystemIgnoredPatterns!);
+            Assert.Equal(["xyz", "qrs"], filters.AdditionalExtensions!);
         }
         finally
         {
@@ -681,8 +681,8 @@ public class LoaderTests
             Assert.False(c.Discovery.Cluster.FailFast);
 
             // Filters
-            Assert.Equal(["dist/", "build/"], c.Filters.SystemIgnoredPatterns);
-            Assert.Equal(["txt", "cfg"], c.Filters.AdditionalExtensions);
+            Assert.Equal(["dist/", "build/"], c.Filters.SystemIgnoredPatterns!);
+            Assert.Equal(["txt", "cfg"], c.Filters.AdditionalExtensions!);
 
             // Presets
             Assert.True(c.Presets.ContainsKey("my-preset"));
@@ -919,5 +919,113 @@ public class LoaderTests
         {
             File.Delete(tempFile);
         }
+    }
+
+    // ---------------------------------------------------------------
+    // Regression: partial config (every section omitted) through the
+    // FULL LoadConfigAsync -> Merge path must NOT throw (was NRE on
+    // startup) and must produce a fully-populated config.
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public async Task LoadConfigAsync_PartialProjectConfig_DoesNotThrow_AndKeepsDefaults()
+    {
+        // A project config containing ONLY a version - every top-level section omitted.
+        var json = """{ "version": "2.0.0" }""";
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), "gc_regr_" + Guid.NewGuid().ToString("N"));
+        var gcDir = Path.Combine(tempRoot, ".gc");
+        Directory.CreateDirectory(gcDir);
+        File.WriteAllText(Path.Combine(gcDir, "config.json"), json);
+
+        var originalCwd = Directory.GetCurrentDirectory();
+        try
+        {
+            Directory.SetCurrentDirectory(tempRoot);
+            var loader = CreateLoader();
+
+            // Before the fix this threw NullReferenceException inside ConfigurationMerger.Merge.
+            var result = await loader.LoadConfigAsync();
+
+            Assert.True(result.IsSuccess);
+            var config = result.Value!;
+
+            // Provided value wins.
+            Assert.Equal("2.0.0", config.Version);
+
+            // Omitted sections fall back to the fully-populated base layer (BuiltInPresets defaults).
+            Assert.NotNull(config.Limits);
+            Assert.Equal("1MB", config.Limits.MaxFileSize);
+            Assert.Equal("10MB", config.Limits.MaxClipboardSize);
+            Assert.Equal("100MB", config.Limits.MaxMemoryBytes);
+            Assert.NotNull(config.Discovery);
+            Assert.NotNull(config.Filters);
+            Assert.NotNull(config.Filters.SystemIgnoredPatterns);
+            Assert.NotEmpty(config.Filters.SystemIgnoredPatterns!);
+            Assert.NotNull(config.Markdown);
+            Assert.Equal("```", config.Markdown.Fence);
+            Assert.NotNull(config.Output);
+            Assert.Equal("markdown", config.Output.DefaultFormat);
+            Assert.NotNull(config.Logging);
+            Assert.Equal("normal", config.Logging.Level);
+            Assert.NotEmpty(config.Presets);
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalCwd);
+            try { Directory.Delete(tempRoot, true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Merge_PartialSourceWithNullSections_DoesNotThrow_AndPreservesTarget()
+    {
+        var baseConfig = gc.Domain.Constants.BuiltInPresets.GetDefaultConfiguration();
+
+        // Simulates source-gen deserialization of {"version":"2.0.0"}: only Version set, all
+        // section references null (object initializers would run record defaults, so null them out
+        // explicitly to match what System.Text.Json source-gen actually produces).
+        var partial = new GcConfiguration
+        {
+            Version = "2.0.0",
+            Limits = null!,
+            Discovery = null!,
+            Filters = null!,
+            Markdown = null!,
+            Output = null!,
+            Logging = null!,
+            Presets = null!,
+            LanguageMappings = null!
+        };
+
+        var merged = ConfigurationMerger.Merge(baseConfig, partial);
+
+        Assert.Equal("2.0.0", merged.Version);
+        Assert.Same(baseConfig.Limits, merged.Limits);
+        Assert.Same(baseConfig.Discovery, merged.Discovery);
+        Assert.Same(baseConfig.Filters, merged.Filters);
+        Assert.Same(baseConfig.Markdown, merged.Markdown);
+        Assert.Same(baseConfig.Output, merged.Output);
+        Assert.Same(baseConfig.Logging, merged.Logging);
+        Assert.Same(baseConfig.Presets, merged.Presets);
+        Assert.Same(baseConfig.LanguageMappings, merged.LanguageMappings);
+    }
+
+    [Fact]
+    public void Merge_LowerLayerSetsLimit_HigherLayerOmits_PreservesLowerLayer()
+    {
+        // Lower (target) layer explicitly sets a non-default MaxFileSize.
+        var target = gc.Domain.Constants.BuiltInPresets.GetDefaultConfiguration() with
+        {
+            Limits = new LimitsConfiguration { MaxFileSize = "5MB" }
+        };
+
+        // Higher (source) layer provides a Limits section but omits maxFileSize (null).
+        var source = new GcConfiguration { Limits = new LimitsConfiguration { MaxFiles = 7 } };
+
+        var merged = ConfigurationMerger.Merge(target, source);
+
+        Assert.Equal("5MB", merged.Limits.MaxFileSize); // not wiped by the higher layer's omission
+        Assert.Equal(7, merged.Limits.MaxFiles);
     }
 }

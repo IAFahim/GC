@@ -2,7 +2,7 @@ using System;
 
 namespace gc.Domain.Common;
 
-public sealed record Result
+public readonly record struct Result
 {
     private Result(string? error)
     {
@@ -50,7 +50,7 @@ public sealed record Result
     }
 }
 
-public sealed record Result<T>
+public readonly record struct Result<T>
 {
     private readonly T? _value;
 

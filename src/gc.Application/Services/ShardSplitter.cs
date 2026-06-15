@@ -37,6 +37,7 @@ public sealed class ShardSplitter
         // Sort groups largest-first (greedy fits large groups before small ones)
         var sortedGroups = groups
             .OrderByDescending(g => g.Value.Sum(e => e.Size))
+            .ThenBy(g => g.Key, StringComparer.Ordinal)
             .ToList();
 
         // A group is kept whole if it doesn't exceed 1.5× the average shard budget.
@@ -102,15 +103,15 @@ public sealed class ShardSplitter
             var path = entry.RelativePath;
             string key;
 
-            var firstSep = path.IndexOfAny(['/', '\\']);
-            if (firstSep < 0)
+            var span = path.AsSpan();
+            var firstSep = span.IndexOfAny('/', '\\');
+            if (firstSep < 0 || span[..firstSep].SequenceEqual("."))
             {
                 key = "_root";
             }
             else
             {
-                key = path[..firstSep].ToLowerInvariant();
-                if (key == ".") key = "_root";
+                key = path[..firstSep];
             }
 
             if (!groups.TryGetValue(key, out var list))

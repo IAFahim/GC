@@ -4,23 +4,25 @@ namespace gc.Domain.Models.Configuration;
 
 public sealed record LimitsConfiguration
 {
-    public string MaxFileSize { get; init; } = "1MB";
-    public string MaxClipboardSize { get; init; } = "10MB";
-    public string MaxMemoryBytes { get; init; } = "100MB";
+    // Nullable so JSON omission yields null and the merge `source.X ?? target.X` preserves the
+    // lower layer. Concrete defaults live in BuiltInPresets.GetDefaultConfiguration() (base layer).
+    public string? MaxFileSize { get; init; }
+    public string? MaxClipboardSize { get; init; }
+    public string? MaxMemoryBytes { get; init; }
     public int MaxFiles { get; init; } = 100000;
 
     public long GetMaxFileSizeBytes()
     {
-        return MemorySizeParser.Parse(MaxFileSize);
+        return MemorySizeParser.Parse(MaxFileSize ?? "1MB");
     }
 
     public long GetMaxClipboardSizeBytes()
     {
-        return MemorySizeParser.Parse(MaxClipboardSize);
+        return MemorySizeParser.Parse(MaxClipboardSize ?? "10MB");
     }
 
     public long GetMaxMemoryBytesValue()
     {
-        return MemorySizeParser.Parse(MaxMemoryBytes);
+        return MemorySizeParser.Parse(MaxMemoryBytes ?? "100MB");
     }
 }

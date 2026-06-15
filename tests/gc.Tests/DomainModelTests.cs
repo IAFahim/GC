@@ -326,7 +326,8 @@ public class DomainModelTests
     public void GcConfiguration_Defaults()
     {
         var cfg = new GcConfiguration();
-        Assert.Equal("1.0.0", cfg.Version);
+        // Version defaults to null on a bare record; the concrete default lives in BuiltInPresets.
+        Assert.Null(cfg.Version);
         Assert.NotNull(cfg.Limits);
         Assert.NotNull(cfg.Discovery);
         Assert.NotNull(cfg.Filters);
@@ -341,11 +342,13 @@ public class DomainModelTests
     public void LimitsConfiguration_Defaults()
     {
         var cfg = new LimitsConfiguration();
-        Assert.Equal("1MB", cfg.MaxFileSize);
-        Assert.Equal("10MB", cfg.MaxClipboardSize);
-        Assert.Equal("100MB", cfg.MaxMemoryBytes);
+        // Omittable string limits default to null so layered-config merge can distinguish
+        // "omitted" from "explicitly set"; concrete defaults live in BuiltInPresets.
+        Assert.Null(cfg.MaxFileSize);
+        Assert.Null(cfg.MaxClipboardSize);
+        Assert.Null(cfg.MaxMemoryBytes);
         Assert.Equal(100000, cfg.MaxFiles);
-        // Verify the Get* methods work
+        // Get* methods fall back to the concrete defaults when the string is null.
         Assert.Equal(1048576, cfg.GetMaxFileSizeBytes());
         Assert.Equal(10 * 1048576, cfg.GetMaxClipboardSizeBytes());
         Assert.Equal(100L * 1048576, cfg.GetMaxMemoryBytesValue());
@@ -355,25 +358,27 @@ public class DomainModelTests
     public void FiltersConfiguration_Defaults()
     {
         var cfg = new FiltersConfiguration();
-        Assert.Empty(cfg.SystemIgnoredPatterns);
-        Assert.Empty(cfg.AdditionalExtensions);
+        // Arrays default to null (not []) so JSON omission preserves lower config layers in the merge.
+        Assert.Null(cfg.SystemIgnoredPatterns);
+        Assert.Null(cfg.AdditionalExtensions);
     }
 
     [Fact]
     public void MarkdownConfiguration_Defaults()
     {
         var cfg = new MarkdownConfiguration();
-        Assert.Equal("```", cfg.Fence);
-        Assert.Equal("_Project Structure:_ ", cfg.ProjectStructureHeader);
-        Assert.Equal("## File: {path}", cfg.FileHeaderTemplate);
-        Assert.Equal("extension", cfg.LanguageDetection);
+        // Omittable strings default to null; concrete defaults live in BuiltInPresets.
+        Assert.Null(cfg.Fence);
+        Assert.Null(cfg.ProjectStructureHeader);
+        Assert.Null(cfg.FileHeaderTemplate);
+        Assert.Null(cfg.LanguageDetection);
     }
 
     [Fact]
     public void OutputConfiguration_Defaults()
     {
         var cfg = new OutputConfiguration();
-        Assert.Equal("markdown", cfg.DefaultFormat);
+        Assert.Null(cfg.DefaultFormat);
         Assert.Null(cfg.IncludeStats);
         Assert.Null(cfg.SortByPath);
     }
@@ -382,7 +387,7 @@ public class DomainModelTests
     public void LoggingConfiguration_Defaults()
     {
         var cfg = new LoggingConfiguration();
-        Assert.Equal("normal", cfg.Level);
+        Assert.Null(cfg.Level);
         Assert.Null(cfg.IncludeTimestamps);
     }
 
@@ -436,7 +441,7 @@ public class DomainModelTests
         Assert.Equal("2.0.0", deserialized.Version);
         Assert.Equal("5MB", deserialized.Limits.MaxFileSize);
         Assert.Equal("git", deserialized.Discovery.Mode);
-        Assert.Contains("razor", deserialized.Filters.AdditionalExtensions);
+        Assert.Contains("razor", deserialized.Filters.AdditionalExtensions!);
         Assert.Equal("~~", deserialized.Markdown.Fence);
         Assert.False(deserialized.Output.IncludeStats);
         Assert.Equal("debug", deserialized.Logging.Level);

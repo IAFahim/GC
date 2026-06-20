@@ -90,6 +90,17 @@ public static class Program
             return 0;
         }
 
+        if (cliArgs.PrintCompletion != null)
+            return CompletionInstaller.Print(logger, cliArgs.PrintCompletion);
+
+        if (cliArgs.InstallCompletion != null)
+        {
+            // `--install-completion` is a bare flag, so an explicit shell (e.g. `gc --install-completion zsh`)
+            // lands in Paths. Prefer it when present; otherwise CompletionInstaller auto-detects from $SHELL.
+            var shell = cliArgs.Paths.Length == 1 ? cliArgs.Paths[0] : null;
+            return CompletionInstaller.Install(logger, shell);
+        }
+
         if (cliArgs.RunTests)
         {
             TestRunner.RunTests();
@@ -528,6 +539,10 @@ CONFIGURATION:
     --dump-config                    Show configuration
     --export-schema <file>           Export configuration JSON schema to file
 
+SHELL COMPLETION:
+    --install-completion             Install tab-completion for your shell (auto-detects bash/zsh/fish)
+    --print-completion <shell>       Print the completion script to stdout (bash|zsh|fish)
+
 OTHER:
     --history [N]                    Show run history (optionally re-run entry N)
     -v, --verbose                    Enable verbose logging
@@ -540,7 +555,7 @@ OTHER:
 
     private static void PrintVersion()
     {
-        Console.WriteLine("gc version 1.1.0");
+        Console.WriteLine("gc version 1.2.0");
         Console.WriteLine("Git Copy (Elite C# Edition) with Cluster Mode and Shard Mode");
     }
 }

@@ -25,12 +25,23 @@ curl -sSL https://raw.githubusercontent.com/IAFahim/gc/main/install.sh | bash
 powershell -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/IAFahim/gc/main/install.ps1 | iex"
 ```
 
+Both install scripts also set up shell tab-completion automatically. To do it
+by hand later:
+
+```bash
+gc --install-completion          # auto-detects bash / zsh / fish
+```
+
 ### Nautilus Integration (GNOME)
 
 ```bash
+git submodule update --init integration/nautilus
 chmod +x integration/nautilus/setup.sh
 ./integration/nautilus/setup.sh
 ```
+
+> See [docs/installation.md](docs/installation.md) for build-from-source,
+> manual completion setup, all integrations, and uninstall instructions.
 
 ## Quick Start
 
@@ -147,15 +158,25 @@ This header is automatically prepended to all compressed output so LLMs respond 
 | `--preset` | - | Use predefined configurations (`dotnet`, `web`, `python`, etc.) |
 | `-d, --depth` | - | Maximum directory depth |
 | `-f, --force` | - | Force filesystem discovery (ignore git) |
+| `--exclude-path` | - | Exclude paths matching a glob pattern |
+| `--include-path` | - | Include only paths matching a glob pattern |
+| `--exclude-content` | - | Exclude files containing a keyword |
+| `--include-content` | - | Include only files containing a keyword |
+| `--changed-since` | - | Only include files changed since a git ref |
+| `--explain-filter` | - | Explain why a given file is included or excluded |
 
 ### Output
 
 | Option | Keyword | Description |
 |---|---|---|
 | `-o, --output` | `spit` | Write to a file instead of clipboard |
+| `--no-clipboard` | - | Don't copy output to the clipboard |
 | `--append` | - | Append to existing clipboard/file content |
 | `--no-append` | - | Don't append (default) |
 | `--no-sort` | - | Disable alphabetical sorting of files |
+| `--dry-run`, `--list` | - | Preview which files would be included, no output generated |
+| `--count`, `--tokens-only` | - | Show a token-count estimate without generating output |
+| `--stats` | - | Print detailed execution statistics |
 | `-v, --verbose` | - | Enable verbose logging |
 | `--debug` | - | Enable debug logging |
 
@@ -184,6 +205,13 @@ This header is automatically prepended to all compressed output so LLMs respond 
 | `--validate-config` | Check your config for errors |
 | `--dump-config` | Print the current active configuration |
 | `--max-memory` | Limit output size (e.g., `100MB`, `500KB`) |
+
+### Shell Completion
+
+| Option | Description |
+|---|---|
+| `--install-completion` | Install tab-completion for your shell (auto-detects bash/zsh/fish) |
+| `--print-completion <shell>` | Print the completion script to stdout (`bash`, `zsh`, or `fish`) |
 
 ## Cluster Mode
 

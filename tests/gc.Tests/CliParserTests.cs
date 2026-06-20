@@ -178,4 +178,56 @@ public class CliParserTests
         Assert.False(result.Value!.Compress);
         Assert.False(result.Value!.NoCache);
     }
+
+    [Fact]
+    public void Parse_InstallCompletion_SetsAutoSentinel()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+
+        var result = parser.Parse(["--install-completion"], config);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("", result.Value!.InstallCompletion); // "" = auto-detect
+        Assert.Null(result.Value!.PrintCompletion);
+    }
+
+    [Fact]
+    public void Parse_InstallCompletion_NotRequestedByDefault()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+
+        var result = parser.Parse([], config);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value!.InstallCompletion);
+    }
+
+    [Fact]
+    public void Parse_InstallCompletion_ExplicitShell_LandsInPaths()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+
+        // `--install-completion` is a bare flag, so an explicit shell is captured as a path
+        // and resolved by Program. Verify both pieces are present.
+        var result = parser.Parse(["--install-completion", "zsh"], config);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("", result.Value!.InstallCompletion);
+        Assert.Equal(["zsh"], result.Value!.Paths);
+    }
+
+    [Fact]
+    public void Parse_PrintCompletion_CapturesShell()
+    {
+        var parser = new CliParser();
+        var config = BuiltInPresets.GetDefaultConfiguration();
+
+        var result = parser.Parse(["--print-completion", "bash"], config);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("bash", result.Value!.PrintCompletion);
+    }
 }

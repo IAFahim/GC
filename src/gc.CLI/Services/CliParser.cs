@@ -72,6 +72,8 @@ public sealed class CliParser
             a.ProfileOutput = v;
         }),
         new(["--unsafe-direct-write"], OptionKind.Flag, (a, _) => a.UnsafeDirectWrite = true),
+        // Install shell completion (auto-detects $SHELL). "" is the auto sentinel; null = not requested.
+        new(["--install-completion"], OptionKind.Flag, (a, _) => a.InstallCompletion = ""),
         new(["--stats"], OptionKind.Flag, (a, _) => a.ShowStats = true),
         new(["--json-stats"], OptionKind.SingleValue, (a, v) =>
         {
@@ -101,6 +103,8 @@ public sealed class CliParser
         new(["--changed-since"], OptionKind.SingleValue, (a, v) => a.ChangedSince = v),
         new(["--export-schema"], OptionKind.SingleValue, (a, v) => a.ExportSchema = v),
         new(["--explain-filter"], OptionKind.SingleValue, (a, v) => a.ExplainFilter = v),
+        // Print a shell completion script to stdout, e.g. `source <(gc --print-completion bash)`.
+        new(["--print-completion"], OptionKind.SingleValue, (a, v) => a.PrintCompletion = v),
         new(["--shard"], OptionKind.SingleValue, (a, v) =>
         {
             if (v != null) a.ShardInfo = ShardInfo.TryParse(v);

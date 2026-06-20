@@ -21,4 +21,18 @@
     <ProjectReference Include="..\gc.Infrastructure\gc.Infrastructure.csproj" />
   </ItemGroup>
 
+  <!-- Shell completion scripts shipped inside the binary so the install-completion
+       command works from a standalone download with no extra files. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\completions\gc.bash">
+      <LogicalName>gc.completion.bash</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\completions\gc.zsh">
+      <LogicalName>gc.completion.zsh</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\..\completions\gc.fish">
+      <LogicalName>gc.completion.fish</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

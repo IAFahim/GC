@@ -33,6 +33,11 @@ chmod +x "$INSTALL_DIR/gc"
 
 echo -e "${GREEN}Successfully installed locally built gc to $INSTALL_DIR/gc${NC}"
 
+# Install shell completions (best-effort — the binary ships them embedded).
+echo -e "${GREEN}Installing shell completions...${NC}"
+"$INSTALL_DIR/gc" --install-completion || \
+    echo -e "${YELLOW}Note: run 'gc --install-completion' later to set up tab-completion.${NC}"
+
 # Check if installation directory is in PATH
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     echo -e "${YELLOW}Warning: $INSTALL_DIR is not in your PATH.${NC}"

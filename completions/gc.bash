@@ -12,9 +12,11 @@ _gc_completion() {
 		"-f" "--force" "--no-sort"
 		"-b" "--brain" "-c" "--compress" "--no-cache"
 		"--cluster" "--dry-run" "--list" "--count" "--tokens-only"
-		"--init-config" "--validate-config" "--dump-config"
-		"--history"
+		"--init-config" "--validate-config" "--dump-config" "--list-profiles"
+		"--history" "--no-clipboard"
 		"--no-append" "--append"
+		"--stats" "--profile-timing" "--unsafe-direct-write"
+		"--install-completion"
 		"--test" "--benchmark"
 	)
 
@@ -30,6 +32,9 @@ _gc_completion() {
 		"--cluster-dir" "--cluster-depth"
 		"--exclude-path" "--include-path"
 		"--exclude-content" "--include-content"
+		"--changed-since" "--explain-filter" "--shard"
+		"--export-schema" "--profile-json" "--json-stats"
+		"--print-completion"
 	)
 
 	local keywords=("grab" "type" "yeet" "zap" "spit" "brain" "compress" "horde")
@@ -62,6 +67,9 @@ _gc_completion() {
 			;;
 		--preset | --presets)
 			COMPREPLY=($(compgen -W "dotnet web python rust go java ruby php minimal" -- "$cur"))
+			;;
+		--print-completion)
+			COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur"))
 			;;
 		--cluster-dir)
 			COMPREPLY=($(compgen -d -- "$cur"))

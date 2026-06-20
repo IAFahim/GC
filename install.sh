@@ -199,8 +199,17 @@ else
     exit 1
 fi
 
+# Install shell completions (best-effort — the binary ships them embedded).
+echo -e "${GREEN}[7/8]${NC} Installing shell completions..."
+if "$INSTALL_DIR/gc" --install-completion; then
+    : # completion installer prints its own success/follow-up notes
+else
+    echo -e "${YELLOW}Note: Could not auto-install shell completions. Run 'gc --install-completion' later, or"
+    echo -e "      'gc --print-completion <bash|zsh|fish>' to set them up manually.${NC}"
+fi
+
 # Check if installation directory is in PATH
-echo -e "${GREEN}[7/7]${NC} Verifying installation..."
+echo -e "${GREEN}[8/8]${NC} Verifying installation..."
 
 if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     cat << 'EOF'
@@ -252,6 +261,11 @@ FEATURES:
     • Git-aware file discovery
     • Compact mode for token optimization
     • Append mode for incremental updates
+    • Shell tab-completion (bash/zsh/fish) — installed automatically
+
+SHELL COMPLETION:
+    Already set up above. Open a new shell to activate it.
+    Re-run manually any time:  gc --install-completion
 
 DOCUMENTATION:
     GitHub: https://github.com/IAFahim/gc

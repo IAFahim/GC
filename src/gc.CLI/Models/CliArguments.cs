@@ -76,4 +76,10 @@ public sealed class CliArguments
     public string? ShardError { get; set; }
 
     public string? MaxMemoryError { get; set; }
+
+    /// <summary>Set when the user requests completion install. Value is the optional shell name (bash|zsh|fish), or "" to auto-detect.</summary>
+    public string? InstallCompletion { get; set; }
+
+    /// <summary>Set when the user requests the raw completion script printed to stdout. Value is the shell name.</summary>
+    public string? PrintCompletion { get; set; }
 }

@@ -23,9 +23,15 @@ _gc() {
         '--init-config[Initialize config]'
         '--validate-config[Validate config]'
         '--dump-config[Show config]'
+        '--list-profiles[List saved profiles]'
         '--history[Show history]'
+        '--no-clipboard[Disable clipboard copy]'
         '--no-append[Do not append]'
         '--append[Append to clipboard]'
+        '--stats[Show execution statistics]'
+        '--profile-timing[Print stage timing profile]'
+        '--unsafe-direct-write[Disable transactional writes]'
+        '--install-completion[Install shell tab-completion]'
         '--test[Run tests]'
         '--benchmark[Run benchmark]'
     )
@@ -55,6 +61,13 @@ _gc() {
         '--include-path[Include path pattern]:pattern:'
         '--exclude-content[Exclude content keyword]:keyword:'
         '--include-content[Include content keyword]:keyword:'
+        '--changed-since[Only files changed since git ref]:ref:'
+        '--explain-filter[Explain include/exclude for a file]:file:_files'
+        '--shard[Process shard N of M]:shard:'
+        '--export-schema[Export config JSON schema]:file:_files'
+        '--profile-json[Write profile JSON]:file:_files'
+        '--json-stats[Write stats JSON]:file:_files'
+        '--print-completion[Print completion script]:shell:(bash zsh fish)'
     )
 
     _arguments -C \

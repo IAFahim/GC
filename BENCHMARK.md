@@ -2,10 +2,22 @@
 
 Measured on the published NativeAOT binary (the shipped artifact), best of 5 warm runs:
 
+## This repository (small workload)
+
 | Metric | Value |
 |--------|-------|
 | Discovery Time | 2 ms |
-| File Read Time | 6 ms |
-| Total Time | 8 ms |
+| File Read Time | 4 ms |
+| Total Time | 6 ms |
 
-*Last updated: 2026-06-21 22:18:20 UTC*
+## Synthetic large workload (~1,500 files incl. large files)
+
+Exercises the parallel read + generate pipeline at scale.
+
+| Metric | Value |
+|--------|-------|
+| Files | 1,505 |
+| Read Time | 17 ms |
+| Throughput | 296.45 MB/s |
+
+*Last updated: 2026-06-21 22:53:02 UTC*

@@ -478,35 +478,13 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         offset += toWrite;
                                         remaining -= toWrite;
                                     }
-                                    var decoder = Utf8NoBom.GetDecoder();
-                                    var byteRemaining = (int)contentBytesWritten;
-                                    var byteOffset = 0;
-                                    const int decodeChunk = 65536;
-                                    var charBuf = ArrayPool<char>.Shared.Rent(decodeChunk + 8);
-                                    // Streaming estimator carries the partial word across decode chunks so an
-                                    // identifier split by a 64KB boundary is not counted twice.
-                                    var streamingEstimator = new TokenEstimator.StreamingTokenEstimator();
-                                    try
-                                    {
-                                        while (byteRemaining > 0)
-                                        {
-                                            var byteCount = Math.Min(byteRemaining, decodeChunk);
-                                            var flush = byteCount == byteRemaining;
-                                            var charsDecoded = decoder.GetChars(
-                                                contentBuffer.AsSpan(byteOffset, byteCount),
-                                                charBuf.AsSpan(),
-                                                flush);
-                                            streamingEstimator.Append(charBuf.AsSpan(0, charsDecoded));
-                                            byteOffset += byteCount;
-                                            byteRemaining -= byteCount;
-                                        }
-                                        streamingEstimator.Flush();
-                                        estimatedTokensAccumulator += streamingEstimator.Tokens;
-                                    }
-                                    finally
-                                    {
-                                        ArrayPool<char>.Shared.Return(charBuf);
-                                    }
+
+                                    // Estimate tokens straight from the UTF-8 bytes — no UTF-16 decode and no
+                                    // char buffer. Byte-identical to decoding then estimating (proven by the
+                                    // differential fuzz suite in TokenEstimatorUtf8Tests); over a contiguous
+                                    // span there are no chunk boundaries, so no carry is needed.
+                                    estimatedTokensAccumulator += TokenEstimator.EstimateTokensUtf8(
+                                        contentBuffer.AsSpan(0, (int)contentBytesWritten));
                                 }
 
                                 if (needsTrailingNewline) WriteStringLine(writer, "");

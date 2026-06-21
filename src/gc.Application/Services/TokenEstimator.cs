@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace gc.Application.Services;
 
@@ -135,6 +137,140 @@ public static class TokenEstimator
     public static int EstimateTokens(string text)
     {
         return string.IsNullOrEmpty(text) ? 0 : EstimateTokens(text.AsSpan());
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static byte ClassifyAsciiByte(byte b)
+    {
+        // Caller guarantees b < 128; Class.Length == 128, so the access is always in range.
+        return Unsafe.Add(ref MemoryMarshal.GetReference(Class), b);
+    }
+
+    /// <summary>
+    ///     Estimates LLM tokens DIRECTLY over UTF-8 bytes, producing a result byte-identical to
+    ///     <see cref="EstimateTokens(ReadOnlySpan{char})"/> applied to the decoded text — but with no
+    ///     UTF-16 decode and no intermediate char buffer. ASCII bytes (&lt; 0x80) classify exactly as
+    ///     their char value would; a fresh non-ASCII run is scored by the UTF-16 code-unit count the
+    ///     .NET decoder would emit (via <see cref="Rune.DecodeFromUtf8"/>, which uses the same
+    ///     maximal-subpart U+FFFD substitution as UTF8Encoding), and a non-ASCII char absorbed inside
+    ///     an ASCII word contributes no token and resets the CamelCase predecessor class to None —
+    ///     mirroring the char path where Classify of a non-ASCII char is 0.
+    /// </summary>
+    public static int EstimateTokensUtf8(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.IsEmpty) return 0;
+
+        var tokens = 0;
+        var i = 0;
+        var n = bytes.Length;
+
+        while (i < n)
+        {
+            var c = bytes[i];
+
+            if (c < 0x80)
+            {
+                var k = ClassifyAsciiByte(c);
+
+                if ((k & (byte)CharClass.Whitespace) != 0)
+                {
+                    i++;
+                    continue;
+                }
+
+                if ((k & (byte)CharClass.Punct) != 0)
+                {
+                    tokens++;
+                    i++;
+                    continue;
+                }
+
+                // ASCII alphanumeric word: mirror the EstimateTokens(char) inner state machine
+                // exactly, tracking the predecessor class explicitly (== Classify(text[i-1])).
+                tokens++;
+                i++;
+                var prevClass = k;
+
+                while (i < n)
+                {
+                    var cur = bytes[i];
+
+                    if (cur < 0x80)
+                    {
+                        var ck = ClassifyAsciiByte(cur);
+
+                        if ((ck & (byte)(CharClass.Whitespace | CharClass.Punct)) != 0)
+                            break;
+
+                        if (cur == (byte)'_')
+                        {
+                            i++;
+                            prevClass = ck; // Class['_'] == 0, matching Classify('_')
+                            continue;
+                        }
+
+                        const byte upper = (byte)CharClass.Upper;
+                        const byte alpha = (byte)(CharClass.Upper | CharClass.Lower);
+                        const byte digit = (byte)CharClass.Digit;
+
+                        var currentUpper = (ck & upper) != 0;
+                        var prevUpper = (prevClass & upper) != 0;
+
+                        if (currentUpper && !prevUpper)
+                        {
+                            tokens++;
+                            i++;
+                            prevClass = ck;
+                            continue;
+                        }
+
+                        if (currentUpper && prevUpper && i + 1 < n && bytes[i + 1] < 0x80 &&
+                            (ClassifyAsciiByte(bytes[i + 1]) & (byte)CharClass.Lower) != 0)
+                        {
+                            tokens++;
+                            i++;
+                            prevClass = ck;
+                            continue;
+                        }
+
+                        if (((ck & alpha) != 0 && (prevClass & digit) != 0) ||
+                            ((ck & digit) != 0 && (prevClass & alpha) != 0))
+                        {
+                            tokens++;
+                            i++;
+                            prevClass = ck;
+                            continue;
+                        }
+
+                        i++;
+                        prevClass = ck;
+                        continue;
+                    }
+
+                    // Non-ASCII char absorbed mid-word: no token, predecessor class becomes None,
+                    // and the whole UTF-8 sequence (or maximal invalid subpart) is consumed.
+                    Rune.DecodeFromUtf8(bytes[i..], out _, out var midConsumed);
+                    i += midConsumed;
+                    prevClass = 0;
+                }
+
+                continue;
+            }
+
+            // Fresh non-ASCII run at a token boundary: sum the UTF-16 code units the decoder would
+            // emit, then approximate BPE granularity as ceil(units / 1.5) — identical to the char path.
+            var units = 0;
+            while (i < n && bytes[i] >= 0x80)
+            {
+                var status = Rune.DecodeFromUtf8(bytes[i..], out var rune, out var consumed);
+                units += status == OperationStatus.Done ? rune.Utf16SequenceLength : 1; // invalid -> one U+FFFD
+                i += consumed;
+            }
+
+            tokens += (units * 2 + 2) / 3;
+        }
+
+        return tokens;
     }
 
     /// <summary>

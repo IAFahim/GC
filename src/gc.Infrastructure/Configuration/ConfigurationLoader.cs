@@ -120,28 +120,31 @@ public sealed class ConfigurationLoader
 
     public async Task<Result<GcConfiguration>> LoadConfigFromFileAsync(string filePath)
     {
-        if (!File.Exists(filePath))
-            return Result<GcConfiguration>.Failure($"Configuration file not found: {filePath}");
-
         try
         {
-            // Hardcoded guard: the configurable MaxFileSize lives inside the very config being loaded,
-            // so using it here would be circular. 4 MiB is far above any sane config.json.
-            const long maxConfigBytes = 4L * 1024 * 1024;
-            var length = new FileInfo(filePath).Length;
-            if (length > maxConfigBytes)
-                return Result<GcConfiguration>.Failure(
-                    $"Configuration file '{filePath}' is too large ({length} bytes); max {maxConfigBytes} bytes.");
-
-            // Deserialize UTF-8 directly from the stream: no intermediate string, no UTF-16 transcode.
+            // Open first and take the length from the stream (one open+fstat) instead of
+            // File.Exists + FileInfo.Length + open (three metadata syscalls). Missing/inaccessible
+            // files surface as the typed exceptions handled below, preserving the same messages.
             await using var fs = new FileStream(
                 filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, true);
 
+            // Hardcoded guard: the configurable MaxFileSize lives inside the very config being loaded,
+            // so using it here would be circular. 4 MiB is far above any sane config.json.
+            const long maxConfigBytes = 4L * 1024 * 1024;
+            if (fs.Length > maxConfigBytes)
+                return Result<GcConfiguration>.Failure(
+                    $"Configuration file '{filePath}' is too large ({fs.Length} bytes); max {maxConfigBytes} bytes.");
+
+            // Deserialize UTF-8 directly from the stream: no intermediate string, no UTF-16 transcode.
             var typeInfo = GcJsonSerializerContext.Default.GcConfiguration;
             var config = await JsonSerializer.DeserializeAsync(fs, typeInfo);
             return config != null
                 ? Result<GcConfiguration>.Success(config)
                 : Result<GcConfiguration>.Failure($"Failed to deserialize configuration from {filePath}");
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return Result<GcConfiguration>.Failure($"Configuration file not found: {filePath}");
         }
         catch (Exception ex)
         {

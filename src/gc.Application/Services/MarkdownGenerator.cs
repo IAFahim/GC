@@ -83,7 +83,13 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var token = cts.Token;
 
-            var channel = Channel.CreateBounded<(int Index, byte[]? Buffer, int Length, string? Error)>(
+            // On the plain path (no brain-crush, no line-exclude, no content filter) the per-file CPU —
+            // trailing-trim and the content token estimate — is pure and order-independent, so the parallel
+            // worker computes it and the reader does only ordered budget-gating + memcpy + summation. The
+            // binary scan and fence-run scan are computed in the worker for every file regardless of mode.
+            var plainPath = brainCrusher == null && !hasExclude && contentFilter.IsEmpty;
+
+            var channel = Channel.CreateBounded<ReadResult>(
                 new BoundedChannelOptions(maxPendingFiles) { SingleReader = true, SingleWriter = false });
 
             var generateTask = Task.Run(async () =>
@@ -98,7 +104,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             var content = sortedList[index];
                             if (content.Content != null)
                             {
-                                await channel.Writer.WriteAsync((index, null, 0, null), threadToken);
+                                await channel.Writer.WriteAsync(ReadResult.Marker(index), threadToken);
                                 return;
                             }
 
@@ -129,7 +135,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     else if (Marshal.GetLastPInvokeError() == LinuxFastPath.ENOENT)
                                     {
                                         await channel.Writer.WriteAsync(
-                                            (index, null, 0,
+                                            ReadResult.Failure(index,
                                                 $"File not found: {content.Entry.DisplayPath ?? content.Entry.RelativePath}"),
                                             threadToken);
                                         return;
@@ -147,7 +153,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     if (fileLength > maxFileSize)
                                     {
                                         await channel.Writer.WriteAsync(
-                                            (index, null, 0,
+                                            ReadResult.Failure(index,
                                                 $"File size ({fileLength} bytes) exceeds maximum allowed size ({maxFileSize} bytes)"),
                                             threadToken);
                                         return;
@@ -184,7 +190,37 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                                 bytesRead += n;
                                             }
 
-                                            await channel.Writer.WriteAsync((index, buffer, bytesRead, null),
+                                            // Per-file CPU, computed HERE in the parallel worker instead of on the
+                                            // single reader: binary detection (NUL in first 4 KB) and the fence-run
+                                            // scan for every file, plus the trailing-trim length and the content
+                                            // token estimate on the plain path. The reader then only orders,
+                                            // budget-gates, memcpys, and sums — collapsing the serial bottleneck.
+                                            var isBinary = buffer.AsSpan(0, Math.Min(bytesRead, 4096))
+                                                .ContainsAny(NullByte);
+                                            var fenceRun = isBinary ? 0 : GetFenceRunForBytes(buffer, bytesRead);
+                                            var trimmedLength = -1;
+                                            var contentTokens = 0;
+                                            if (plainPath && !isBinary)
+                                            {
+                                                var validLength = bytesRead;
+                                                while (validLength > 0)
+                                                {
+                                                    var b = buffer[validLength - 1];
+                                                    if (b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' ||
+                                                        b == (byte)'\n')
+                                                        validLength--;
+                                                    else
+                                                        break;
+                                                }
+
+                                                trimmedLength = validLength;
+                                                contentTokens =
+                                                    TokenEstimator.EstimateTokensUtf8(buffer.AsSpan(0, validLength));
+                                            }
+
+                                            await channel.Writer.WriteAsync(
+                                                new ReadResult(index, buffer, bytesRead, null, isBinary, fenceRun,
+                                                    trimmedLength, contentTokens),
                                                 threadToken);
                                             deposited = true;
                                         }
@@ -195,7 +231,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     }
                                     else
                                     {
-                                        await channel.Writer.WriteAsync((index, null, -1, null), threadToken);
+                                        await channel.Writer.WriteAsync(ReadResult.TooLarge(index), threadToken);
                                     }
                                 }
                             }
@@ -204,7 +240,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 _logger.Error(
                                     $"Failed to read file {content.Entry.DisplayPath ?? content.Entry.RelativePath}",
                                     ex);
-                                await channel.Writer.WriteAsync((index, null, 0, ex.Message), threadToken);
+                                await channel.Writer.WriteAsync(ReadResult.Failure(index, ex.Message), threadToken);
                             }
                         });
                 }
@@ -216,15 +252,14 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
             var nextExpectedIndex = 0;
             // In-flight items are bounded by the channel capacity, so pre-size to avoid rehashing.
-            var outOfOrderBuffer =
-                new Dictionary<int, (byte[]? Buffer, int Length, string? Error)>(maxPendingFiles);
+            var outOfOrderBuffer = new Dictionary<int, ReadResult>(maxPendingFiles);
             long estimatedTokensAccumulator = 0;
 
             try
             {
                 await foreach (var result in channel.Reader.ReadAllAsync(token))
                 {
-                    outOfOrderBuffer[result.Index] = (result.Buffer, result.Length, result.Error);
+                    outOfOrderBuffer[result.Index] = result;
 
                     while (outOfOrderBuffer.TryGetValue(nextExpectedIndex, out var ready))
                     {
@@ -341,10 +376,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     continue;
                                 }
 
-                                var checkLen = Math.Min(ready.Length, 4096);
-                                var isBinary = ready.Buffer!.AsSpan(0, checkLen).ContainsAny(NullByte);
-
-                                if (isBinary)
+                                if (ready.IsBinary)
                                 {
                                     var errorMsg =
                                         $"[Skipping binary file: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
@@ -365,7 +397,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     continue;
                                 }
 
-                                var fence = GetFenceForBytes(ready.Buffer!, ready.Length);
+                                // Fence run was scanned in the worker; build the fence string here (the scan,
+                                // not this tiny alloc, was the cost). Matches the old new string('`', run+1).
+                                var fence = new string('`', ready.FenceRun + 1);
 
                                 var header = (config.Markdown.FileHeaderTemplate ?? "## File: {path}").Replace("{path}",
                                     content.Entry.DisplayPath ?? content.Entry.RelativePath,
@@ -425,17 +459,27 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 else
                                 {
                                     contentBuffer = ready.Buffer!;
-                                    var validLength = ready.Length;
-                                    while (validLength > 0)
+                                    if (ready.TrimmedLength >= 0)
                                     {
-                                        var b = contentBuffer[validLength - 1];
-                                        if (b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n')
-                                            validLength--;
-                                        else
-                                            break;
+                                        // Plain path: the worker already trimmed trailing whitespace.
+                                        contentBytesWritten = ready.TrimmedLength;
                                     }
+                                    else
+                                    {
+                                        // Content-filter path (filter present, no crush/exclude): the worker did
+                                        // not precompute, so trim here as before.
+                                        var validLength = ready.Length;
+                                        while (validLength > 0)
+                                        {
+                                            var b = contentBuffer[validLength - 1];
+                                            if (b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n')
+                                                validLength--;
+                                            else
+                                                break;
+                                        }
 
-                                    contentBytesWritten = validLength;
+                                        contentBytesWritten = validLength;
+                                    }
                                 }
 
                                 var needsTrailingNewline = true;
@@ -479,12 +523,14 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         remaining -= toWrite;
                                     }
 
-                                    // Estimate tokens straight from the UTF-8 bytes — no UTF-16 decode and no
-                                    // char buffer. Byte-identical to decoding then estimating (proven by the
-                                    // differential fuzz suite in TokenEstimatorUtf8Tests); over a contiguous
-                                    // span there are no chunk boundaries, so no carry is needed.
-                                    estimatedTokensAccumulator += TokenEstimator.EstimateTokensUtf8(
-                                        contentBuffer.AsSpan(0, (int)contentBytesWritten));
+                                    // Token estimate: on the plain path the worker already computed it from the
+                                    // UTF-8 bytes (carried in ready.ContentTokens); on the content-filter path
+                                    // estimate it here. Both are byte-identical to decoding then estimating
+                                    // (proven by TokenEstimatorUtf8Tests).
+                                    estimatedTokensAccumulator += ready.TrimmedLength >= 0
+                                        ? ready.ContentTokens
+                                        : TokenEstimator.EstimateTokensUtf8(
+                                            contentBuffer.AsSpan(0, (int)contentBytesWritten));
                                 }
 
                                 if (needsTrailingNewline) WriteStringLine(writer, "");
@@ -651,8 +697,10 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         return new string('`', longestRun + 1);
     }
 
-    // For streaming: scan the full byte span for the longest backtick run.
-    private static string GetFenceForBytes(byte[] buffer, int length)
+    // For streaming: scan the full byte span for the longest backtick run, returning the run length
+    // (>= 3). The caller emits run+1 backticks. Computed in the parallel worker so the scan is not
+    // serialized on the reader; the fence string itself is built cheaply on the reader.
+    private static int GetFenceRunForBytes(byte[] buffer, int length)
     {
         var span = buffer.AsSpan(0, length);
         var longestRun = 3;
@@ -667,6 +715,27 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             if (run > longestRun) longestRun = run;
         }
 
-        return new string('`', longestRun + 1);
+        return longestRun;
+    }
+
+    // Result of a single file's parallel read + precomputed per-file work, reassembled in index order
+    // by the reader. Buffer ownership transfers to the reader, which returns it to the pool.
+    private readonly record struct ReadResult(
+        int Index,
+        byte[]? Buffer,
+        int Length,
+        string? Error,
+        bool IsBinary,
+        int FenceRun, // longest backtick run over Buffer[0..Length]; used only when emitting content
+        int TrimmedLength, // plain-path trailing-trimmed content length; -1 when the worker did not precompute
+        int ContentTokens) // EstimateTokensUtf8 over Buffer[0..TrimmedLength]; valid iff TrimmedLength >= 0
+    {
+        // Marker for caller-supplied in-memory content (read from FileContent.Content, not from disk).
+        public static ReadResult Marker(int index) => new(index, null, 0, null, false, 0, -1, 0);
+
+        public static ReadResult Failure(int index, string error) =>
+            new(index, null, 0, error, false, 0, -1, 0);
+
+        public static ReadResult TooLarge(int index) => new(index, null, -1, null, false, 0, -1, 0);
     }
 }

@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
 using gc.Application.Native;
@@ -105,53 +106,52 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             {
                                 // Compute the absolute path once: FileEntry.AbsolutePath runs
                                 // Path.GetFullPath+Combine on every access, and this hot parallel loop
-                                // would otherwise normalize it 3x per file (FileInfo + two open() calls).
+                                // would otherwise normalize it repeatedly.
                                 var absolutePath = content.Entry.AbsolutePath;
-                                var fileInfo = new FileInfo(absolutePath);
-                                if (!fileInfo.Exists)
-                                {
-                                    await channel.Writer.WriteAsync(
-                                        (index, null, 0,
-                                            $"File not found: {content.Entry.DisplayPath ?? content.Entry.RelativePath}"),
-                                        threadToken);
-                                    return;
-                                }
 
-                                if (fileInfo.Length > maxFileSize)
-                                {
-                                    await channel.Writer.WriteAsync(
-                                        (index, null, 0,
-                                            $"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes)"),
-                                        threadToken);
-                                    return;
-                                }
-
-                                SafeFileHandle handle;
+                                // Open FIRST, then fstat once via RandomAccess.GetLength — this removes the
+                                // separate FileInfo stat (a syscall + a heap alloc per file). "File not found"
+                                // is derived from open() failing with ENOENT; any other errno falls through to
+                                // the managed File.OpenHandle so its typed exception reproduces today's
+                                // [Error reading file: <ex.Message>] bytes verbatim via the catch below.
+                                SafeFileHandle? handle = null;
                                 if (OperatingSystem.IsLinux())
                                 {
-                                    var fd = LinuxFastPath.open(absolutePath, 0x40000);
-                                    if (fd < 0) fd = LinuxFastPath.open(absolutePath, 0);
+                                    var fd = LinuxFastPath.open(absolutePath,
+                                        LinuxFastPath.O_RDONLY | LinuxFastPath.O_NOATIME | LinuxFastPath.O_CLOEXEC);
+                                    if (fd < 0)
+                                        fd = LinuxFastPath.open(absolutePath,
+                                            LinuxFastPath.O_RDONLY | LinuxFastPath.O_CLOEXEC);
                                     if (fd >= 0)
                                     {
-                                        LinuxFastPath.posix_fadvise(fd, 0, 0, LinuxFastPath.POSIX_FADV_SEQUENTIAL);
                                         handle = new SafeFileHandle(fd, true);
                                     }
-                                    else
+                                    else if (Marshal.GetLastPInvokeError() == LinuxFastPath.ENOENT)
                                     {
-                                        handle = File.OpenHandle(absolutePath, FileMode.Open,
-                                            FileAccess.Read, FileShare.ReadWrite,
-                                            FileOptions.SequentialScan | FileOptions.Asynchronous);
+                                        await channel.Writer.WriteAsync(
+                                            (index, null, 0,
+                                                $"File not found: {content.Entry.DisplayPath ?? content.Entry.RelativePath}"),
+                                            threadToken);
+                                        return;
                                     }
+                                    // else: fall through to the managed open below.
                                 }
-                                else
-                                {
-                                    handle = File.OpenHandle(absolutePath, FileMode.Open, FileAccess.Read,
-                                        FileShare.ReadWrite, FileOptions.SequentialScan | FileOptions.Asynchronous);
-                                }
+
+                                handle ??= File.OpenHandle(absolutePath, FileMode.Open, FileAccess.Read,
+                                    FileShare.ReadWrite, FileOptions.SequentialScan);
 
                                 using (handle)
                                 {
                                     var fileLength = RandomAccess.GetLength(handle);
+
+                                    if (fileLength > maxFileSize)
+                                    {
+                                        await channel.Writer.WriteAsync(
+                                            (index, null, 0,
+                                                $"File size ({fileLength} bytes) exceeds maximum allowed size ({maxFileSize} bytes)"),
+                                            threadToken);
+                                        return;
+                                    }
 
                                     // The file is already gated by maxFileSize above; read it whole up to the
                                     // single-buffer ceiling (int.MaxValue). Only genuinely enormous files
@@ -160,12 +160,30 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     if (fileLength <= int.MaxValue)
                                     {
                                         var len = (int)fileLength;
+
+                                        // posix_fadvise only earns its syscall on files large enough for kernel
+                                        // readahead to matter; for the common small file it is pure overhead.
+                                        if (OperatingSystem.IsLinux() && len > 128 * 1024)
+                                            LinuxFastPath.posix_fadvise((int)handle.DangerousGetHandle(), 0, 0,
+                                                LinuxFastPath.POSIX_FADV_SEQUENTIAL);
+
                                         var buffer = ArrayPool<byte>.Shared.Rent(len);
                                         var deposited = false;
                                         try
                                         {
-                                            var bytesRead = await RandomAccess.ReadAsync(handle, buffer.AsMemory(0, len),
-                                                0, threadToken);
+                                            // Synchronous read: the handle is opened synchronously, so ReadAsync
+                                            // would only bounce the blocking read onto a thread-pool thread —
+                                            // wasteful since parallelism already comes from Parallel.ForEachAsync.
+                                            // The fill loop is mandatory: a single read may return short of EOF.
+                                            var bytesRead = 0;
+                                            while (bytesRead < len)
+                                            {
+                                                var n = RandomAccess.Read(handle,
+                                                    buffer.AsSpan(bytesRead, len - bytesRead), bytesRead);
+                                                if (n == 0) break; // EOF (e.g. concurrent truncation)
+                                                bytesRead += n;
+                                            }
+
                                             await channel.Writer.WriteAsync((index, buffer, bytesRead, null),
                                                 threadToken);
                                             deposited = true;
@@ -197,7 +215,9 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             }, token);
 
             var nextExpectedIndex = 0;
-            var outOfOrderBuffer = new Dictionary<int, (byte[]? Buffer, int Length, string? Error)>();
+            // In-flight items are bounded by the channel capacity, so pre-size to avoid rehashing.
+            var outOfOrderBuffer =
+                new Dictionary<int, (byte[]? Buffer, int Length, string? Error)>(maxPendingFiles);
             long estimatedTokensAccumulator = 0;
 
             try

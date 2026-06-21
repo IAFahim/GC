@@ -371,10 +371,16 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 }
                                 else if (hasExclude)
                                 {
-                                    var sb = new StringBuilder();
-                                    var span = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length).AsSpan();
+                                    // Reuse the thread-static builder (same as the in-memory path) so the
+                                    // streaming exclude path allocates no per-file StringBuilder and avoids
+                                    // growth reallocations. The decoded string must stay rooted while the
+                                    // span over it is enumerated, so keep it in a local.
+                                    var sb = t_lineExclusionBuilder ??= new StringBuilder(4096);
+                                    sb.Clear();
+                                    sb.EnsureCapacity(ready.Length);
+                                    var text = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length);
                                     var first = true;
-                                    foreach (var line in span.EnumerateLines())
+                                    foreach (var line in text.AsSpan().EnumerateLines())
                                     {
                                         var trimmedLine = line.TrimStart().TrimStart('\uFEFF');
                                         if (excludeNewline && (trimmedLine.IsEmpty || trimmedLine.IsWhiteSpace())) continue;
@@ -630,18 +636,19 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     // =========================================================================
     private static string GetFenceForContent(string content)
     {
+        var span = content.AsSpan();
         var longestRun = 3;
-        var run = 0;
-        for (var i = 0; i < content.Length; i++)
-            if (content[i] == '`')
-            {
-                run++;
-                if (run > longestRun) longestRun = run;
-            }
-            else
-            {
-                run = 0;
-            }
+        var i = 0;
+        while (true)
+        {
+            // Vectorized skip over the (overwhelmingly common) non-backtick stretches.
+            var rel = span.Slice(i).IndexOf('`');
+            if (rel < 0) break;
+            i += rel;
+            var run = 0;
+            while (i < span.Length && span[i] == '`') { run++; i++; }
+            if (run > longestRun) longestRun = run;
+        }
 
         return new string('`', longestRun + 1);
     }
@@ -649,18 +656,18 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     // For streaming: scan the full byte span for the longest backtick run.
     private static string GetFenceForBytes(byte[] buffer, int length)
     {
+        var span = buffer.AsSpan(0, length);
         var longestRun = 3;
-        var run = 0;
-        for (var i = 0; i < length; i++)
-            if (buffer[i] == '`')
-            {
-                run++;
-                if (run > longestRun) longestRun = run;
-            }
-            else
-            {
-                run = 0;
-            }
+        var i = 0;
+        while (true)
+        {
+            var rel = span.Slice(i).IndexOf((byte)'`');
+            if (rel < 0) break;
+            i += rel;
+            var run = 0;
+            while (i < length && buffer[i] == (byte)'`') { run++; i++; }
+            if (run > longestRun) longestRun = run;
+        }
 
         return new string('`', longestRun + 1);
     }

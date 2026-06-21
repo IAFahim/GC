@@ -128,13 +128,19 @@ public sealed class AhoCorasick
                 if (s != -1 && s != _root)
                 {
                     queue.Enqueue(s);
-                    var state = _fail[r];
-                    while (Goto(state, a) == -1)
-                        state = _fail[state];
-                    _fail[s] = Goto(state, a);
+                    // _fail[r]'s row is already dense (processed earlier in BFS; the root
+                    // row was densified above), so this resolves in a single lookup.
+                    _fail[s] = Goto(_fail[r], a);
 
                     if (_output[s] == -1)
                         _output[s] = _output[_fail[s]];
+                }
+                else if (s == -1)
+                {
+                    // Complete the delta (goto) automaton: copy the transition from the
+                    // fail state so every (state, char) pair resolves in one array read,
+                    // turning the per-character scan into a single lookup with no fail walk.
+                    SetGoto(r, a, Goto(_fail[r], a));
                 }
             }
         }
@@ -169,8 +175,19 @@ public sealed class AhoCorasick
     }
 
     /// <summary>
+    ///     Get the next state from the current state via character index. The transition
+    ///     table is a complete delta (goto) automaton, so this is a single array lookup that
+    ///     always returns a valid state — no fail-link walk is required by callers.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int Next(int state, int charIndex)
+    {
+        return _gotoFunc[state * _alphabetSize + charIndex];
+    }
+
+    /// <summary>
     ///     Get the next state from current state via character index.
-    ///     Returns -1 if no transition exists.
+    ///     With the delta automaton this never returns -1 (transitions are complete).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int GetGoto(int state, int charIndex)

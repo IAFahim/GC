@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace gc.Domain.Language;
 
 /// <summary>
@@ -83,7 +85,7 @@ public static class LanguageProfiles
         SqlComment = false
     };
 
-    private static readonly Dictionary<string, LanguageProfile> Map = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly FrozenDictionary<string, LanguageProfile> Map = new Dictionary<string, LanguageProfile>(StringComparer.OrdinalIgnoreCase)
     {
         // C-family
         ["cs"] = CSharp,
@@ -160,7 +162,7 @@ public static class LanguageProfiles
         ["gemfile"] = Shell,
         ["rakefile"] = Shell,
         ["bagfile"] = Shell
-    };
+    }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
     // Each profile declares which comment styles are active for a language.
     // String/char handling is universal (strip contents verbatim).
 

@@ -100,25 +100,36 @@ public sealed class DynamicCompressor
         if (!text.Contains("```")) return text;
 
         var sb = new StringBuilder(text.Length / 2);
-        var lines = text.Split('\n');
+        var span = text.AsSpan();
         var inCodeBlock = false;
         var isSourceCode = false;
 
-        foreach (var line in lines)
+        // Walk lines over the span (splitting only on '\n', exactly like the old Split('\n'))
+        // to avoid allocating a string[] of every line plus a string per harvested line.
+        var start = 0;
+        while (start <= span.Length)
         {
+            var rel = span.Slice(start).IndexOf('\n');
+            var line = rel < 0 ? span.Slice(start) : span.Slice(start, rel);
+
             if (line.StartsWith("```"))
             {
                 if (!inCodeBlock)
                 {
-                    var lang = line.Substring(3).Trim().ToLowerInvariant();
+                    var lang = line[3..].Trim().ToString().ToLowerInvariant();
                     isSourceCode = IsSourceCodeLanguage(lang);
                 }
 
                 inCodeBlock = !inCodeBlock;
-                continue;
+            }
+            else if (inCodeBlock && isSourceCode)
+            {
+                sb.Append(line);
+                sb.Append('\n'); // matches the old AppendLine on the (Linux) build/test platform
             }
 
-            if (inCodeBlock && isSourceCode) sb.AppendLine(line);
+            if (rel < 0) break;
+            start += rel + 1;
         }
 
         return sb.ToString();
@@ -160,22 +171,31 @@ public sealed class DynamicCompressor
         }
 
         var sb = new StringBuilder(text.Length);
-        var lines = text.Split('\n');
+        var span = text.AsSpan();
         var inCodeBlock = false;
         var isSourceCode = false;
 
         // Sort by length descending to ensure greedy matching
         var sortedList = candidates.OrderByDescending(c => c.Phrase.Length).ToList();
 
-        for (var l = 0; l < lines.Length; l++)
+        // Walk lines over the span (splitting only on '\n'), rejoining with '\n'. This is a
+        // lossless reconstruction of the original text (Split('\n')+Join('\n')) with replacements
+        // applied only inside source-code fences, and avoids the per-line string[] allocation.
+        // Only actually-replaced code lines still materialize a string (the Replace helpers need one).
+        var start = 0;
+        var segIdx = 0;
+        while (start <= span.Length)
         {
-            var line = lines[l];
+            var rel = span.Slice(start).IndexOf('\n');
+            var line = rel < 0 ? span.Slice(start) : span.Slice(start, rel);
+
+            if (segIdx > 0) sb.Append('\n'); // separator between segments == old `if (l < lines.Length-1)`
 
             if (line.StartsWith("```"))
             {
                 if (!inCodeBlock)
                 {
-                    var lang = line.Substring(3).Trim().ToLowerInvariant();
+                    var lang = line[3..].Trim().ToString().ToLowerInvariant();
                     isSourceCode = IsSourceCodeLanguage(lang);
                 }
                 // Toggle code block state
@@ -185,7 +205,7 @@ public sealed class DynamicCompressor
             else if (inCodeBlock && isSourceCode)
             {
                 // Only apply replacements in code blocks
-                var processedLine = line;
+                var processedLine = line.ToString();
                 foreach (var c in sortedList)
                     if (c.IsIdent)
                         processedLine = ReplaceWordBoundary(processedLine, c.Phrase, symbolMap[c.Phrase]);
@@ -198,8 +218,9 @@ public sealed class DynamicCompressor
                 sb.Append(line);
             }
 
-            if (l < lines.Length - 1)
-                sb.Append('\n');
+            segIdx++;
+            if (rel < 0) break;
+            start += rel + 1;
         }
 
         return sb.ToString();
@@ -219,18 +240,18 @@ public sealed class DynamicCompressor
 
             if (leftOk && rightOk)
             {
-                sb.Append(line[i..idx]);
+                sb.Append(line.AsSpan(i, idx - i));
                 sb.Append(newStr);
                 i = idx + oldStr.Length;
             }
             else
             {
-                sb.Append(line[i..(idx + 1)]);
+                sb.Append(line.AsSpan(i, idx + 1 - i));
                 i = idx + 1;
             }
         }
 
-        sb.Append(line[i..]);
+        sb.Append(line.AsSpan(i));
         return sb.ToString();
     }
 

@@ -28,10 +28,37 @@ public static class SuffixArray
             rank[i] = text[i];
         }
 
+        // Fast path: pack the (primary rank, secondary rank) pair into a single long key so the
+        // doubling sort becomes a primitive-key Array.Sort with no per-comparison interface
+        // dispatch. The secondary field holds values in [0, n] (n encodes "past end"), so n must
+        // fit in RankBits bits; above that we fall back to the boxing-free struct-comparer sort.
+        // The packing preserves the comparer's ordering exactly (-1 sentinel -> 0, rank -> rank+1),
+        // and the final suffix array is uniquely determined once all ranks are distinct, so the
+        // result is identical to the comparer path regardless of tie ordering.
+        const int RankBits = 21;
+        const int FastKeyMaxN = (1 << RankBits) - 1; // 2_097_151
+        var useFastKey = n <= FastKeyMaxN;
+        var key = useFastKey ? new long[n] : null;
+
         for (var k = 1; k < n; k *= 2)
         {
-            var comparer = new SuffixComparer(rank, k, n);
-            Array.Sort(sa, comparer);
+            if (useFastKey)
+            {
+                for (var j = 0; j < n; j++)
+                {
+                    var s = sa[j];
+                    long hi = rank[s];
+                    long lo = s + k < n ? rank[s + k] + 1 : 0; // -1 sentinel -> 0
+                    key![j] = (hi << RankBits) | lo;
+                }
+
+                Array.Sort(key!, sa);
+            }
+            else
+            {
+                var comparer = new SuffixComparer(rank, k, n);
+                sa.AsSpan().Sort(comparer);
+            }
 
             tmp[sa[0]] = 0;
             for (var i = 1; i < n; i++)
@@ -52,7 +79,7 @@ public static class SuffixArray
         return sa;
     }
 
-    private struct SuffixComparer : IComparer<int>
+    private readonly struct SuffixComparer : IComparer<int>
     {
         private readonly int[] _rank;
         private readonly int _k;

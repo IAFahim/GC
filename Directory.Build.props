@@ -1,0 +1,16 @@
+<Project>
+
+  <!--
+    Solution-wide build settings.
+
+    InvariantGlobalization: the application is provably culture-independent — every string
+    comparison uses StringComparison.Ordinal/OrdinalIgnoreCase, every number format/parse pins
+    CultureInfo.InvariantCulture, and case folding uses ToLowerInvariant. Enabling invariant mode
+    drops the ICU dependency from the published (NativeAOT) image and skips ICU load/initialization
+    at process startup — a measurable win for a short-lived CLI — while keeping output byte-identical.
+  -->
+  <PropertyGroup>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

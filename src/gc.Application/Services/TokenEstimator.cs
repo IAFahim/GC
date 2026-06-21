@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace gc.Application.Services;
 
@@ -251,30 +252,29 @@ public static class TokenEstimator
         Digit = 16
     }
 
-    private static readonly byte[] Class = BuildTable();
-
-    private static byte[] BuildTable()
-    {
-        var t = new byte[128];
-        for (var c = 0; c < 128; c++)
-        {
-            byte k = 0;
-            var ch = (char)c;
-            if (IsWhitespace(ch)) k |= (byte)CharClass.Whitespace;
-            if (IsPunctuation(ch)) k |= (byte)CharClass.Punct;
-            if (IsUpper(ch)) k |= (byte)CharClass.Upper;
-            if (IsLower(ch)) k |= (byte)CharClass.Lower;
-            if (IsDigit(ch)) k |= (byte)CharClass.Digit;
-            t[c] = k;
-        }
-
-        return t;
-    }
+    // Compile-time classification table, embedded as RVA data in the binary (no static ctor,
+    // no startup allocation). Generated to byte-match the Is* classifier helpers below over c in
+    // [0,128): Whitespace=1, Punct=2, Upper=4, Lower=8, Digit=16.
+    private static ReadOnlySpan<byte> Class =>
+    [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 2, 2, 2, 2, 2, 2,
+        2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+        4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 0,
+        2, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+        8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 2, 2, 2, 2, 0,
+    ];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static byte Classify(char c)
     {
-        return c < 128 ? Class[c] : (byte)0;
+        // c is provably in [0,128) inside the branch and Class.Length == 128, so the bounds
+        // check is redundant; elide it with a direct ref read into the RVA table.
+        return c < 128
+            ? Unsafe.Add(ref MemoryMarshal.GetReference(Class), c)
+            : (byte)0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

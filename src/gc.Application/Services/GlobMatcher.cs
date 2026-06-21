@@ -236,7 +236,7 @@ public static class GlobMatcher
                 // Optimization: if next character in pattern is not a wildcard, we can scan for it
                 var nextChar = nextPattern[0];
                 var nextIsWildcard = nextChar == '*' || nextChar == '?';
-                var nextLower = !nextIsWildcard ? char.ToLowerInvariant(nextChar) : '\0';
+                var nextLower = !nextIsWildcard ? Fold(nextChar) : '\0';
 
                 for (var i = pathIdx; i <= path.Length; i++)
                 {
@@ -248,7 +248,7 @@ public static class GlobMatcher
 
                     // Optimization: if next char is not wildcard, skip paths that don't match nextChar
                     if (!nextIsWildcard && i < path.Length)
-                        if (char.ToLowerInvariant(path[i]) != nextLower)
+                        if (Fold(path[i]) != nextLower)
                             continue;
 
                     var remainingPath = path.Slice(i);
@@ -278,7 +278,7 @@ public static class GlobMatcher
                 var pc = patChar;
                 var sc = path[pathIdx];
 
-                if (char.ToLowerInvariant(pc) != char.ToLowerInvariant(sc)) return false;
+                if (Fold(pc) != Fold(sc)) return false;
 
                 pathIdx++;
                 patIdx++;
@@ -287,6 +287,12 @@ public static class GlobMatcher
 
         return pathIdx == path.Length;
     }
+
+    // ASCII fast-path case fold: repo paths are overwhelmingly ASCII, so fold 'A'-'Z' with a
+    // branchless bit-set and only fall back to the Unicode path for non-ASCII chars. Inlined into
+    // the per-char comparison loops; behaviour is identical to char.ToLowerInvariant.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static char Fold(char c) => (uint)(c - 'A') <= 'Z' - 'A' ? (char)(c | 0x20) : char.ToLowerInvariant(c);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool PathEquals(ReadOnlySpan<char> path, ReadOnlySpan<char> pattern)
@@ -298,7 +304,7 @@ public static class GlobMatcher
             var sc = path[i];
             if (pc == '\\') pc = '/';
             if (sc == '\\') sc = '/';
-            if (char.ToLowerInvariant(pc) != char.ToLowerInvariant(sc)) return false;
+            if (Fold(pc) != Fold(sc)) return false;
         }
         return true;
     }
@@ -313,7 +319,7 @@ public static class GlobMatcher
             var sc = path[i];
             if (pc == '\\') pc = '/';
             if (sc == '\\') sc = '/';
-            if (char.ToLowerInvariant(pc) != char.ToLowerInvariant(sc)) return false;
+            if (Fold(pc) != Fold(sc)) return false;
         }
         return true;
     }

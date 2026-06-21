@@ -92,20 +92,8 @@ public sealed class ContentFilter
                 continue;
             }
 
-            while (true)
-            {
-                var next = ac.GetGoto(state, ci);
-                if (next != -1)
-                {
-                    state = next;
-                    break;
-                }
-
-                if (state == 0) break;
-                state = ac.GetFail(state);
-            }
-
-            // Check output chain
+            // Single lookup into the delta automaton — no fail-link walk.
+            state = ac.Next(state, ci);
             if (ac.GetOutput(state) != -1) return true;
         }
 
@@ -131,20 +119,8 @@ public sealed class ContentFilter
                 continue;
             }
 
-            while (true)
-            {
-                var next = ac.GetGoto(state, ci);
-                if (next != -1)
-                {
-                    state = next;
-                    break;
-                }
-
-                if (state == 0) break;
-                state = ac.GetFail(state);
-            }
-
-            // Check output chain
+            // Single lookup into the delta automaton — no fail-link walk.
+            state = ac.Next(state, ci);
             if (ac.GetOutput(state) != -1) return true;
         }
 

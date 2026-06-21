@@ -14,6 +14,24 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>gc</ToolCommandName>
+
+    <!-- Favor throughput in AOT codegen: the SuffixArray/BrainCrusher/GlobMatcher passes are CPU-heavy. -->
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <IsAotCompatible>true</IsAotCompatible>
+
+    <!--
+      Runtime feature switches scoped to the published entry project (kept out of the test/benchmark
+      runtimes so they never change those processes). They trim unused infrastructure from the AOT
+      image and skip its startup initializers. Verified unused in this app: no EventSource/EventListener,
+      no DiagnosticListener/Activity/HttpClient, no metadata-update (hot reload), no Apple autorelease pool.
+      UseSystemResourceKeys drops localized framework exception strings (this CLI surfaces its own messages).
+      StackTraceSupport is intentionally left enabled (ConsoleLogger prints ex.StackTrace in verbose mode).
+    -->
+    <EventSourceSupport>false</EventSourceSupport>
+    <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <AutoreleasePoolSupport>false</AutoreleasePoolSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
   </PropertyGroup>
 
   <ItemGroup>

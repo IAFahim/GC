@@ -10,6 +10,7 @@ namespace gc.Infrastructure.IO;
 public sealed class FileReader : IFileReader
 {
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
+    private static readonly SearchValues<byte> NullByte = SearchValues.Create((byte)0);
     private readonly ILogger _logger;
 
     public FileReader(ILogger logger)
@@ -17,24 +18,24 @@ public sealed class FileReader : IFileReader
         _logger = logger;
     }
 
-    public async Task<Result<Stream>> ReadStreamingAsync(string path, CancellationToken ct = default)
+    public Task<Result<Stream>> ReadStreamingAsync(string path, CancellationToken ct = default)
     {
         try
         {
-            if (!File.Exists(path)) return Result<Stream>.Failure($"File not found: {path}");
+            if (!File.Exists(path)) return Task.FromResult(Result<Stream>.Failure($"File not found: {path}"));
 
             var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, true);
-            return Result<Stream>.Success(stream);
+            return Task.FromResult(Result<Stream>.Success(stream));
         }
         catch (IOException ex)
         {
             _logger.Error($"Failed to open stream for {path} (file may be locked)", ex);
-            return Result<Stream>.Failure(ex.Message);
+            return Task.FromResult(Result<Stream>.Failure(ex.Message));
         }
         catch (UnauthorizedAccessException ex)
         {
             _logger.Error($"Access denied to {path}", ex);
-            return Result<Stream>.Failure(ex.Message);
+            return Task.FromResult(Result<Stream>.Failure(ex.Message));
         }
     }
 
@@ -87,9 +88,16 @@ public sealed class FileReader : IFileReader
             if (IsBinaryBytes(buffer.AsSpan(0, read)))
                 return Result<FileContent>.Failure($"Skipping binary file: {entry.Path}");
 
-            using var ms = new MemoryStream(buffer, 0, read, false);
-            using var reader = new StreamReader(ms, Utf8NoBom);
-            var content = await reader.ReadToEndAsync(ct);
+            // The whole file is already in a contiguous pooled buffer, so decode it
+            // directly instead of wrapping it in a MemoryStream+StreamReader (which would
+            // allocate a stream, a reader, an internal char/byte buffer and a Decoder, plus
+            // an async state machine for a purely in-memory transform). StreamReader strips a
+            // leading UTF-8 BOM; replicate that to stay byte-identical. (UTF-16/32 BOM files
+            // contain null bytes and are already rejected by IsBinaryBytes above.)
+            var span = buffer.AsSpan(0, read);
+            if (span.Length >= 3 && span[0] == 0xEF && span[1] == 0xBB && span[2] == 0xBF)
+                span = span[3..];
+            var content = Utf8NoBom.GetString(span);
 
             // Report bytes actually read, not the declared length: a concurrent truncation
             // (FileShare.ReadWrite) can shorten the file between Length capture and read.
@@ -151,31 +159,31 @@ public sealed class FileReader : IFileReader
         }
     }
 
-    public async Task<Result<Stream>> ReadStreamingAsync(string path, LimitsConfiguration limits,
+    public Task<Result<Stream>> ReadStreamingAsync(string path, LimitsConfiguration limits,
         CancellationToken ct = default)
     {
         try
         {
-            if (!File.Exists(path)) return Result<Stream>.Failure($"File not found: {path}");
+            if (!File.Exists(path)) return Task.FromResult(Result<Stream>.Failure($"File not found: {path}"));
 
             var fileInfo = new FileInfo(path);
             var maxFileSize = limits.GetMaxFileSizeBytes();
             if (fileInfo.Length > maxFileSize)
-                return Result<Stream>.Failure(
-                    $"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes): {path}");
+                return Task.FromResult(Result<Stream>.Failure(
+                    $"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes): {path}"));
 
             var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096, true);
-            return Result<Stream>.Success(stream);
+            return Task.FromResult(Result<Stream>.Success(stream));
         }
         catch (IOException ex)
         {
             _logger.Error($"Failed to open stream for {path} (file may be locked)", ex);
-            return Result<Stream>.Failure(ex.Message);
+            return Task.FromResult(Result<Stream>.Failure(ex.Message));
         }
         catch (UnauthorizedAccessException ex)
         {
             _logger.Error($"Access denied to {path}", ex);
-            return Result<Stream>.Failure(ex.Message);
+            return Task.FromResult(Result<Stream>.Failure(ex.Message));
         }
     }
 
@@ -214,13 +222,14 @@ public sealed class FileReader : IFileReader
         var window = bytes.Length > 4096 ? bytes[..4096] : bytes;
         if (window.Length == 0) return false;
 
+        // Vectorized first pass for the most common positive signal (a NUL byte).
+        if (window.ContainsAny(NullByte)) return true;
+
         var nonPrintableCount = 0;
 
         for (var i = 0; i < window.Length; i++)
         {
             var b = window[i];
-
-            if (b == 0x00) return true;
 
             if (b < 32 && b != 9 && b != 10 && b != 13) nonPrintableCount++;
         }

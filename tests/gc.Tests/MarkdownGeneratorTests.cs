@@ -50,6 +50,33 @@ public class MarkdownGeneratorTests
     }
 
     [Fact]
+    public async Task GenerateMarkdownStreamingAsync_DirectoryEntry_EmitsFileNotFound()
+    {
+        // A git submodule / gitlink appears in `git ls-files` as a directory path. It cannot be read
+        // as a file; the output must say "File not found" (byte-identical to historical behavior), not
+        // leak the OS "Is a directory" error from open()+read() on a directory.
+        var generator = new MarkdownGenerator(_logger);
+        var tempDir = Directory.CreateTempSubdirectory("gc-dirtest-");
+        try
+        {
+            var entry = new FileEntry(tempDir.Parent!.FullName, tempDir.Name, "", "", 0);
+            var fileContents = new List<FileContent> { new(entry, null, 0) };
+            using var output = new MemoryStream();
+
+            var result = await generator.GenerateMarkdownStreamingAsync(fileContents, output, _config);
+
+            Assert.True(result.IsSuccess);
+            var str = Encoding.UTF8.GetString(output.ToArray());
+            Assert.Contains($"[Error reading file: File not found: {tempDir.Name}]", str);
+            Assert.DoesNotContain("Is a directory", str);
+        }
+        finally
+        {
+            tempDir.Delete(true);
+        }
+    }
+
+    [Fact]
     public async Task ExcludeLineIfStart_Streaming_FiltersCorrectly()
     {
         var generator = new MarkdownGenerator(_logger);

@@ -46,16 +46,22 @@ jobs:
       id: metrics
       run: |
         cat benchmark_results.txt
-        DISCOVERY_TIME=$(grep -oP "Discovery time:\s+\K[0-9]+" benchmark_results.txt || echo "0")
-        READ_TIME=$(grep -oP "Read time:\s+\K[0-9]+" benchmark_results.txt | head -1 || echo "0")
-        TOTAL_TIME=$(grep -oP "Total time:\s+\K[0-9]+" benchmark_results.txt || echo "0")
+        DISCOVERY_TIME=$(grep -oP "Discovery time:\s+\K[0-9]+" benchmark_results.txt | head -1 || echo "0")
+        READ_TIME=$(grep -oP "(?<!Large )Read time:\s+\K[0-9]+" benchmark_results.txt | head -1 || echo "0")
+        TOTAL_TIME=$(grep -oP "Total time:\s+\K[0-9]+" benchmark_results.txt | head -1 || echo "0")
+        LARGE_FILES=$(grep -oP "Large files discovered:\s+\K[0-9,]+" benchmark_results.txt || echo "0")
+        LARGE_READ_TIME=$(grep -oP "Large read time:\s+\K[0-9]+" benchmark_results.txt || echo "0")
+        LARGE_THROUGHPUT=$(grep -oP "Large throughput:\s+\K[0-9.]+" benchmark_results.txt || echo "0")
 
         echo "discovery_time=${DISCOVERY_TIME}" >> $GITHUB_OUTPUT
         echo "read_time=${READ_TIME}" >> $GITHUB_OUTPUT
         echo "total_time=${TOTAL_TIME}" >> $GITHUB_OUTPUT
+        echo "large_files=${LARGE_FILES}" >> $GITHUB_OUTPUT
+        echo "large_read_time=${LARGE_READ_TIME}" >> $GITHUB_OUTPUT
+        echo "large_throughput=${LARGE_THROUGHPUT}" >> $GITHUB_OUTPUT
         echo "timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_OUTPUT
-        
-        echo "Extracted: Discovery=${DISCOVERY_TIME}ms, Read=${READ_TIME}ms, Total=${TOTAL_TIME}ms"
+
+        echo "Extracted: Discovery=${DISCOVERY_TIME}ms, Read=${READ_TIME}ms, Total=${TOTAL_TIME}ms, LargeRead=${LARGE_READ_TIME}ms @ ${LARGE_THROUGHPUT} MB/s"
 
     - name: Update BENCHMARK.md
       run: |
@@ -63,11 +69,23 @@ jobs:
         echo '' >> BENCHMARK.md
         echo 'Measured on the published NativeAOT binary (the shipped artifact), best of 5 warm runs:' >> BENCHMARK.md
         echo '' >> BENCHMARK.md
+        echo '## This repository (small workload)' >> BENCHMARK.md
+        echo '' >> BENCHMARK.md
         echo '| Metric | Value |' >> BENCHMARK.md
         echo '|--------|-------|' >> BENCHMARK.md
         echo "| Discovery Time | ${{ steps.metrics.outputs.discovery_time }} ms |" >> BENCHMARK.md
         echo "| File Read Time | ${{ steps.metrics.outputs.read_time }} ms |" >> BENCHMARK.md
         echo "| Total Time | ${{ steps.metrics.outputs.total_time }} ms |" >> BENCHMARK.md
+        echo '' >> BENCHMARK.md
+        echo '## Synthetic large workload (~1,500 files incl. large files)' >> BENCHMARK.md
+        echo '' >> BENCHMARK.md
+        echo 'Exercises the parallel read + generate pipeline at scale.' >> BENCHMARK.md
+        echo '' >> BENCHMARK.md
+        echo '| Metric | Value |' >> BENCHMARK.md
+        echo '|--------|-------|' >> BENCHMARK.md
+        echo "| Files | ${{ steps.metrics.outputs.large_files }} |" >> BENCHMARK.md
+        echo "| Read Time | ${{ steps.metrics.outputs.large_read_time }} ms |" >> BENCHMARK.md
+        echo "| Throughput | ${{ steps.metrics.outputs.large_throughput }} MB/s |" >> BENCHMARK.md
         echo '' >> BENCHMARK.md
         echo "*Last updated: ${{ steps.metrics.outputs.timestamp }}*" >> BENCHMARK.md
 

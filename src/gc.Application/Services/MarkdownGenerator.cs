@@ -235,6 +235,18 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     }
                                 }
                             }
+                            catch (Exception) when (Directory.Exists(content.Entry.AbsolutePath))
+                            {
+                                // A directory entry (e.g. a git submodule / gitlink that ls-files reports)
+                                // cannot be read as a file: open() succeeds on a directory and the read then
+                                // fails with EISDIR. Reproduce the historical behavior exactly — a quiet
+                                // "File not found" placeholder with no error log — so both the output bytes
+                                // and the console output stay identical.
+                                await channel.Writer.WriteAsync(
+                                    ReadResult.Failure(index,
+                                        $"File not found: {content.Entry.DisplayPath ?? content.Entry.RelativePath}"),
+                                    threadToken);
+                            }
                             catch (Exception ex)
                             {
                                 _logger.Error(

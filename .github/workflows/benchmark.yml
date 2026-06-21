@@ -31,9 +31,16 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore src/gc.CLI/gc.CLI.csproj
 
+    # Benchmark the SHIPPED artifact (NativeAOT, optimized) — not `dotnet run`, which measures a
+    # Debug/JIT process whose time is dominated by JIT compilation + cold startup, masking the
+    # actual pipeline cost and making run-to-run numbers meaningless. RealBenchmark itself warms up
+    # and reports the best of several in-process iterations to isolate code cost from runner noise.
+    - name: Publish NativeAOT binary
+      run: dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -p:PublishAot=true -p:StripSymbols=true -o ./bench-bin
+
     - name: Run Benchmark
       run: |
-        dotnet run --project src/gc.CLI/gc.CLI.csproj --no-restore -- --benchmark 2>&1 | tee benchmark_results.txt
+        ./bench-bin/gc --benchmark 2>&1 | tee benchmark_results.txt
 
     - name: Extract Metrics
       id: metrics
@@ -54,7 +61,7 @@ jobs:
       run: |
         echo '# Real Performance Data' > BENCHMARK.md
         echo '' >> BENCHMARK.md
-        echo 'Latest benchmark results from automated testing:' >> BENCHMARK.md
+        echo 'Measured on the published NativeAOT binary (the shipped artifact), best of 5 warm runs:' >> BENCHMARK.md
         echo '' >> BENCHMARK.md
         echo '| Metric | Value |' >> BENCHMARK.md
         echo '|--------|-------|' >> BENCHMARK.md

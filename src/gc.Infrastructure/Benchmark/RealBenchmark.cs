@@ -45,50 +45,79 @@ public sealed class RealBenchmark
     {
         var discovery = new FileDiscovery(_logger);
         var loader = new ConfigurationLoader(_logger);
-        var reader = new FileReader(_logger);
         var generator = new MarkdownGenerator(_logger);
         var filter = new FileFilter(_logger);
 
         var configResult = await loader.LoadConfigAsync();
         var config = configResult.Value!;
 
-        var discoveryWatch = Stopwatch.StartNew();
-        var discoveryResult = await discovery.DiscoverFilesAsync(repoPath, config);
-        discoveryWatch.Stop();
+        // Warm up (warms the OS page cache + any one-time init), then take the BEST of several
+        // measured iterations. A single cold run is dominated by I/O and scheduler noise; best-of-N
+        // isolates the actual code cost so regressions stay visible. Paired with the NativeAOT
+        // artifact (see benchmark.yml) so JIT-compilation time is out of the measurement entirely.
+        const int warmups = 2;
+        const int iterations = 5;
 
-        if (!discoveryResult.IsSuccess)
+        var bestDiscoveryMs = double.MaxValue;
+        var bestReadMs = double.MaxValue;
+        long lastBytes = 0;
+        var fileCount = 0;
+        var entryCount = 0;
+
+        for (var run = 0; run < warmups + iterations; run++)
         {
-            _logger.Error($"Discovery failed: {discoveryResult.Error}");
-            return;
+            var discoveryWatch = Stopwatch.StartNew();
+            var discoveryResult = await discovery.DiscoverFilesAsync(repoPath, config);
+            discoveryWatch.Stop();
+
+            if (!discoveryResult.IsSuccess)
+            {
+                _logger.Error($"Discovery failed: {discoveryResult.Error}");
+                return;
+            }
+
+            var rawFiles = discoveryResult.Value!.ToList();
+            fileCount = rawFiles.Count;
+
+            var filterResult = filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
+                Array.Empty<string>());
+            var entries = filterResult.Value!.ToList();
+            entryCount = entries.Count;
+
+            var streamWatch = Stopwatch.StartNew();
+            using var ms = new MemoryStream();
+            var contents = entries.Select(e => new FileContent(e, null, e.Size));
+            var genResult = await generator.GenerateMarkdownStreamingAsync(contents, ms, config);
+            streamWatch.Stop();
+
+            if (!genResult.IsSuccess)
+            {
+                _logger.Error($"Generation failed: {genResult.Error}");
+                return;
+            }
+
+            if (run >= warmups)
+            {
+                bestDiscoveryMs = Math.Min(bestDiscoveryMs, discoveryWatch.Elapsed.TotalMilliseconds);
+                bestReadMs = Math.Min(bestReadMs, streamWatch.Elapsed.TotalMilliseconds);
+                lastBytes = genResult.Value;
+            }
         }
 
-        var rawFiles = discoveryResult.Value!.ToList();
-        Console.WriteLine($"  • Files discovered: {rawFiles.Count:N0}");
-        Console.WriteLine($"  • Discovery time:   {discoveryWatch.ElapsedMilliseconds} ms");
+        // Round to whole milliseconds for the headline figures (CI parses integers).
+        var discoveryMs = (long)Math.Round(bestDiscoveryMs);
+        var readMs = (long)Math.Round(bestReadMs);
 
-        var filterResult = filter.FilterFiles(rawFiles, config, Array.Empty<string>(), Array.Empty<string>(),
-            Array.Empty<string>());
-        var entries = filterResult.Value!.ToList();
-
-        Console.WriteLine($"  • Files after filter: {entries.Count:N0}");
-
-        var streamWatch = Stopwatch.StartNew();
-        using var ms = new MemoryStream();
-        var contents = entries.Select(e => new FileContent(e, null, e.Size));
-        var genResult = await generator.GenerateMarkdownStreamingAsync(contents, ms, config);
-        streamWatch.Stop();
-
-        if (genResult.IsSuccess)
-        {
-            Console.WriteLine($"  • Read time:        {streamWatch.ElapsedMilliseconds} ms");
-            Console.WriteLine($"  • Total bytes:      {genResult.Value:N0}");
-            // Use the higher-resolution elapsed seconds and guard against a sub-millisecond run
-            // that would otherwise divide by zero and print "Infinity"/"NaN" MB/s.
-            var seconds = streamWatch.Elapsed.TotalSeconds;
-            var throughput = seconds > 0 ? $"{genResult.Value / seconds / 1024 / 1024:F2} MB/s" : "n/a";
-            Console.WriteLine($"  • Throughput:       {throughput}");
-            Console.WriteLine(
-                $"  • Total time:       {discoveryWatch.ElapsedMilliseconds + streamWatch.ElapsedMilliseconds} ms");
-        }
+        Console.WriteLine($"  • Files discovered: {fileCount:N0}");
+        Console.WriteLine($"  • Files after filter: {entryCount:N0}");
+        Console.WriteLine($"  • Discovery time:   {discoveryMs} ms");
+        Console.WriteLine($"  • Read time:        {readMs} ms");
+        Console.WriteLine($"  • Total bytes:      {lastBytes:N0}");
+        // Guard against a sub-millisecond run that would otherwise divide by zero and print NaN MB/s.
+        var seconds = bestReadMs / 1000.0;
+        var throughput = seconds > 0 ? $"{lastBytes / seconds / 1024 / 1024:F2} MB/s" : "n/a";
+        Console.WriteLine($"  • Throughput:       {throughput}");
+        Console.WriteLine($"  • Total time:       {discoveryMs + readMs} ms");
+        Console.WriteLine($"  • (best of {iterations} runs after {warmups} warmups)");
     }
 }

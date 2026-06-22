@@ -380,7 +380,10 @@ public static class Program
                 }
             }
 
-            logger.Info($"Estimated token count: {totalTokens:N0}");
+            // The token count is the explicit result of --count, not a log message: write it to
+            // stdout so it always shows (logger.Info is suppressed at the default verbosity) and is
+            // cleanly pipeable/greppable by scripts.
+            Console.WriteLine($"Estimated token count: {totalTokens:N0}");
             return 0;
         }
 

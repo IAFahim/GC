@@ -24,14 +24,15 @@
       runtimes so they never change those processes). They trim unused infrastructure from the AOT
       image and skip its startup initializers. Verified unused in this app: no EventSource/EventListener,
       no DiagnosticListener/Activity/HttpClient, no metadata-update (hot reload), no Apple autorelease pool.
-      UseSystemResourceKeys drops localized framework exception strings (this CLI surfaces its own messages).
       StackTraceSupport is intentionally left enabled (ConsoleLogger prints ex.StackTrace in verbose mode).
+      UseSystemResourceKeys is intentionally NOT set: gc surfaces framework exception messages to users
+      (e.g. "[Error reading file: {ex.Message}]"); resource keys ("NotSupported_UnseekableStream") would be
+      cryptic, so readable errors win over the small binary-size saving.
     -->
     <EventSourceSupport>false</EventSourceSupport>
     <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
     <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
     <AutoreleasePoolSupport>false</AutoreleasePoolSupport>
-    <UseSystemResourceKeys>true</UseSystemResourceKeys>
   </PropertyGroup>
 
   <ItemGroup>

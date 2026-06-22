@@ -82,6 +82,30 @@ public class GenerateContextUseCaseTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_UnwritableOutputPath_ReturnsFailure_DoesNotThrow()
+    {
+        // An output path whose parent cannot be created (here it routes through an existing FILE)
+        // must produce a clean Result.Failure, never an unhandled exception / crash.
+        var (useCase, discovery, _, _, _) = CreateUseCase();
+        discovery.FilesPerDirectory["/repo"] = ["file1.cs"];
+        var config = DefaultConfig();
+
+        var tempFile = Path.GetTempFileName(); // a real file; using it as a directory must fail
+        try
+        {
+            var badOutput = Path.Combine(tempFile, "sub", "out.md");
+            var result = await useCase.ExecuteAsync("/repo", config, [], [], [], badOutput);
+
+            Assert.False(result.IsSuccess);
+            Assert.Contains("Failed to write output", result.Error!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_DiscoveryFails_ReturnsFailure()
     {
         var (useCase, discovery, _, _, _) = CreateUseCase();

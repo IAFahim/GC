@@ -50,6 +50,43 @@ public class MarkdownGeneratorTests
     }
 
     [Fact]
+    public async Task GenerateMarkdownStreamingAsync_Fifo_DoesNotHang()
+    {
+        // A named pipe (FIFO) with no writer would block open()/read() forever and hang the whole
+        // pipeline. The reader must complete (treating it as an unreadable file), not deadlock.
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return; // mkfifo is POSIX-only
+
+        var dir = Directory.CreateTempSubdirectory("gc-fifotest-");
+        try
+        {
+            var fifo = Path.Combine(dir.FullName, "pipe.cs");
+            using (var p = System.Diagnostics.Process.Start("mkfifo", fifo))
+            {
+                await p!.WaitForExitAsync();
+                if (p.ExitCode != 0) return; // mkfifo unavailable; skip
+            }
+
+            var generator = new MarkdownGenerator(_logger);
+            var entry = new FileEntry(dir.FullName, "pipe.cs", "cs", "cs", 0);
+            var fileContents = new List<FileContent> { new(entry, null, 0) };
+            using var output = new MemoryStream();
+
+            // Hard timeout: if the pipeline deadlocks on the FIFO this fails instead of hanging CI.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var task = generator.GenerateMarkdownStreamingAsync(fileContents, output, _config, null, null, cts.Token);
+            var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(20)));
+
+            Assert.True(completed == task, "Generation hung on a FIFO");
+            var result = await task;
+            Assert.True(result.IsSuccess);
+        }
+        finally
+        {
+            dir.Delete(true);
+        }
+    }
+
+    [Fact]
     public async Task GenerateMarkdownStreamingAsync_DirectoryEntry_EmitsFileNotFound()
     {
         // A git submodule / gitlink appears in `git ls-files` as a directory path. It cannot be read

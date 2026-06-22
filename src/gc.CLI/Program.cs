@@ -165,8 +165,25 @@ public static class Program
 
         var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
 
-        exitCode = await ExecuteAsync(currentDirectory, cliArgs, config, useCase, configService,
-            logger, cts.Token, profileReporter);
+        // Safety net: a CLI must never core-dump on bad input or a hostile environment. Convert any
+        // unhandled exception (e.g. an output path that can't be written) into a clean error + exit
+        // code, and treat cancellation (Ctrl+C) as the conventional 130.
+        try
+        {
+            exitCode = await ExecuteAsync(currentDirectory, cliArgs, config, useCase, configService,
+                logger, cts.Token, profileReporter);
+        }
+        catch (OperationCanceledException)
+        {
+            logger.Error("Operation cancelled.");
+            return 130;
+        }
+        catch (Exception ex)
+        {
+            logger.Error($"Unexpected error: {ex.Message}");
+            logger.Debug(ex.ToString());
+            return 1;
+        }
 
         if (profileReporter != null)
         {

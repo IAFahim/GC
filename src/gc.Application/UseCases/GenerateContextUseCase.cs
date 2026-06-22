@@ -460,9 +460,18 @@ public sealed class GenerateContextUseCase
         sw.Restart();
 
         if (!string.IsNullOrEmpty(outputFile))
-            return await EmitToFile(filteredList, actualFileCount, outputFile, appendMode,
-                hasPipeline, finalOutput, compiled, excludeLineIfStart, transformInfo,
-                unsafeDirectWrite, config, brainCrusherInstance, ct, sw, profileReporter);
+            try
+            {
+                return await EmitToFile(filteredList, actualFileCount, outputFile, appendMode,
+                    hasPipeline, finalOutput, compiled, excludeLineIfStart, transformInfo,
+                    unsafeDirectWrite, config, brainCrusherInstance, ct, sw, profileReporter);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Output destination unwritable (missing parent dir, no permission, target is a
+                // directory, disk full, …) — a clean error, never an unhandled crash.
+                return Result.Failure($"Failed to write output to '{outputFile}': {ex.Message}");
+            }
 
         return await EmitToClipboard(filteredList, actualFileCount, hasPipeline, finalOutput,
             compiled, excludeLineIfStart, transformInfo, config, appendMode, brainCrusherInstance, ct, sw,

@@ -123,11 +123,15 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 SafeFileHandle? handle = null;
                                 if (OperatingSystem.IsLinux())
                                 {
+                                    // O_NONBLOCK: a FIFO/named pipe with no writer would otherwise block
+                                    // open() forever and hang the whole pipeline. It is a no-op for regular
+                                    // file reads, so this only changes the pathological special-file case.
                                     var fd = LinuxFastPath.open(absolutePath,
-                                        LinuxFastPath.O_RDONLY | LinuxFastPath.O_NOATIME | LinuxFastPath.O_CLOEXEC);
+                                        LinuxFastPath.O_RDONLY | LinuxFastPath.O_NONBLOCK | LinuxFastPath.O_NOATIME |
+                                        LinuxFastPath.O_CLOEXEC);
                                     if (fd < 0)
                                         fd = LinuxFastPath.open(absolutePath,
-                                            LinuxFastPath.O_RDONLY | LinuxFastPath.O_CLOEXEC);
+                                            LinuxFastPath.O_RDONLY | LinuxFastPath.O_NONBLOCK | LinuxFastPath.O_CLOEXEC);
                                     if (fd >= 0)
                                     {
                                         handle = new SafeFileHandle(fd, true);

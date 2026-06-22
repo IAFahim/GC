@@ -50,6 +50,24 @@ public class MarkdownGeneratorTests
     }
 
     [Fact]
+    public async Task GenerateMarkdownStreamingAsync_NewlineInFilename_DoesNotBreakHeader()
+    {
+        // A filename containing a newline must not inject a line break into the "## File:" header
+        // (which could forge a fake header in LLM-bound output). Control chars are replaced for display.
+        var generator = new MarkdownGenerator(_logger);
+        var entry = new FileEntry("", "we\nird.cs", "cs", "cs", 1);
+        var fileContents = new List<FileContent> { new(entry, "X", 1) };
+        using var output = new MemoryStream();
+
+        var result = await generator.GenerateMarkdownStreamingAsync(fileContents, output, _config);
+
+        Assert.True(result.IsSuccess);
+        var str = Encoding.UTF8.GetString(output.ToArray());
+        Assert.DoesNotContain("we\nird.cs", str); // raw newline must not survive in the header
+        Assert.Contains("we�ird.cs", str); // sanitized to U+FFFD
+    }
+
+    [Fact]
     public async Task GenerateMarkdownStreamingAsync_Fifo_DoesNotHang()
     {
         // A named pipe (FIFO) with no writer would block open()/read() forever and hang the whole

@@ -140,7 +140,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     {
                                         await channel.Writer.WriteAsync(
                                             ReadResult.Failure(index,
-                                                $"File not found: {content.Entry.DisplayPath ?? content.Entry.RelativePath}"),
+                                                $"File not found: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}"),
                                             threadToken);
                                         return;
                                     }
@@ -248,13 +248,13 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 // and the console output stay identical.
                                 await channel.Writer.WriteAsync(
                                     ReadResult.Failure(index,
-                                        $"File not found: {content.Entry.DisplayPath ?? content.Entry.RelativePath}"),
+                                        $"File not found: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}"),
                                     threadToken);
                             }
                             catch (Exception ex)
                             {
                                 _logger.Error(
-                                    $"Failed to read file {content.Entry.DisplayPath ?? content.Entry.RelativePath}",
+                                    $"Failed to read file {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}",
                                     ex);
                                 await channel.Writer.WriteAsync(ReadResult.Failure(index, ex.Message), threadToken);
                             }
@@ -329,7 +329,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 var fence = GetFenceForContent(actualContent);
 
                                 var header = (config.Markdown.FileHeaderTemplate ?? "## File: {path}").Replace("{path}",
-                                    content.Entry.DisplayPath ?? content.Entry.RelativePath,
+                                    SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath),
                                     StringComparison.Ordinal);
                                 var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
                                 var fenceLine = $"{fence}{content.Entry.Language}";
@@ -367,7 +367,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 estimatedTokensAccumulator += TokenEstimator.EstimateTokens(actualContent);
                                 estimatedTokensAccumulator += TokenEstimator.EstimateTokens(fence);
 
-                                fileList.Add(content.Entry.DisplayPath ?? content.Entry.RelativePath);
+                                fileList.Add(SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath));
                                 totalBytes += entryTotalBytes;
                                 if (!content.Entry.Path.StartsWith('[')) LastEmittedFileCount++;
                             }
@@ -385,7 +385,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 if (ready.Length == -1)
                                 {
                                     var errorMsg =
-                                        $"[File too large to buffer (>2GB): {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
+                                        $"[File too large to buffer (>2GB): {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}]";
                                     WriteStringLine(writer, errorMsg);
                                     totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                     estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
@@ -395,7 +395,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 if (ready.IsBinary)
                                 {
                                     var errorMsg =
-                                        $"[Skipping binary file: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
+                                        $"[Skipping binary file: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}]";
                                     WriteStringLine(writer, errorMsg);
                                     totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                     estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
@@ -406,7 +406,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 if (!contentFilter.IsEmpty && !contentFilter.ShouldInclude(ready.Buffer!, ready.Length))
                                 {
                                     var errorMsg =
-                                        $"[Skipped by content filter: {content.Entry.DisplayPath ?? content.Entry.RelativePath}]";
+                                        $"[Skipped by content filter: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}]";
                                     WriteStringLine(writer, errorMsg);
                                     totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                     estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
@@ -418,7 +418,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 var fence = new string('`', ready.FenceRun + 1);
 
                                 var header = (config.Markdown.FileHeaderTemplate ?? "## File: {path}").Replace("{path}",
-                                    content.Entry.DisplayPath ?? content.Entry.RelativePath,
+                                    SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath),
                                     StringComparison.Ordinal);
                                 var headerBytes = Utf8NoBom.GetByteCount(header) + NewlineByteCount;
                                 var fenceLine = $"{fence}{content.Entry.Language}";
@@ -555,7 +555,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                                 estimatedTokensAccumulator += TokenEstimator.EstimateTokens(fence);
 
-                                fileList.Add(content.Entry.DisplayPath ?? content.Entry.RelativePath);
+                                fileList.Add(SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath));
                                 totalBytes += entryTotalBytes;
                                 if (!content.Entry.Path.StartsWith('[')) LastEmittedFileCount++;
                             }
@@ -688,6 +688,26 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
         WriteStringLine(writer, structureFence);
         WriteStringLine(writer, "");
+    }
+
+    // A filename can legally contain control characters (newline, CR, tab, …); `git ls-files -z`
+    // and the filesystem walker faithfully surface them. Emitting one raw into a "## File:" header,
+    // an error placeholder, or the structure listing would break the markdown and let a
+    // maliciously-named file inject a fake "## File:" line into LLM-bound output. Replace C0 control
+    // chars with U+FFFD for DISPLAY only — never for IO, which uses Entry.AbsolutePath.
+    private static string SanitizePathForOutput(string path)
+    {
+        // Fast path: clean paths (the overwhelming common case) return as-is with no allocation.
+        if (path.AsSpan().IndexOfAnyInRange('\u0000', '\u001F') < 0) return path;
+
+        return string.Create(path.Length, path, static (dst, src) =>
+        {
+            for (var i = 0; i < src.Length; i++)
+            {
+                var c = src[i];
+                dst[i] = c <= '\u001F' ? '\uFFFD' : c;
+            }
+        });
     }
 
     // =========================================================================

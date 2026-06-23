@@ -17,7 +17,7 @@ Exercises the parallel read + generate pipeline at scale.
 | Metric | Value |
 |--------|-------|
 | Files | 1,505 |
-| Read Time | 18 ms |
-| Throughput | 287.55 MB/s |
+| Read Time | 17 ms |
+| Throughput | 308.61 MB/s |
 
-*Last updated: 2026-06-22 17:16:11 UTC*
+*Last updated: 2026-06-23 05:47:17 UTC*

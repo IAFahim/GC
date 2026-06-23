@@ -35,6 +35,12 @@ BenchmarkDotNet.Artifacts/
 
 # Code coverage
 coverage/
+coverage*.xml
+*.coverage
+
+# Agent/IDE session scratch dirs (transient, churn during runs)
+.antigravitycli/
+.pi/
 
 # Logs
 *.log

@@ -45,6 +45,26 @@ chmod +x integration/nautilus/setup.sh
 
 ## Quick Start
 
+### Short commands for AI context
+
+```sh
+gc src -k          # collect this folder; make Markdown files of at most 50,000 bytes
+gc -u -k          # portable src + Unity Runtime/Editor; exclude tests and samples
+gc /path/to/src -k # pick a folder directly, from anywhere
+```
+
+`-k` writes the parts to an OS temporary folder and prints its path. It does not need a clipboard session. `-k50` and `--split 50KB` select the same limit; `KB` means 1,000 bytes, and `KiB` is explicit. Each part is valid Markdown; the manifest records byte ranges and hashes for lossless reconstruction of the collected export.
+
+Set your preferred workflow once in a project:
+
+```sh
+gc init -u -k --temp -e cs
+```
+
+After that, use **`gc`** for the project, **`gc src`** for a folder, or **`gc file.cs`** for one file. The saved options are also found when selecting that project from another directory. The Unity source preset includes initialized registered submodules and skips tests, samples, build output and local worktrees. Keep the `.gc` file with the project to use the same short commands on another PC.
+
+Use `--output-dir <new-or-empty-folder>` for a specific parts folder, or `--temp` without splitting for a single temporary Markdown file. Existing nonempty part folders are preserved. Normal commands without splitting keep their existing single-file/clipboard behavior.
+
 ```bash
 # Copy all tracked files to clipboard
 gc

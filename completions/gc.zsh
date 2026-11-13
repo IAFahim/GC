@@ -34,6 +34,11 @@ _gc() {
         '--install-completion[Install shell tab-completion]'
         '--test[Run tests]'
         '--benchmark[Run benchmark]'
+        '-u[Unity source without tests]' '--unity'
+        '-r[Include registered submodules]' '--submodules' '--recurse-submodules'
+        '--temp[Save in temporary folder]'
+        '-k[Markdown parts, 50 KB by default]::size:(50KB 100KB 200KB)'
+        '--split[Markdown parts, 50 KB by default]::size:(50KB 100KB 200KB)'
     )
 
     flags_with_args=(
@@ -68,6 +73,8 @@ _gc() {
         '--profile-json[Write profile JSON]:file:_files'
         '--json-stats[Write stats JSON]:file:_files'
         '--print-completion[Print completion script]:shell:(bash zsh fish)'
+        '--root[Folder to collect]:folder:_files -/'
+        '--output-dir[Parts folder]:folder:_files -/'
     )
 
     _arguments -C \

@@ -18,6 +18,7 @@ _gc_completion() {
 		"--stats" "--profile-timing" "--unsafe-direct-write"
 		"--install-completion"
 		"--test" "--benchmark"
+		"-u" "--unity" "-r" "--submodules" "--recurse-submodules" "--temp" "-k" "--split"
 	)
 
 	local flags_with_args=(
@@ -35,6 +36,7 @@ _gc_completion() {
 		"--changed-since" "--explain-filter" "--shard"
 		"--export-schema" "--profile-json" "--json-stats"
 		"--print-completion"
+		"--root" "--output-dir"
 	)
 
 	local keywords=("grab" "type" "yeet" "zap" "spit" "brain" "compress" "horde")
@@ -46,8 +48,8 @@ _gc_completion() {
 	*)
 		# Check if previous word is a flag that expects an argument
 		case $prev in
-		-g | -p | --paths | --Paths | grab)
-			COMPREPLY=($(compgen -d -- "$cur"))
+		-g | -p | --paths | --Paths | grab | --root | --output-dir)
+			_filedir
 			;;
 		-t | -e | --extension | --extensions | --ext | type)
 			COMPREPLY=($(compgen -W "cs py js ts go rs java rb php sh" -- "$cur"))
@@ -63,10 +65,14 @@ _gc_completion() {
 		--max-memory | --Max-Memory)
 			COMPREPLY=($(compgen -W "100MB 500MB 1GB 5GB" -- "$cur"))
 			;;
+		-k | --split)
+			_filedir
+			COMPREPLY+=($(compgen -W "50KB 100KB 200KB" -- "$cur"))
+			;;
 		-d | --depth | --Depth)
 			;;
 		--preset | --presets)
-			COMPREPLY=($(compgen -W "dotnet web python rust go java ruby php minimal" -- "$cur"))
+			COMPREPLY=($(compgen -W "unity-source unity dotnet web python rust go java ruby php minimal" -- "$cur"))
 			;;
 		--print-completion)
 			COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur"))
@@ -79,7 +85,8 @@ _gc_completion() {
 		--exclude-content | --include-content)
 			;;
 		*)
-			COMPREPLY=($(compgen -W "${keywords[*]}" -- "$cur"))
+			_filedir
+			COMPREPLY+=($(compgen -W "${keywords[*]}" -- "$cur"))
 			;;
 		esac
 		;;

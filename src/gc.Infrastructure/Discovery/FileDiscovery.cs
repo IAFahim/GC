@@ -31,13 +31,20 @@ public sealed class FileDiscovery : IFileDiscovery
                     return Result<IEnumerable<string>>.Failure(
                         "Not a git repository. git discovery mode requires a git repository.");
 
-                return await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
+                return discoveryConfig.RecurseSubmodules == true
+                    ? await DiscoverGitTreeAsync(rootPath, discoveryConfig, new HashSet<string>(PathComparer), ct)
+                    : await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
             }
 
             if (mode == "auto")
             {
-                var gitFiles = await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
+                var gitFiles = discoveryConfig.RecurseSubmodules == true
+                    ? await DiscoverGitTreeAsync(rootPath, discoveryConfig, new HashSet<string>(PathComparer), ct)
+                    : await DiscoverWithGitAsync(rootPath, discoveryConfig, ct);
                 if (gitFiles.IsSuccess) return gitFiles;
+                if (discoveryConfig.RecurseSubmodules == true &&
+                    (File.Exists(Path.Combine(rootPath, ".git")) || Directory.Exists(Path.Combine(rootPath, ".git"))))
+                    return gitFiles;
             }
 
             return await DiscoverWithFileSystemAsync(rootPath, discoveryConfig, ct);
@@ -285,6 +292,69 @@ public sealed class FileDiscovery : IFileDiscovery
         var gitPath = Path.Combine(rootPath, ".git");
         var exists = Directory.Exists(gitPath) || File.Exists(gitPath);
         return Task.FromResult(exists);
+    }
+
+    private static StringComparer PathComparer => OperatingSystem.IsWindows()
+        ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private async Task<Result<IEnumerable<string>>> DiscoverGitTreeAsync(string rootPath,
+        DiscoveryConfiguration config, HashSet<string> visited, CancellationToken ct)
+    {
+        var canonical = new DirectoryInfo(rootPath).ResolveLinkTarget(true)?.FullName ?? Path.GetFullPath(rootPath);
+        if (!visited.Add(canonical)) return Result<IEnumerable<string>>.Success(Array.Empty<string>());
+        var local = await DiscoverWithGitAsync(rootPath, config, ct);
+        if (!local.IsSuccess) return local;
+        var moduleFile = Path.Combine(rootPath, ".gitmodules");
+        if (!File.Exists(moduleFile)) return local;
+
+        var psi = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = rootPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in new[] { "config", "--file", moduleFile, "--null", "--get-regexp", @"^submodule\..*\.path$" })
+            psi.ArgumentList.Add(argument);
+        using var process = Process.Start(psi);
+        if (process == null) return Result<IEnumerable<string>>.Failure("Could not read registered submodules.");
+        var stdout = process.StandardOutput.ReadToEndAsync(ct);
+        var stderr = process.StandardError.ReadToEndAsync(ct);
+        await process.WaitForExitAsync(ct);
+        var output = await stdout;
+        var error = await stderr;
+        if (process.ExitCode is not (0 or 1))
+            return Result<IEnumerable<string>>.Failure("Could not read registered submodules: " + error);
+
+        var files = local.Value!.ToList();
+        foreach (var record in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            ct.ThrowIfCancellationRequested();
+            var separator = record.IndexOf('\n');
+            if (separator < 0) return Result<IEnumerable<string>>.Failure("Invalid submodule path record.");
+            var relative = record[(separator + 1)..].Replace('\\', '/').TrimEnd('/');
+            var child = Path.GetFullPath(relative, rootPath);
+            var boundary = Path.GetRelativePath(Path.GetFullPath(rootPath), child);
+            if (Path.IsPathRooted(relative) || boundary == ".." ||
+                boundary.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                return Result<IEnumerable<string>>.Failure("Submodule path escapes its repository: " + relative);
+            files.RemoveAll(path => PathComparer.Equals(path.TrimEnd('/'), relative));
+            if (!File.Exists(Path.Combine(child, ".git")) && !Directory.Exists(Path.Combine(child, ".git")))
+            {
+                _logger.Warning("Uninitialized submodule skipped: " + relative);
+                continue;
+            }
+            var children = await DiscoverGitTreeAsync(child, config, visited, ct);
+            if (!children.IsSuccess) return children;
+            foreach (var path in children.Value!)
+            {
+                var prefixed = relative + "/" + path;
+                if (!config.MaxDepth.HasValue || prefixed.Count(c => c == '/') <= config.MaxDepth.Value)
+                    files.Add(prefixed);
+            }
+        }
+        return Result<IEnumerable<string>>.Success(files);
     }
 
     private async Task<Result<IEnumerable<string>>> DiscoverWithGitAsync(string rootPath, DiscoveryConfiguration config,

@@ -55,6 +55,7 @@ public static class ConfigurationMerger
             Mode = source.Mode ?? target.Mode,
             UseGit = source.UseGit ?? target.UseGit,
             FollowSymlinks = source.FollowSymlinks ?? target.FollowSymlinks,
+            RecurseSubmodules = source.RecurseSubmodules ?? target.RecurseSubmodules,
             MaxDepth = source.MaxDepth ?? target.MaxDepth,
             Cluster = MergeCluster(target.Cluster, source.Cluster)
         };

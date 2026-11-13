@@ -10,6 +10,22 @@ namespace gc.CLI.Models;
 public sealed class CliArguments
 {
     public string[] Paths { get; set; } = [];
+    /// <summary>Direct folder/file arguments, distinct from include filters.</summary>
+    public string[] PositionalPaths { get; set; } = [];
+    /// <summary>An explicitly selected discovery root.</summary>
+    public string? RootPath { get; set; }
+    /// <summary>Whether the invocation root and filters have already been normalized.</summary>
+    public bool RootResolved { get; set; }
+    /// <summary>The final byte ceiling for each Markdown part, or zero for normal output.</summary>
+    public int SplitBytes { get; set; }
+    /// <summary>An invalid split value to report before starting discovery.</summary>
+    public string? SplitError { get; set; }
+    /// <summary>Requests file output in the OS temporary directory.</summary>
+    public bool TempOutput { get; set; }
+    /// <summary>An explicit new or empty destination for Markdown parts.</summary>
+    public string? OutputDirectory { get; set; }
+    /// <summary>Includes initialized registered submodules in Git discovery.</summary>
+    public bool RecurseSubmodules { get; set; }
     public string[] Extensions { get; set; } = [];
     public string[] Excludes { get; set; } = [];
     public string[] Presets { get; set; } = [];

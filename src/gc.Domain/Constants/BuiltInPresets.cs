@@ -90,6 +90,11 @@ public static class BuiltInPresets
                 Extensions = PresetUnity,
                 Description = "Unity game engine files"
             },
+            ["unity-source"] = new()
+            {
+                Extensions = ["cs", "csproj", "asmdef", "asmref", "shader", "hlsl", "cginc", "compute", "glsl", "uss", "uxml"],
+                Description = "Portable source and Unity Runtime/Editor code, excluding tests and samples"
+            },
             ["java"] = new()
             {
                 Extensions = PresetJava,

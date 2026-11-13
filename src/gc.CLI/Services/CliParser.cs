@@ -30,7 +30,10 @@ internal enum OptionKind
     SingleValue,
 
     /// Accumulates multiple following values (--paths a b c).
-    MultiValue
+    MultiValue,
+
+    /// A size option whose omitted value uses the attachment-safe default.
+    OptionalSize
 }
 
 public sealed class CliParser
@@ -75,6 +78,15 @@ public sealed class CliParser
         // Install shell completion (auto-detects $SHELL). "" is the auto sentinel; null = not requested.
         new(["--install-completion"], OptionKind.Flag, (a, _) => a.InstallCompletion = ""),
         new(["--stats"], OptionKind.Flag, (a, _) => a.ShowStats = true),
+        new(["--temp"], OptionKind.Flag, (a, _) => a.TempOutput = true),
+        new(["--submodules", "--recurse-submodules", "-r"], OptionKind.Flag, (a, _) => a.RecurseSubmodules = true),
+        new(["--unity", "-u"], OptionKind.Flag, (a, _) => a.Presets = [..a.Presets, "unity-source"]),
+        new(["-k", "--split"], OptionKind.OptionalSize, (a, v) =>
+        {
+            if (v == null) a.SplitBytes = ChunkSize.DefaultBytes;
+            else if (ChunkSize.TryParse(v, out var bytes)) a.SplitBytes = bytes;
+            else a.SplitError = v;
+        }),
         new(["--json-stats"], OptionKind.SingleValue, (a, v) =>
         {
             a.ShowStats = true;
@@ -83,6 +95,8 @@ public sealed class CliParser
 
         // ── Single-value options ──
         new(["-s", "-o", "--output", "spit"], OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
+        new(["--root"], OptionKind.SingleValue, (a, v) => a.RootPath = v),
+        new(["--output-dir"], OptionKind.SingleValue, (a, v) => a.OutputDirectory = v),
         new(["--max-memory"], OptionKind.SingleValue, (a, v) =>
         {
             // Fail loud, not open: an unparseable value must not silently clobber the configured
@@ -161,6 +175,7 @@ public sealed class CliParser
         var onlyPaths = false;
         OptionSpec? pendingSingleValue = null;
         OptionSpec? activeMultiValue = null;
+        OptionSpec? pendingOptionalSize = null;
         var unknownFlags = new List<string>();
 
         foreach (var arg in args)
@@ -169,6 +184,7 @@ public sealed class CliParser
             if (onlyPaths)
             {
                 result.Paths = [.. result.Paths, arg.Replace('\\', '/')];
+                result.PositionalPaths = [.. result.PositionalPaths, arg];
                 continue;
             }
 
@@ -183,8 +199,7 @@ public sealed class CliParser
             {
                 // If the next arg looks like a known flag but we expected a value,
                 // that's an error.
-                if (arg.StartsWith('-') && TokenMap.TryGetValue(arg, out var flagSpec) &&
-                    flagSpec.Kind == OptionKind.Flag)
+                if (arg.StartsWith('-') && TokenMap.ContainsKey(arg))
                 {
                     var flagName = pendingSingleValue.Value.Tokens.First();
                     return Result<CliArguments>.Failure($"Missing value for {flagName} before {arg}");
@@ -192,6 +207,26 @@ public sealed class CliParser
 
                 pendingSingleValue.Value.Apply(result, arg);
                 pendingSingleValue = null;
+                activeMultiValue = null;
+                continue;
+            }
+
+            if (pendingOptionalSize != null)
+            {
+                var optional = pendingOptionalSize.Value;
+                pendingOptionalSize = null;
+                if (!arg.StartsWith('-') && !ExistingInputPath(arg, result.RootPath))
+                {
+                    optional.Apply(result, arg);
+                    continue;
+                }
+            }
+
+            if (arg.StartsWith("--split=", StringComparison.OrdinalIgnoreCase) ||
+                (arg.Length > 2 && arg.StartsWith("-k", StringComparison.OrdinalIgnoreCase) && char.IsAsciiDigit(arg[2])))
+            {
+                var value = arg.StartsWith("--", StringComparison.Ordinal) ? arg[8..] : arg[2..];
+                TokenMap["--split"].Apply(result, value);
                 activeMultiValue = null;
                 continue;
             }
@@ -212,15 +247,13 @@ public sealed class CliParser
                     case OptionKind.MultiValue:
                         activeMultiValue = spec;
                         break;
+                    case OptionKind.OptionalSize:
+                        spec.Apply(result, null);
+                        pendingOptionalSize = spec;
+                        activeMultiValue = null;
+                        break;
                 }
 
-                continue;
-            }
-
-            // If we're in a multi-value state, accumulate
-            if (activeMultiValue != null)
-            {
-                activeMultiValue.Value.Apply(result, arg);
                 continue;
             }
 
@@ -231,6 +264,17 @@ public sealed class CliParser
                 continue;
             }
 
+            if (activeMultiValue != null)
+            {
+                var isExtension = activeMultiValue.Value.Tokens.Contains("--extension");
+                if (!isExtension || result.Extensions.Length == 0 || !ExistingInputPath(arg, result.RootPath))
+                {
+                    activeMultiValue.Value.Apply(result, arg);
+                    continue;
+                }
+                activeMultiValue = null;
+            }
+
             // Default: treat bare words as paths (but handle history index)
             if (result.ShowHistory && result.HistoryIndex is null && int.TryParse(arg, out var idx) && idx > 0)
             {
@@ -239,6 +283,7 @@ public sealed class CliParser
             }
 
             result.Paths = [.. result.Paths, arg.Replace('\\', '/')];
+            result.PositionalPaths = [.. result.PositionalPaths, arg];
         }
 
         // Missing value for a single-value option
@@ -268,5 +313,17 @@ public sealed class CliParser
         {
             result.Extensions = [.. result.Extensions, arg.TrimStart('.').ToLowerInvariant()];
         }
+    }
+
+    private static bool ExistingInputPath(string value, string? root)
+    {
+        if (value is "src" or "Runtime" or "Editor") return true;
+        try
+        {
+            var path = root == null ? value : Path.GetFullPath(value, Path.GetFullPath(root));
+            return Directory.Exists(path) || File.Exists(path);
+        }
+        catch (ArgumentException) { return false; }
+        catch (NotSupportedException) { return false; }
     }
 }

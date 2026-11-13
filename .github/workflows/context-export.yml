@@ -1,0 +1,53 @@
+name: Context Export Binaries (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test byte limits and direct paths
+        run: dotnet test tests/gc.Tests/gc.Tests.csproj --filter FullyQualifiedName~ContextPartsTests
+      - name: Publish native binary
+        shell: bash
+        run: |
+          case "$RUNNER_OS/$RUNNER_ARCH" in
+            Linux/X64) context_rid=linux-x64 ;;
+            Linux/ARM64) context_rid=linux-arm64 ;;
+            Windows/X64) context_rid=win-x64 ;;
+            Windows/ARM64) context_rid=win-arm64 ;;
+            macOS/X64) context_rid=osx-x64 ;;
+            macOS/ARM64) context_rid=osx-arm64 ;;
+            *) exit 1 ;;
+          esac
+          dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -r "$context_rid" --self-contained true -p:PublishAot=true -o publish
+      - name: Test real binary
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            python scripts/smoke-context.py publish/gc.exe
+          else
+            python scripts/smoke-context.py publish/gc
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gc-context-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            publish/gc
+            publish/gc.exe

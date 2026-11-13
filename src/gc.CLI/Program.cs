@@ -4,6 +4,7 @@ using gc.Application.Validators;
 using gc.CLI.Models;
 using gc.CLI.Services;
 using gc.Domain.Interfaces;
+using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
 using gc.Infrastructure.Benchmark;
 using gc.Infrastructure.Configuration;
@@ -30,12 +31,22 @@ public static class Program
         var logger = new ConsoleLogger(null, console);
         var configLoader = new ConfigurationLoader(logger);
 
-        var configResult = await configLoader.LoadConfigAsync();
+        var callerDirectory = Directory.GetCurrentDirectory();
+        string currentDirectory;
+        try
+        {
+            currentDirectory = InvocationRootResolver.FindRoot(args, callerDirectory);
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            logger.Error(ex.Message);
+            return 1;
+        }
+        var configResult = await configLoader.LoadConfigAsync(rootPath: currentDirectory);
         var config = configResult.Value ?? new GcConfiguration();
         logger.ApplyConfiguration(config.Logging);
 
         var configDir = configLoader.GetConfigDirectory();
-        var currentDirectory = Directory.GetCurrentDirectory();
         string[] resolvedArgs;
         bool shouldExit;
         int exitCode;
@@ -55,6 +66,22 @@ public static class Program
         }
 
         var cliArgs = parseResult.Value!;
+
+        try
+        {
+            currentDirectory = InvocationRootResolver.Resolve(cliArgs, callerDirectory);
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            logger.Error(ex.Message);
+            return 1;
+        }
+
+        if (cliArgs.SplitError != null)
+        {
+            logger.Error($"Invalid split size '{cliArgs.SplitError}'. Use -k for 50KB, or --split 50KB.");
+            return 1;
+        }
 
         if (cliArgs.NoClipboard)
         {
@@ -221,7 +248,7 @@ public static class Program
 
         if (exitCode == 0)
             await historyService.AddEntryAsync(
-                currentDirectory,
+                callerDirectory,
                 resolvedArgs.Where(a => !a.Equals("--history", StringComparison.OrdinalIgnoreCase)).ToArray(),
                 cts.Token);
 
@@ -232,6 +259,52 @@ public static class Program
         GenerateContextUseCase useCase, ConfigurationService configService, ILogger logger, CancellationToken ct,
         ProfileReporter? profileReporter = null)
     {
+        currentDirectory = InvocationRootResolver.Resolve(cliArgs, currentDirectory);
+        var contextOptions = SourceContextOptions.Apply(cliArgs, config, currentDirectory);
+        if (!contextOptions.IsSuccess)
+        {
+            logger.Error(contextOptions.Error!);
+            return 1;
+        }
+        if (cliArgs.SplitError != null)
+        {
+            logger.Error("Invalid split size: " + cliArgs.SplitError);
+            return 1;
+        }
+        if (cliArgs.RecurseSubmodules)
+            config = config with { Discovery = config.Discovery with { RecurseSubmodules = true } };
+        if (cliArgs.RecurseSubmodules && cliArgs.ChangedSince != null)
+        {
+            logger.Error("--changed-since cannot currently be combined with recursive submodules.");
+            return 1;
+        }
+
+        ChunkOutputOptions? chunkOutput = null;
+        if (cliArgs.SplitBytes > 0)
+        {
+            if (cliArgs.OutputDirectory != null && !string.IsNullOrEmpty(cliArgs.OutputFile))
+            {
+                logger.Error("Choose either --output-dir or --output for Markdown parts.");
+                return 1;
+            }
+            var destination = cliArgs.OutputDirectory;
+            var prefix = "context";
+            if (!string.IsNullOrEmpty(cliArgs.OutputFile))
+            {
+                var file = Path.GetFullPath(cliArgs.OutputFile);
+                prefix = Path.GetFileNameWithoutExtension(file);
+                destination = Path.Combine(Path.GetDirectoryName(file)!, prefix + "-parts");
+            }
+            chunkOutput = new ChunkOutputOptions(cliArgs.SplitBytes, destination, prefix);
+        }
+        else if (cliArgs.OutputDirectory != null)
+        {
+            logger.Error("--output-dir requires -k or --split.");
+            return 1;
+        }
+        else if (cliArgs.TempOutput && string.IsNullOrEmpty(cliArgs.OutputFile))
+            cliArgs.OutputFile = Path.Combine(Path.GetTempPath(), "gc-" + Guid.NewGuid().ToString("N")[..12], "context.md");
+
         if (cliArgs.InitConfig) return (await configService.InitializeConfigAsync()).IsSuccess ? 0 : 1;
         if (cliArgs.ValidateConfig)
         {
@@ -455,7 +528,8 @@ public static class Program
                 profileReporter,
                 cliArgs.UnsafeDirectWrite,
                 cliArgs.ChangedSince,
-                cliArgs.ShardInfo);
+                cliArgs.ShardInfo,
+                chunkOutput);
 
             if (!result.IsSuccess)
             {
@@ -486,7 +560,8 @@ public static class Program
             profileReporter,
             cliArgs.UnsafeDirectWrite,
             cliArgs.ChangedSince,
-            cliArgs.ShardInfo);
+            cliArgs.ShardInfo,
+            chunkOutput);
 
         if (!normalResult.IsSuccess)
         {
@@ -503,10 +578,14 @@ public static class Program
 USAGE: gc [OPTIONS]
 
 DISCOVERY:
+    <folder-or-file>                 Collect that folder or file directly
+    --root <folder>                  Choose a discovery root without changing directory
+    -r, --submodules                 Include initialized registered submodules
     -f, --force                      Force filesystem discovery (ignore git)
     -d, --depth <number>             Maximum directory depth to penetrate
 
 FILTERING:
+    -u, --unity                      src + Unity Runtime/Editor; skip tests and samples
     -g, grab, -p, --paths <paths>    Filter by starting paths
     -t, type, -e, --extension <ext>  Filter by extension
     -y, yeet, -x, --exclude <path>   Exclude folder, path or pattern
@@ -520,6 +599,9 @@ FILTERING:
     --preset <name>                  Use a built-in preset (web,backend,dotnet,etc)
 
 OUTPUT:
+    -k, --split [size]               Markdown parts, 50KB by default (KB=1000 bytes)
+    --temp                           Save to the OS temp folder; print its path
+    --output-dir <folder>            Destination for size-limited parts
     -s, -o, spit, --output <file>    Save output to file instead of clipboard
     --no-clipboard                   Disable copying output to clipboard
     -b, brain, --brain               Universal minification + Dynamic BPE fallback
@@ -575,7 +657,8 @@ OTHER:
 
     private static void PrintVersion()
     {
-        Console.WriteLine("gc version 1.2.0");
-        Console.WriteLine("Git Copy (Elite C# Edition) with Cluster Mode and Shard Mode");
+        var version = typeof(Program).Assembly.GetName().Version;
+        Console.WriteLine($"gc version {version?.ToString(3) ?? "unknown"}");
+        Console.WriteLine("Git Copy with native Markdown parts and direct folder selection");
     }
 }

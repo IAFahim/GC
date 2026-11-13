@@ -63,7 +63,8 @@ public sealed class GenerateContextUseCase
         ProfileReporter? profileReporter = null,
         bool unsafeDirectWrite = false,
         string? changedSince = null,
-        ShardInfo? shardInfo = null)
+        ShardInfo? shardInfo = null,
+        ChunkOutputOptions? chunkOutput = null)
     {
         var sw = Stopwatch.StartNew();
         Result<IEnumerable<string>> discoveryResult;
@@ -106,7 +107,7 @@ public sealed class GenerateContextUseCase
             var shardContents = shardEntries.Select(e => new FileContent(e, null, e.Size));
             return await WriteOutputAsync(shardContents, shardEntries.Count, rootPath, config, outputFile, appendMode,
                 excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
-                profileReporter, unsafeDirectWrite);
+                profileReporter, unsafeDirectWrite, chunkOutput);
         }
 
         _logger.Success("Processing...");
@@ -115,7 +116,7 @@ public sealed class GenerateContextUseCase
 
         return await WriteOutputAsync(contents, entries.Count, rootPath, config, outputFile, appendMode,
             excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
-            profileReporter, unsafeDirectWrite);
+            profileReporter, unsafeDirectWrite, chunkOutput);
     }
 
     public async Task<Result> ExecuteClusterAsync(
@@ -138,7 +139,8 @@ public sealed class GenerateContextUseCase
         ProfileReporter? profileReporter = null,
         bool unsafeDirectWrite = false,
         string? changedSince = null,
-        ShardInfo? shardInfo = null)
+        ShardInfo? shardInfo = null,
+        ChunkOutputOptions? chunkOutput = null)
     {
         var clusterConfig = config.Discovery?.Cluster ?? new ClusterConfiguration();
         if (clusterConfig.MaxDepth is null or <= 0) clusterConfig = clusterConfig with { MaxDepth = 2 };
@@ -264,12 +266,12 @@ public sealed class GenerateContextUseCase
             return await WriteOutputAsync(shardContents, shardEntries.Count, clusterRoot, config, outputFile,
                 appendMode,
                 excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
-                profileReporter, unsafeDirectWrite);
+                profileReporter, unsafeDirectWrite, chunkOutput);
         }
 
         return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode,
             excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
-            profileReporter, unsafeDirectWrite);
+            profileReporter, unsafeDirectWrite, chunkOutput);
     }
 
     private IEnumerable<FileContent> BuildClusterContents(
@@ -343,7 +345,8 @@ public sealed class GenerateContextUseCase
         string[]? includeContentPatterns,
         CancellationToken ct,
         ProfileReporter? profileReporter = null,
-        bool unsafeDirectWrite = false)
+        bool unsafeDirectWrite = false,
+        ChunkOutputOptions? chunkOutput = null)
     {
         var sw = Stopwatch.StartNew();
 
@@ -389,7 +392,7 @@ public sealed class GenerateContextUseCase
             }
             else
             {
-                transforms.Add(new SqzCompressionAdapter(sqzService, noCache));
+                transforms.Add(new SqzCompressionAdapter(sqzService, noCache || chunkOutput != null));
             }
         }
 
@@ -458,6 +461,34 @@ public sealed class GenerateContextUseCase
 
         // ── 5. Emit to sink ──
         sw.Restart();
+
+        if (chunkOutput != null)
+        {
+            if (appendMode) return Result.Failure("Split output cannot be appended; choose a new output folder.");
+            try
+            {
+                using var chunks = new MarkdownChunkStream(chunkOutput);
+                if (hasPipeline)
+                    await chunks.WriteAsync(Encoding.UTF8.GetBytes(finalOutput), ct);
+                else
+                {
+                    var generated = await _generator.GenerateMarkdownStreamingAsync(filteredList, chunks, config,
+                        compiled, excludeLineIfStart, brainCrusherInstance, ct);
+                    if (!generated.IsSuccess) return Result.Failure(generated.Error!);
+                }
+                ct.ThrowIfCancellationRequested();
+                chunks.Complete();
+                profileReporter?.RecordStage("GenerationAndParts", sw.ElapsedTicks);
+                profileReporter?.RecordMetric("OutputSize", chunks.OutputBytes.ToString());
+                _logger.Success($"Saved {chunks.PartCount} Markdown parts, each at most {chunkOutput.MaxBytes:N0} bytes.\n" +
+                                $"Folder: {chunks.OutputDirectory}\nFiles: {chunkOutput.Prefix}-001.md onwards");
+                return Result.Success();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return Result.Failure("Failed to write Markdown parts: " + ex.Message);
+            }
+        }
 
         if (!string.IsNullOrEmpty(outputFile))
             try

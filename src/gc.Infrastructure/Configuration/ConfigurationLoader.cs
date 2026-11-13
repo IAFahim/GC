@@ -42,7 +42,7 @@ public sealed class ConfigurationLoader
         return "/etc/gc";
     }
 
-    public async Task<Result<GcConfiguration>> LoadConfigAsync(bool useCache = true)
+    public async Task<Result<GcConfiguration>> LoadConfigAsync(bool useCache = true, string? rootPath = null)
     {
         _logger.Debug("Loading configuration...");
 
@@ -65,7 +65,7 @@ public sealed class ConfigurationLoader
                 config = MergeConfiguration(config, userResult.Value, "User");
         }
 
-        var projectConfigPath = FindProjectConfig();
+        var projectConfigPath = FindProjectConfig(rootPath);
         if (projectConfigPath != null)
         {
             var projectResult = await LoadConfigFromFileAsync(projectConfigPath);
@@ -76,9 +76,9 @@ public sealed class ConfigurationLoader
         return Result<GcConfiguration>.Success(config);
     }
 
-    public string? FindProjectConfig()
+    public string? FindProjectConfig(string? rootPath = null)
     {
-        var currentDir = Directory.GetCurrentDirectory();
+        var currentDir = rootPath ?? Directory.GetCurrentDirectory();
         var gitRoot = FindGitRoot(currentDir);
 
         var searchDir = currentDir;

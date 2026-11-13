@@ -197,9 +197,8 @@ public sealed class CliParser
             // If waiting for a single value, consume it
             if (pendingSingleValue != null)
             {
-                // If the next arg looks like a known flag but we expected a value,
-                // that's an error.
-                if (arg.StartsWith('-') && TokenMap.ContainsKey(arg))
+                // Flags (including attached values and typos) cannot become filenames.
+                if (arg.StartsWith('-') && arg.Length > 1 && !char.IsDigit(arg[1]))
                 {
                     var flagName = pendingSingleValue.Value.Tokens.First();
                     return Result<CliArguments>.Failure($"Missing value for {flagName} before {arg}");

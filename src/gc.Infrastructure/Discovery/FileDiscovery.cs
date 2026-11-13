@@ -327,6 +327,34 @@ public sealed class FileDiscovery : IFileDiscovery
         if (process.ExitCode is not (0 or 1))
             return Result<IEnumerable<string>>.Failure("Could not read registered submodules: " + error);
 
+        // .gitmodules alone can contain stale paths into ignored repositories/worktrees.
+        // Only mode-160000 entries in THIS repository's index are submodules.
+        var indexInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = rootPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var argument in new[] { "ls-files", "--stage", "-z" }) indexInfo.ArgumentList.Add(argument);
+        using var indexProcess = Process.Start(indexInfo);
+        if (indexProcess == null) return Result<IEnumerable<string>>.Failure("Could not read submodule gitlinks.");
+        var indexOutput = indexProcess.StandardOutput.ReadToEndAsync(ct);
+        var indexError = indexProcess.StandardError.ReadToEndAsync(ct);
+        await indexProcess.WaitForExitAsync(ct);
+        var indexed = await indexOutput;
+        var indexMessage = await indexError;
+        if (indexProcess.ExitCode != 0)
+            return Result<IEnumerable<string>>.Failure("Could not read submodule gitlinks: " + indexMessage);
+        var gitlinks = new HashSet<string>(PathComparer);
+        foreach (var record in indexed.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var tab = record.IndexOf('\t');
+            if (tab > 0 && record.StartsWith("160000 ", StringComparison.Ordinal) && record[tab - 1] == '0')
+                gitlinks.Add(record[(tab + 1)..]);
+        }
+
         var files = local.Value!.ToList();
         foreach (var record in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -339,6 +367,7 @@ public sealed class FileDiscovery : IFileDiscovery
             if (Path.IsPathRooted(relative) || boundary == ".." ||
                 boundary.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
                 return Result<IEnumerable<string>>.Failure("Submodule path escapes its repository: " + relative);
+            if (!gitlinks.Contains(relative)) continue;
             files.RemoveAll(path => PathComparer.Equals(path.TrimEnd('/'), relative));
             if (!File.Exists(Path.Combine(child, ".git")) && !Directory.Exists(Path.Combine(child, ".git")))
             {

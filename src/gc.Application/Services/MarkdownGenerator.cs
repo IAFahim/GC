@@ -52,6 +52,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         IEnumerable<string>? excludeLineIfStart = null, IBrainCrusher? brainCrusher = null,
         CancellationToken ct = default)
     {
+        PipeWriter? writer = null;
         try
         {
             LastEstimatedTokens = 0;
@@ -64,7 +65,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             bool excludeNewline = Array.IndexOf(excludeArray, "\n") >= 0;
 
             var pipeOptions = new StreamPipeWriterOptions(leaveOpen: true, minimumBufferSize: 65536);
-            var writer = PipeWriter.Create(outputStream, pipeOptions);
+            writer = PipeWriter.Create(outputStream, pipeOptions);
+            var boundaries = outputStream as IMarkdownBoundarySink;
 
             var sortedContents = config.Output.SortByPath.GetValueOrDefault()
                 ? contents.OrderBy(c => c.Entry.DisplayPath ?? c.Entry.Path, StringComparer.OrdinalIgnoreCase)
@@ -82,6 +84,18 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             var token = cts.Token;
+            using var readWindow = new SemaphoreSlim(maxPendingFiles);
+
+            // Admit indices in order and release only after ordered consumption. A bounded
+            // channel alone cannot bound the dictionary when an early file reads slowly.
+            async IAsyncEnumerable<int> WindowedIndices([EnumeratorCancellation] CancellationToken readToken)
+            {
+                for (var index = 0; index < sortedList.Count; index++)
+                {
+                    await readWindow.WaitAsync(readToken);
+                    yield return index;
+                }
+            }
 
             // On the plain path (no brain-crush, no line-exclude, no content filter) the per-file CPU —
             // trailing-trim and the content token estimate — is pure and order-independent, so the parallel
@@ -97,7 +111,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                 try
                 {
                     await Parallel.ForEachAsync(
-                        Enumerable.Range(0, sortedList.Count),
+                        WindowedIndices(token),
                         new ParallelOptions { MaxDegreeOfParallelism = degreeOfParallelism, CancellationToken = token },
                         async (index, threadToken) =>
                         {
@@ -267,7 +281,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             }, token);
 
             var nextExpectedIndex = 0;
-            // In-flight items are bounded by the channel capacity, so pre-size to avoid rehashing.
+            // The admission window bounds both channel and out-of-order results together.
             var outOfOrderBuffer = new Dictionary<int, ReadResult>(maxPendingFiles);
             long estimatedTokensAccumulator = 0;
 
@@ -288,6 +302,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                             if (content.Content != null)
                             {
                                 var actualContent = content.Content;
+                                List<int>? sourceLines = null;
                                 // Synthetic cluster markers (repo separators/headers, Path "[...]") carry
                                 // their own ready-made markdown; never line-filter or brain-crush them, or
                                 // a -z prefix / minifier could mangle the separators.
@@ -299,9 +314,12 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     sb.Clear();
                                     sb.EnsureCapacity(actualContent.Length);
                                     var first = true;
+                                    if (boundaries != null) sourceLines = [];
+                                    var sourceLine = 0;
 
                                     foreach (var line in span.EnumerateLines())
                                     {
+                                        sourceLine++;
                                         var trimmedLine = line.TrimStart().TrimStart('\uFEFF');
                                         if (excludeNewline && (trimmedLine.IsEmpty || trimmedLine.IsWhiteSpace()))
                                             continue;
@@ -320,6 +338,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                                         if (!first) sb.Append('\n');
                                         sb.Append(line);
+                                        sourceLines?.Add(sourceLine);
                                         first = false;
                                     }
 
@@ -344,10 +363,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                                 var contentBytes = Utf8NoBom.GetByteCount(actualContent);
 
-                                var needsTrailingNewline = !actualContent.EndsWith('\n');
                                 long entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + closingFenceBytes +
-                                                       newlineBytes;
-                                if (needsTrailingNewline && actualContent.Length > 0) entryTotalBytes += newlineBytes;
+                                                       newlineBytes * 2;
 
                                 if (totalBytes + entryTotalBytes > maxMemoryBytes)
                                 {
@@ -356,11 +373,34 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         $"Output size ({totalBytes + entryTotalBytes} bytes) would exceed maximum output limit ({maxMemoryBytes} bytes).");
                                 }
 
-                                WriteStringLine(writer, header);
-                                WriteStringLine(writer, fenceLine);
-                                WriteStringLine(writer, actualContent);
-                                WriteStringLine(writer, fence);
-                                WriteStringLine(writer, "");
+                                if (boundaries != null)
+                                {
+                                    await writer.FlushAsync(token);
+                                    boundaries.BeginFile(isSynthetic ? null : SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath),
+                                        entryTotalBytes, Math.Max(fence.Length, Math.Max(GetFenceForContent(header).Length - 1,
+                                            GetFenceForContent(fenceLine).Length - 1)));
+                                }
+                                await WriteStringLineAsync(writer, header, token);
+                                await WriteStringLineAsync(writer, fenceLine, token);
+                                if (boundaries != null)
+                                {
+                                    await writer.FlushAsync(token);
+                                    boundaries.BeginContent(contentBytes, sourceLines);
+                                }
+                                await WriteStringAsync(writer, actualContent, token);
+                                if (boundaries != null)
+                                {
+                                    await writer.FlushAsync(token);
+                                    boundaries.EndContent();
+                                }
+                                await WriteStringLineAsync(writer, "", token);
+                                await WriteStringLineAsync(writer, fence, token);
+                                await WriteStringLineAsync(writer, "", token);
+                                if (boundaries != null)
+                                {
+                                    await writer.FlushAsync(token);
+                                    boundaries.EndFile();
+                                }
 
                                 estimatedTokensAccumulator += TokenEstimator.EstimateTokens(header);
                                 estimatedTokensAccumulator += TokenEstimator.EstimateTokens(fenceLine);
@@ -376,7 +416,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 if (ready.Error != null)
                                 {
                                     var errorMsg = $"[Error reading file: {ready.Error}]";
-                                    WriteStringLine(writer, errorMsg);
+                                    await WriteMetadataLineAsync(writer, boundaries, errorMsg, token);
                                     totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                     estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
                                     continue;
@@ -386,7 +426,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 {
                                     var errorMsg =
                                         $"[File too large to buffer (>2GB): {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}]";
-                                    WriteStringLine(writer, errorMsg);
+                                    await WriteMetadataLineAsync(writer, boundaries, errorMsg, token);
                                     totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                     estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
                                     continue;
@@ -396,7 +436,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 {
                                     var errorMsg =
                                         $"[Skipping binary file: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}]";
-                                    WriteStringLine(writer, errorMsg);
+                                    await WriteMetadataLineAsync(writer, boundaries, errorMsg, token);
                                     totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                     estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
                                     continue;
@@ -407,7 +447,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 {
                                     var errorMsg =
                                         $"[Skipped by content filter: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}]";
-                                    WriteStringLine(writer, errorMsg);
+                                    await WriteMetadataLineAsync(writer, boundaries, errorMsg, token);
                                     totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
                                     estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
                                     continue;
@@ -430,6 +470,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 long contentBytesWritten = 0;
                                 byte[]? contentBuffer = null;
                                 string? crushedContent = null;
+                                List<int>? sourceLines = null;
 
                                 if (brainCrusher != null)
                                 {
@@ -450,8 +491,11 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     sb.EnsureCapacity(ready.Length);
                                     var text = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length);
                                     var first = true;
+                                    if (boundaries != null) sourceLines = [];
+                                    var sourceLine = 0;
                                     foreach (var line in text.AsSpan().EnumerateLines())
                                     {
+                                        sourceLine++;
                                         var trimmedLine = line.TrimStart().TrimStart('\uFEFF');
                                         if (excludeNewline && (trimmedLine.IsEmpty || trimmedLine.IsWhiteSpace())) continue;
                                         var shouldExclude = false;
@@ -466,11 +510,13 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         if (shouldExclude) continue;
                                         if (!first) sb.Append('\n');
                                         sb.Append(line);
+                                        sourceLines?.Add(sourceLine);
                                         first = false;
                                     }
 
                                     crushedContent = sb.ToString();
-                                    contentBytesWritten = Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount;
+                                    contentBytesWritten = crushedContent.Length > 0
+                                        ? Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount : 0;
                                 }
                                 else
                                 {
@@ -513,15 +559,28 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 }
 
                                 // Write now that we've confirmed we have budget
-                                WriteStringLine(writer, header);
-                                WriteStringLine(writer, fenceLine);
+                                if (boundaries != null)
+                                {
+                                    await writer.FlushAsync(token);
+                                    boundaries.BeginFile(SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath),
+                                        entryTotalBytes, Math.Max(fence.Length, Math.Max(GetFenceForContent(header).Length - 1,
+                                            GetFenceForContent(fenceLine).Length - 1)));
+                                }
+                                await WriteStringLineAsync(writer, header, token);
+                                await WriteStringLineAsync(writer, fenceLine, token);
+                                if (boundaries != null)
+                                {
+                                    await writer.FlushAsync(token);
+                                    boundaries.BeginContent(crushedContent != null ? Utf8NoBom.GetByteCount(crushedContent) : contentBytesWritten,
+                                        sourceLines);
+                                }
 
                                 estimatedTokensAccumulator += TokenEstimator.EstimateTokens(header);
                                 estimatedTokensAccumulator += TokenEstimator.EstimateTokens(fenceLine);
 
                                 if (crushedContent != null && crushedContent.Length > 0)
                                 {
-                                    WriteStringLine(writer, crushedContent);
+                                    await WriteStringAsync(writer, crushedContent, token);
                                     estimatedTokensAccumulator += TokenEstimator.EstimateTokens(crushedContent);
                                 }
                                 else if (contentBuffer != null && contentBytesWritten > 0)
@@ -535,6 +594,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         var destMemory = writer.GetMemory(toWrite);
                                         contentBuffer.AsSpan(offset, toWrite).CopyTo(destMemory.Span);
                                         writer.Advance(toWrite);
+                                        await FlushIfNeededAsync(writer, token);
                                         offset += toWrite;
                                         remaining -= toWrite;
                                     }
@@ -549,9 +609,20 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                             contentBuffer.AsSpan(0, (int)contentBytesWritten));
                                 }
 
-                                if (needsTrailingNewline) WriteStringLine(writer, "");
-                                WriteStringLine(writer, fence);
-                                WriteStringLine(writer, "");
+                                if (boundaries != null)
+                                {
+                                    await writer.FlushAsync(token);
+                                    boundaries.EndContent();
+                                }
+                                if (crushedContent is { Length: > 0 }) await WriteStringLineAsync(writer, "", token);
+                                if (needsTrailingNewline) await WriteStringLineAsync(writer, "", token);
+                                await WriteStringLineAsync(writer, fence, token);
+                                await WriteStringLineAsync(writer, "", token);
+                                if (boundaries != null)
+                                {
+                                    await writer.FlushAsync(token);
+                                    boundaries.EndFile();
+                                }
 
                                 estimatedTokensAccumulator += TokenEstimator.EstimateTokens(fence);
 
@@ -563,6 +634,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                         finally
                         {
                             if (ready.Buffer != null) ArrayPool<byte>.Shared.Return(ready.Buffer);
+                            readWindow.Release();
                         }
                     }
                 }
@@ -599,10 +671,6 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                 }
             }
 
-            WriteProjectStructure(writer, fileList, config);
-            await writer.FlushAsync();
-            await writer.CompleteAsync();
-
             var structureHeader = config.Markdown.ProjectStructureHeader ?? "_Project Structure:_ ";
             var structureFence = config.Markdown.Fence ?? "```";
             var projectStructureBytes =
@@ -616,6 +684,20 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
             projectStructureBytes += Utf8NoBom.GetByteCount(structureFence) + NewlineByteCount;
             projectStructureBytes += NewlineByteCount;
+            if (boundaries != null)
+            {
+                await writer.FlushAsync(ct);
+                var longestFence = Math.Max(GetFenceForContent(structureHeader).Length - 1,
+                    GetFenceForContent(structureFence).Length - 1);
+                foreach (var path in fileList)
+                    longestFence = Math.Max(longestFence, GetFenceForContent(path).Length - 1);
+                boundaries.BeginFile(null, projectStructureBytes, longestFence);
+            }
+            await WriteProjectStructureAsync(writer, fileList, config, ct);
+            await writer.FlushAsync(ct);
+            boundaries?.EndFile();
+            await writer.CompleteAsync();
+            writer = null;
             totalBytes += projectStructureBytes;
 
             LastEstimatedTokens = estimatedTokensAccumulator;
@@ -631,63 +713,81 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
             _logger.Error("Markdown generation failed", ex);
             return Result<long>.Failure(ex.Message);
         }
+        finally
+        {
+            // Release pooled pipe segments on cancellation or an early budget/error return too.
+            if (writer != null)
+            {
+                try { await writer.CompleteAsync(); }
+                catch { /* Preserve the generation error already reported above. */ }
+            }
+        }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void WriteString(PipeWriter writer, ReadOnlySpan<char> str)
+    private static async ValueTask WriteStringAsync(PipeWriter writer, string str, CancellationToken ct)
     {
-        if (str.IsEmpty) return;
-
-        // Optimization for small strings (most headers, fences, short lines)
-        if (str.Length < 1024)
-        {
-            var maxBytes = Utf8NoBom.GetMaxByteCount(str.Length);
-            var span = writer.GetSpan(maxBytes);
-            var written = Utf8NoBom.GetBytes(str, span);
-            writer.Advance(written);
-            return;
-        }
-
-        // For larger strings, write in chunks to ensure we don't request 
-        // excessively large spans from the PipeWriter which might cause 
-        // internal buffer reallocations.
         const int chunkCharCount = 4096;
         var offset = 0;
         while (offset < str.Length)
         {
             var length = Math.Min(chunkCharCount, str.Length - offset);
-            var chunk = str.Slice(offset, length);
-            var maxBytes = Utf8NoBom.GetMaxByteCount(chunk.Length);
-            var span = writer.GetSpan(maxBytes);
-            var written = Utf8NoBom.GetBytes(chunk, span);
+            // A surrogate pair must be encoded together even at an internal write boundary.
+            if (offset + length < str.Length && char.IsHighSurrogate(str[offset + length - 1]) &&
+                char.IsLowSurrogate(str[offset + length])) length--;
+            var written = Utf8NoBom.GetBytes(str.AsSpan(offset, length),
+                writer.GetSpan(Utf8NoBom.GetMaxByteCount(length)));
             writer.Advance(written);
             offset += length;
+            await FlushIfNeededAsync(writer, ct);
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void WriteStringLine(PipeWriter writer, string str)
+    private static ValueTask FlushIfNeededAsync(PipeWriter writer, CancellationToken ct)
     {
-        WriteString(writer, str.AsSpan());
-        var newlineSpan = writer.GetSpan(NewlineBytes.Length);
-        NewlineBytes.CopyTo(newlineSpan);
-        writer.Advance(NewlineBytes.Length);
+        // StreamPipeWriter otherwise retains the whole export until the final flush.
+        return writer.UnflushedBytes >= 65536 ? FlushAsync(writer, ct) : ValueTask.CompletedTask;
+
+        static async ValueTask FlushAsync(PipeWriter pipe, CancellationToken token) => await pipe.FlushAsync(token);
     }
 
-    private void WriteProjectStructure(PipeWriter writer, IEnumerable<string> filePaths, GcConfiguration config)
+    private static async ValueTask WriteStringLineAsync(PipeWriter writer, string str, CancellationToken ct)
+    {
+        await WriteStringAsync(writer, str, ct);
+        NewlineBytes.CopyTo(writer.GetSpan(NewlineBytes.Length));
+        writer.Advance(NewlineBytes.Length);
+        await FlushIfNeededAsync(writer, ct);
+    }
+
+    private static async ValueTask WriteMetadataLineAsync(PipeWriter writer, IMarkdownBoundarySink? boundaries,
+        string text, CancellationToken ct)
+    {
+        if (boundaries != null)
+        {
+            await writer.FlushAsync(ct);
+            boundaries.BeginFile(null, Utf8NoBom.GetByteCount(text) + NewlineByteCount,
+                GetFenceForContent(text).Length - 1);
+        }
+        await WriteStringLineAsync(writer, text, ct);
+        if (boundaries != null)
+        {
+            await writer.FlushAsync(ct);
+            boundaries.EndFile();
+        }
+    }
+
+    private static async ValueTask WriteProjectStructureAsync(PipeWriter writer, IEnumerable<string> filePaths,
+        GcConfiguration config, CancellationToken ct)
     {
         var structureFence = config.Markdown.Fence ?? "```";
-        WriteStringLine(writer, config.Markdown.ProjectStructureHeader ?? "_Project Structure:_ ");
-        WriteStringLine(writer, $"{structureFence}text");
-
+        await WriteStringLineAsync(writer, config.Markdown.ProjectStructureHeader ?? "_Project Structure:_ ", ct);
+        await WriteStringLineAsync(writer, $"{structureFence}text", ct);
         foreach (var path in filePaths)
         {
             if (path.StartsWith('[')) continue;
-            WriteStringLine(writer, path);
+            await WriteStringLineAsync(writer, path, ct);
         }
-
-        WriteStringLine(writer, structureFence);
-        WriteStringLine(writer, "");
+        await WriteStringLineAsync(writer, structureFence, ct);
+        await WriteStringLineAsync(writer, "", ct);
     }
 
     // A filename can legally contain control characters (newline, CR, tab, …); `git ls-files -z`

@@ -38,6 +38,31 @@ public class GenerateContextUseCaseTests
 
     // ─── ExecuteAsync tests ──────────────────────────────────────────────────
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SplitOutputRejectsWholeExportTransformsBeforeGenerating(bool cluster, bool brain)
+    {
+        var (useCase, discovery, generator, clipboard, _) = CreateUseCase();
+        var root = Path.Combine(Path.GetTempPath(), "gc-transform-" + Guid.NewGuid());
+        discovery.FilesPerDirectory[root] = ["Source.cs"];
+        discovery.ReposToReturn = [new RepoInfo { RootPath = root, RelativePath = "repo", Name = "repo", IsValid = true }];
+        var config = DefaultConfig();
+        var options = new ChunkOutputOptions(50000, root + "-parts");
+        var result = cluster
+            ? await useCase.ExecuteClusterAsync(root, config, [], [], [], null,
+                brainMode: brain, compress: !brain, chunkOutput: options)
+            : await useCase.ExecuteAsync(root, config, [], [], [], null,
+                brainMode: brain, compress: !brain, chunkOutput: options);
+        Assert.False(result.IsSuccess);
+        Assert.Contains("Split output requires uncompressed source", result.Error);
+        Assert.Empty(generator.ProcessedContents);
+        Assert.Equal(0, clipboard.CopyCallCount);
+        Assert.False(Directory.Exists(options.Directory));
+    }
+
     [Fact]
     public async Task ExecuteAsync_WithValidFiles_ReturnsSuccess()
     {

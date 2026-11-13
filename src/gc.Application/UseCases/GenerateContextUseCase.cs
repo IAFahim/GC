@@ -348,6 +348,11 @@ public sealed class GenerateContextUseCase
         bool unsafeDirectWrite = false,
         ChunkOutputOptions? chunkOutput = null)
     {
+        if (chunkOutput != null && (brainMode || compress))
+            return Result.Failure("Split output requires uncompressed source. Remove --brain/--compress to keep memory bounded and source ranges accurate.");
+        if (chunkOutput != null && appendMode)
+            return Result.Failure("Split output cannot be appended; choose a new output folder.");
+
         var sw = Stopwatch.StartNew();
 
         // ── 1. Compile content filter & filter entries ──
@@ -464,18 +469,12 @@ public sealed class GenerateContextUseCase
 
         if (chunkOutput != null)
         {
-            if (appendMode) return Result.Failure("Split output cannot be appended; choose a new output folder.");
             try
             {
                 using var chunks = new MarkdownChunkStream(chunkOutput);
-                if (hasPipeline)
-                    await chunks.WriteAsync(Encoding.UTF8.GetBytes(finalOutput), ct);
-                else
-                {
-                    var generated = await _generator.GenerateMarkdownStreamingAsync(filteredList, chunks, config,
-                        compiled, excludeLineIfStart, brainCrusherInstance, ct);
-                    if (!generated.IsSuccess) return Result.Failure(generated.Error!);
-                }
+                var generated = await _generator.GenerateMarkdownStreamingAsync(filteredList, chunks, config,
+                    compiled, excludeLineIfStart, brainCrusherInstance, ct);
+                if (!generated.IsSuccess) return Result.Failure(generated.Error!);
                 ct.ThrowIfCancellationRequested();
                 chunks.Complete();
                 profileReporter?.RecordStage("GenerationAndParts", sw.ElapsedTicks);

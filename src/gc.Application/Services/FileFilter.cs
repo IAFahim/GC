@@ -44,8 +44,13 @@ public sealed class FileFilter
 
         var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToArray();
         var searchPathContainsForms = new string[normalizedSearchPaths.Length];
+        var exactFileSearchPaths = new bool[normalizedSearchPaths.Length];
         for (var i = 0; i < normalizedSearchPaths.Length; i++)
+        {
             searchPathContainsForms[i] = "/" + normalizedSearchPaths[i] + "/";
+            exactFileSearchPaths[i] = rootPath != null &&
+                File.Exists(Path.Combine(absoluteRootPath ?? rootPath, normalizedSearchPaths[i]));
+        }
 
         // Merge CLI and config path patterns
         var mergedExcludePath = MergePatterns(excludePathPatterns, config.Filters?.ExcludePathPatterns);
@@ -54,7 +59,10 @@ public sealed class FileFilter
         var filtered = new List<FileEntry>();
         foreach (var path in rawFiles)
         {
-            if (!IsValidPath(path, normalizedSearchPaths, searchPathContainsForms, systemIgnoredNormalized,
+            var matchPath = path;
+            if (rootPath != null && Path.IsPathFullyQualified(path))
+                matchPath = Path.GetRelativePath(Path.GetFullPath(absoluteRootPath ?? rootPath), path).Replace('\\', '/');
+            if (!IsValidPath(matchPath, normalizedSearchPaths, searchPathContainsForms, exactFileSearchPaths, systemIgnoredNormalized,
                     excludePatternsNormalized, activeExtensions, extensionLookup, mergedExcludePath, mergedIncludePath))
                 continue;
             if (TryCreateFileEntry(path, config, rootPath, absoluteRootPath, out var entry))
@@ -325,7 +333,7 @@ public sealed class FileFilter
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsValidPath(string path, string[] normalizedSearchPaths, string[] searchPathContainsForms,
+    private static bool IsValidPath(string path, string[] normalizedSearchPaths, string[] searchPathContainsForms, bool[] exactFileSearchPaths,
         string[] systemIgnoredPatterns, string[] excludePatterns, FrozenSet<string> extensions,
         FrozenSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, string[] excludePathPatterns,
         string[] includePathPatterns)
@@ -377,6 +385,15 @@ public sealed class FileFilter
             for (var i = 0; i < normalizedSearchPaths.Length; i++)
             {
                 var searchSpan = normalizedSearchPaths[i].AsSpan();
+                if (exactFileSearchPaths[i])
+                {
+                    if (normalizedSpan.Equals(searchSpan, StringComparison.OrdinalIgnoreCase))
+                    {
+                        matchesSearchPath = true;
+                        break;
+                    }
+                    continue;
+                }
                 if (normalizedSpan.Equals(searchSpan, StringComparison.OrdinalIgnoreCase) ||
                     (normalizedSpan.Length > searchSpan.Length &&
                      normalizedSpan[searchSpan.Length] == '/' &&

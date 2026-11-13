@@ -53,7 +53,7 @@ gc -u -k          # portable src + Unity Runtime/Editor; exclude tests and sampl
 gc /path/to/src -k # pick a folder directly, from anywhere
 ```
 
-`-k` writes the parts to an OS temporary folder and prints its path. It does not need a clipboard session. `-k50` and `--split 50KB` select the same limit; `KB` means 1,000 bytes, and `KiB` is explicit. Each part is valid Markdown; the manifest records byte ranges and hashes for lossless reconstruction of the collected export.
+`-k` writes the parts to an OS temporary folder and prints its path. It does not need a clipboard session. `-k50` and `--split 50KB` select the same limit; `KB` means 1,000 bytes, and `KiB` is explicit. Files stay whole when they fit in one part. Larger files have continuation labels with their path and original source line range. Each part is valid Markdown; the manifest records file ranges, byte ranges and hashes for lossless reconstruction of the collected export.
 
 Set your preferred workflow once in a project:
 
@@ -64,6 +64,8 @@ gc init -u -k --temp -e cs
 After that, use **`gc`** for the project, **`gc src`** for a folder, or **`gc file.cs`** for one file. The saved options are also found when selecting that project from another directory. The Unity source preset includes initialized registered submodules and skips tests, samples, build output and local worktrees. Keep the `.gc` file with the project to use the same short commands on another PC.
 
 Use `--output-dir <new-or-empty-folder>` for a specific parts folder, or `--temp` without splitting for a single temporary Markdown file. Existing nonempty part folders are preserved. Normal commands without splitting keep their existing single-file/clipboard behavior.
+
+Split output streams uncompressed source. Combining `-k` with `--brain` or `--compress` reports an error before generation; those transforms need the whole export and cannot preserve source line ranges.
 
 ```bash
 # Copy all tracked files to clipboard

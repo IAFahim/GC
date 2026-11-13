@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test byte limits and direct paths
-        run: dotnet test tests/gc.Tests/gc.Tests.csproj --filter FullyQualifiedName~ContextPartsTests
+        run: dotnet test tests/gc.Tests/gc.Tests.csproj --filter "FullyQualifiedName~ContextPartsTests|FullyQualifiedName~SubmoduleDiscoveryTests|FullyQualifiedName~SplitOutputRejectsWholeExportTransforms"
       - name: Publish native binary
         shell: bash
         run: |

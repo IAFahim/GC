@@ -76,6 +76,8 @@ with tempfile.TemporaryDirectory(prefix="gc context smoke ") as name:
     assert b"SourceMarker" in selected and b"RuntimeMarker" not in selected
     single, _ = exported(root, repo / "Runtime/Runner.cs", "-k")
     assert b"RuntimeMarker" in single and b"SourceMarker" not in single
+    filesystem, _ = exported(root, repo / "Runtime/Runner.cs", "-f", "-k")
+    assert b"RuntimeMarker" in filesystem and b"SourceMarker" not in filesystem
 
     run(repo, "init", "-u", "-k", "--temp", "-e", "cs")
     remembered, _ = exported(repo)
@@ -88,13 +90,30 @@ with tempfile.TemporaryDirectory(prefix="gc context smoke ") as name:
     subprocess.run(["git", "init", "--quiet", str(dependency)], check=True)
     (dependency / "src").mkdir()
     (dependency / "src/Child.cs").write_text("class RegisteredSubmoduleMarker {}", encoding="utf-8")
-    (repo / ".gitmodules").write_text('[submodule "dependency"]\n\tpath = dependency\n', encoding="utf-8")
+    subprocess.run(["git", "-C", str(dependency), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(dependency), "-c", "user.name=GC Smoke",
+                    "-c", "user.email=smoke@example.invalid", "commit", "--quiet", "-m", "fixture"], check=True)
+    head = subprocess.check_output(["git", "-C", str(dependency), "rev-parse", "HEAD"], text=True).strip()
+    subprocess.run(["git", "-C", str(repo), "update-index", "--add", "--cacheinfo",
+                    f"160000,{head},dependency"], check=True)
+    stale = repo / "ignored/stale"
+    stale.mkdir(parents=True)
+    subprocess.run(["git", "init", "--quiet", str(stale)], check=True)
+    (stale / "Secret.cs").write_text("class IgnoredWorktreeMarker {}", encoding="utf-8")
+    (repo / ".gitignore").write_text("/ignored/\n", encoding="utf-8")
+    (repo / ".gitmodules").write_text(
+        '[submodule "dependency"]\n\tpath = dependency\n[submodule "stale"]\n\tpath = ignored/stale\n', encoding="utf-8")
     nested, _ = exported(repo)
     assert b"RegisteredSubmoduleMarker" in nested
+    assert b"IgnoredWorktreeMarker" not in nested
 
     bad = subprocess.run([str(binary), "-e", "cs", "--splti", "50KB"], cwd=repo, env=environment,
                          capture_output=True, text=True, timeout=30)
     assert bad.returncode != 0
+    for arguments in [("-o", "--split=50KB"), ("-k", "--output-dir", "--splti"), ("-k", "--brain"), ("-k", "--compress")]:
+        bad = subprocess.run([str(binary), *arguments], cwd=repo, env=environment,
+                             capture_output=True, text=True, timeout=30)
+        assert bad.returncode != 0, (arguments, bad.stdout, bad.stderr)
     print("PASS: direct folders/files, saved gc defaults, registered submodules, source exclusions, UTF-8 byte caps and exact reconstruction.")
 
 for directory in output_directories:

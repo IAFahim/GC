@@ -5,8 +5,17 @@ using gc.Domain.Models;
 
 namespace gc.Application.Services;
 
+// The generator flushes at these boundaries, so positions refer to rendered UTF-8 bytes.
+internal interface IMarkdownBoundarySink
+{
+    void BeginFile(string? path, long renderedBytes, int longestFence);
+    void BeginContent(long bytes, IReadOnlyList<int>? sourceLines);
+    void EndContent();
+    void EndFile();
+}
+
 /// <summary>Streams UTF-8 Markdown into bounded, independently framed files and an integrity manifest.</summary>
-public sealed class MarkdownChunkStream : Stream
+public sealed class MarkdownChunkStream : Stream, IMarkdownBoundarySink
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private readonly ChunkOutputOptions _options;
@@ -14,6 +23,11 @@ public sealed class MarkdownChunkStream : Stream
     private readonly bool _hadEmptyDirectory;
     private readonly IncrementalHash _sourceHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
     private readonly List<Part> _parts = [];
+    private readonly List<FileRegion> _pendingFiles = [];
+    private FileRegion? _activeFile;
+    private bool _inContent;
+    private int _longestRun;
+    private int _trailingRun;
     private byte[] _buffer;
     private int _buffered;
     private long _sourceBytes;
@@ -21,7 +35,30 @@ public sealed class MarkdownChunkStream : Stream
     private bool _disposed;
 
     private sealed record Part(string File, int Bytes, string Sha256, int PayloadOffset,
-        int PayloadBytes, long SourceOffset);
+        int PayloadBytes, long SourceOffset, FileRange[] Files);
+
+    private sealed record FileRange(string Path, int? StartLine, int? EndLine, bool Continued, bool Continues);
+
+    private sealed class FileRegion(string? path, long start, long end, bool whole)
+    {
+        public string? Path { get; } = path;
+        public long Start { get; } = start;
+        public long End { get; } = end;
+        public bool Whole { get; } = whole;
+        public long ContentStart { get; set; } = -1;
+        public long ContentEnd { get; set; } = -1;
+        public List<long> LineStarts { get; } = [];
+        public IReadOnlyList<int>? SourceLines { get; set; }
+        public bool PreviousWasCr { get; set; }
+
+        public int LineAt(long offset)
+        {
+            var index = LineStarts.BinarySearch(offset);
+            if (index < 0) index = ~index - 1;
+            return SourceLines != null && index < SourceLines.Count
+                ? SourceLines[Math.Max(0, index)] : Math.Max(0, index) + 1;
+        }
+    }
 
     /// <summary>Starts an isolated output transaction; existing nonempty directories are preserved.</summary>
     public MarkdownChunkStream(ChunkOutputOptions options)
@@ -63,6 +100,45 @@ public sealed class MarkdownChunkStream : Stream
     /// <inheritdoc/>
     public override long Position { get => Length; set => throw new NotSupportedException(); }
 
+    void IMarkdownBoundarySink.BeginFile(string? path, long renderedBytes, int longestFence)
+    {
+        if (_activeFile != null) throw new InvalidOperationException("A Markdown file is already open.");
+        var whole = FitsWhole(renderedBytes, longestFence);
+        // Large files get their own parts. Whole files share a part when the complete block fits.
+        if (!whole || !FitsWhole(_buffered + renderedBytes, Math.Max(_longestRun, longestFence)))
+            while (_buffered > 0) EmitPart();
+        _activeFile = new FileRegion(path, Length, Length + renderedBytes, whole);
+        _pendingFiles.Add(_activeFile);
+    }
+
+    void IMarkdownBoundarySink.BeginContent(long bytes, IReadOnlyList<int>? sourceLines)
+    {
+        var file = _activeFile ?? throw new InvalidOperationException("No Markdown file is open.");
+        file.ContentStart = Length;
+        file.ContentEnd = Length + bytes;
+        file.SourceLines = sourceLines;
+        file.LineStarts.Add(Length);
+        _inContent = true;
+    }
+
+    void IMarkdownBoundarySink.EndContent() => _inContent = false;
+
+    void IMarkdownBoundarySink.EndFile()
+    {
+        var file = _activeFile ?? throw new InvalidOperationException("No Markdown file is open.");
+        if (Length != file.End) throw new InvalidOperationException("Markdown file byte count did not match its boundary.");
+        _inContent = false;
+        _activeFile = null;
+        if (!file.Whole) while (_buffered > 0) EmitPart();
+    }
+
+    private bool FitsWhole(long bytes, int longestFence)
+    {
+        var fenceBytes = Math.Max(4, longestFence + 1);
+        var prefixBytes = Encoding.UTF8.GetByteCount($"# Context part {_parts.Count + 1:D3}\n\n") + fenceBytes + 9;
+        return bytes + prefixBytes + fenceBytes + 2 <= _options.MaxBytes;
+    }
+
     /// <inheritdoc/>
     public override void Write(byte[] buffer, int offset, int count) => Write(buffer.AsSpan(offset, count));
 
@@ -81,9 +157,28 @@ public sealed class MarkdownChunkStream : Stream
                     EmitPart();
             }
             var count = Math.Min(data.Length, _buffer.Length - _buffered);
+            TrackContent(data[..count], Length);
             data[..count].CopyTo(_buffer.AsSpan(_buffered));
             _buffered += count;
             data = data[count..];
+        }
+    }
+
+    private void TrackContent(ReadOnlySpan<byte> data, long offset)
+    {
+        foreach (var value in data)
+        {
+            _trailingRun = value == '`' ? _trailingRun + 1 : 0;
+            _longestRun = Math.Max(_longestRun, _trailingRun);
+            if (_inContent && _activeFile is { Path: not null } file)
+            {
+                if (value == '\n' && file.PreviousWasCr)
+                    file.LineStarts[^1] = offset + 1;
+                else if (value is (byte)'\r' or (byte)'\n')
+                    file.LineStarts.Add(offset + 1);
+                file.PreviousWasCr = value == '\r';
+            }
+            offset++;
         }
     }
 
@@ -110,7 +205,9 @@ public sealed class MarkdownChunkStream : Stream
             if (count == 0) throw new DecoderFallbackException("Output ended inside a UTF-8 character.");
             var payload = _buffer.AsSpan(0, count);
             var fence = new string('`', Math.Max(4, LongestBacktickRun(payload) + 1));
-            prefix = Encoding.UTF8.GetBytes($"# Context part {_parts.Count + 1:D3}\n\n{fence}markdown\n");
+            var continuation = GetRanges(_sourceBytes, _sourceBytes + count).FirstOrDefault(f => f.Continued);
+            var label = continuation == null ? "" : ContinuationLabel(continuation);
+            prefix = Encoding.UTF8.GetBytes($"# Context part {_parts.Count + 1:D3}\n\n{label}{fence}markdown\n");
             suffix = Encoding.UTF8.GetBytes((payload[^1] == '\n' ? "" : "\n") + fence + "\n");
             var size = (long)prefix.Length + count + suffix.Length;
             if (size <= _options.MaxBytes) break;
@@ -134,12 +231,48 @@ public sealed class MarkdownChunkStream : Stream
         hash.AppendData(suffix);
         var bytes = prefix.Length + count + suffix.Length;
         _parts.Add(new Part(filename, bytes, Convert.ToHexStringLower(hash.GetHashAndReset()),
-            prefix.Length, count, _sourceBytes));
+            prefix.Length, count, _sourceBytes, GetRanges(_sourceBytes, _sourceBytes + count)));
         _sourceHash.AppendData(content);
         _sourceBytes += count;
         OutputBytes += bytes;
         _buffer.AsSpan(count, _buffered - count).CopyTo(_buffer);
         _buffered -= count;
+        _pendingFiles.RemoveAll(f => f.End <= _sourceBytes);
+        _longestRun = LongestBacktickRun(_buffer.AsSpan(0, _buffered));
+        _trailingRun = 0;
+        for (var i = _buffered - 1; i >= 0 && _buffer[i] == '`'; i--) _trailingRun++;
+    }
+
+    private FileRange[] GetRanges(long start, long end)
+    {
+        var ranges = new List<FileRange>();
+        foreach (var file in _pendingFiles)
+        {
+            if (file.Path == null || file.Start >= end || file.End <= start) continue;
+            var contentStart = Math.Max(start, file.ContentStart);
+            var contentEnd = Math.Min(end, file.ContentEnd);
+            var hasContent = file.ContentStart >= 0 && contentStart < contentEnd;
+            ranges.Add(new FileRange(file.Path, hasContent ? file.LineAt(contentStart) : null,
+                hasContent ? file.LineAt(contentEnd - 1) : null, file.Start < start, file.End > end));
+        }
+        return ranges.ToArray();
+    }
+
+    private string ContinuationLabel(FileRange file)
+    {
+        var path = file.Path;
+        // Keep tiny budgets usable with long paths; the manifest always retains the complete path.
+        var pathLimit = Math.Max(16, _options.MaxBytes / 4);
+        if (Encoding.UTF8.GetByteCount(path) > pathLimit)
+        {
+            var encoded = Encoding.UTF8.GetBytes(path);
+            var count = pathLimit - 3;
+            while (count > 0 && (encoded[count] & 0xC0) == 0x80) count--;
+            path = StrictUtf8.GetString(encoded.AsSpan(0, count)) + "…";
+        }
+        return file.StartLine.HasValue
+            ? $"Source: {path} (lines {file.StartLine}-{file.EndLine}, continued)\n\n"
+            : $"Source: {path} (continued)\n\n";
     }
 
     private static int SafePayloadLength(ReadOnlySpan<byte> buffer, int limit)
@@ -188,6 +321,20 @@ public sealed class MarkdownChunkStream : Stream
                 json.WriteNumber("payload_offset", part.PayloadOffset);
                 json.WriteNumber("payload_bytes", part.PayloadBytes);
                 json.WriteNumber("source_offset", part.SourceOffset);
+                json.WriteStartArray("files");
+                foreach (var range in part.Files)
+                {
+                    json.WriteStartObject();
+                    json.WriteString("path", range.Path);
+                    if (range.StartLine.HasValue) json.WriteNumber("start_line", range.StartLine.Value);
+                    else json.WriteNull("start_line");
+                    if (range.EndLine.HasValue) json.WriteNumber("end_line", range.EndLine.Value);
+                    else json.WriteNull("end_line");
+                    json.WriteBoolean("continued", range.Continued);
+                    json.WriteBoolean("continues", range.Continues);
+                    json.WriteEndObject();
+                }
+                json.WriteEndArray();
                 json.WriteEndObject();
             }
             json.WriteEndArray();

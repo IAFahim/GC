@@ -60,26 +60,12 @@ public sealed class GenerateContextUseCase
     public async Task<Result> ExecuteAsync(
         string rootPath,
         GcConfiguration config,
-        IEnumerable<string> paths,
-        IEnumerable<string> excludes,
-        IEnumerable<string> extensions,
-        string? outputFile,
-        bool appendMode = false,
-        IEnumerable<string>? excludeLineIfStart = null,
-        bool brainMode = false,
-        bool compress = false,
-        bool noCache = false,
-        string[]? excludePathPatterns = null,
-        string[]? includePathPatterns = null,
-        string[]? excludeContentPatterns = null,
-        string[]? includeContentPatterns = null,
-        CancellationToken ct = default,
-        ProfileReporter? profileReporter = null,
-        bool unsafeDirectWrite = false,
-        string? changedSince = null,
-        ShardInfo? shardInfo = null,
-        ChunkOutputOptions? chunkOutput = null)
+        RunOptions options,
+        CancellationToken ct = default)
     {
+        var profileReporter = options.Reporter;
+        var changedSince = options.ChangedSince;
+        var shardInfo = options.Shard;
         var sw = Stopwatch.StartNew();
         Result<IEnumerable<string>> discoveryResult;
 
@@ -98,8 +84,8 @@ public sealed class GenerateContextUseCase
 
         sw.Restart();
         var filterResult = _filter.FilterFiles(
-            discoveryResult.Value!, config, paths, excludes, extensions,
-            excludePathPatterns, includePathPatterns, rootPath, rootPath);
+            discoveryResult.Value!, config, options.Paths, options.Excludes, options.Extensions,
+            options.ExcludePathPatterns, options.IncludePathPatterns, rootPath, rootPath);
         profileReporter?.RecordStage("Filtering", sw.ElapsedTicks);
         if (!filterResult.IsSuccess) return Result.Failure(filterResult.Error!);
 
@@ -119,43 +105,24 @@ public sealed class GenerateContextUseCase
             var shardLists = _shardSplitter.SplitIntoShards(entries, shardInfo.Of, shardInfo.Slice, _logger);
             var shardEntries = shardLists.Count >= shardInfo.Slice ? shardLists[shardInfo.Slice - 1] : entries;
             var shardContents = shardEntries.Select(e => new FileContent(e, null, e.Size));
-            return await WriteOutputAsync(shardContents, shardEntries.Count, rootPath, config, outputFile, appendMode,
-                excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
-                profileReporter, unsafeDirectWrite, chunkOutput);
+            return await WriteOutputAsync(shardContents, shardEntries.Count, rootPath, config, options, ct);
         }
 
         _logger.Success("Processing...");
 
         var contents = entries.Select(e => new FileContent(e, null, e.Size));
 
-        return await WriteOutputAsync(contents, entries.Count, rootPath, config, outputFile, appendMode,
-            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
-            profileReporter, unsafeDirectWrite, chunkOutput);
+        return await WriteOutputAsync(contents, entries.Count, rootPath, config, options, ct);
     }
 
     public async Task<Result> ExecuteClusterAsync(
         string clusterRoot,
         GcConfiguration config,
-        IEnumerable<string> paths,
-        IEnumerable<string> excludes,
-        IEnumerable<string> extensions,
-        string? outputFile,
-        bool appendMode = false,
-        IEnumerable<string>? excludeLineIfStart = null,
-        bool brainMode = false,
-        bool compress = false,
-        bool noCache = false,
-        string[]? excludePathPatterns = null,
-        string[]? includePathPatterns = null,
-        string[]? excludeContentPatterns = null,
-        string[]? includeContentPatterns = null,
-        CancellationToken ct = default,
-        ProfileReporter? profileReporter = null,
-        bool unsafeDirectWrite = false,
-        string? changedSince = null,
-        ShardInfo? shardInfo = null,
-        ChunkOutputOptions? chunkOutput = null)
+        RunOptions options,
+        CancellationToken ct = default)
     {
+        var profileReporter = options.Reporter;
+        var shardInfo = options.Shard;
         var clusterConfig = config.Discovery?.Cluster ?? new ClusterConfiguration();
         if (clusterConfig.MaxDepth is null or <= 0) clusterConfig = clusterConfig with { MaxDepth = 2 };
 
@@ -205,8 +172,8 @@ public sealed class GenerateContextUseCase
                 }
 
                 var filterResult = _filter.FilterFiles(
-                    discoveryResult.Value!, config, paths, excludes, extensions,
-                    excludePathPatterns, includePathPatterns, rootPath: repo.RootPath);
+                    discoveryResult.Value!, config, options.Paths, options.Excludes, options.Extensions,
+                    options.ExcludePathPatterns, options.IncludePathPatterns, rootPath: repo.RootPath);
                 if (!filterResult.IsSuccess)
                 {
                     lock (lockObj)
@@ -277,15 +244,10 @@ public sealed class GenerateContextUseCase
             var shardLists = _shardSplitter.SplitIntoShards(flatEntries, shardInfo.Of, shardInfo.Slice, _logger);
             var shardEntries = shardLists.Count >= shardInfo.Slice ? shardLists[shardInfo.Slice - 1] : flatEntries;
             var shardContents = shardEntries.Select(e => new FileContent(e, null, e.Size));
-            return await WriteOutputAsync(shardContents, shardEntries.Count, clusterRoot, config, outputFile,
-                appendMode,
-                excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
-                profileReporter, unsafeDirectWrite, chunkOutput);
+            return await WriteOutputAsync(shardContents, shardEntries.Count, clusterRoot, config, options, ct);
         }
 
-        return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, outputFile, appendMode,
-            excludeLineIfStart, brainMode, compress, noCache, excludeContentPatterns, includeContentPatterns, ct,
-            profileReporter, unsafeDirectWrite, chunkOutput);
+        return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, options, ct);
     }
 
     private IEnumerable<FileContent> BuildClusterContents(
@@ -349,19 +311,20 @@ public sealed class GenerateContextUseCase
         int fileCount,
         string rootPath,
         GcConfiguration config,
-        string? outputFile,
-        bool appendMode,
-        IEnumerable<string>? excludeLineIfStart,
-        bool brainMode,
-        bool compress,
-        bool noCache,
-        string[]? excludeContentPatterns,
-        string[]? includeContentPatterns,
-        CancellationToken ct,
-        ProfileReporter? profileReporter = null,
-        bool unsafeDirectWrite = false,
-        ChunkOutputOptions? chunkOutput = null)
+        RunOptions options,
+        CancellationToken ct)
     {
+        var outputFile = options.OutputFile;
+        var appendMode = options.Append;
+        var excludeLineIfStart = options.DropLinesStartingWith;
+        var brainMode = options.Brain;
+        var compress = options.Compress;
+        var noCache = options.NoCache;
+        var excludeContentPatterns = options.ExcludeContentPatterns;
+        var includeContentPatterns = options.IncludeContentPatterns;
+        var profileReporter = options.Reporter;
+        var chunkOutput = options.Parts;
+
         if (chunkOutput != null && (brainMode || compress))
             return Result.Failure("Split output requires uncompressed source. Remove --brain/--compress to keep memory bounded and source ranges accurate.");
         if (chunkOutput != null && appendMode)
@@ -508,7 +471,7 @@ public sealed class GenerateContextUseCase
             {
                 return await EmitToFile(filteredList, actualFileCount, outputFile, appendMode,
                     hasPipeline, finalOutput, compiled, excludeLineIfStart, transformInfo,
-                    unsafeDirectWrite, config, brainCrusherInstance, ct, sw, profileReporter);
+                    config, brainCrusherInstance, ct, sw, profileReporter);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -532,7 +495,6 @@ public sealed class GenerateContextUseCase
         CompiledContentPatterns compiled,
         IEnumerable<string>? excludeLineIfStart,
         string transformInfo,
-        bool unsafeDirectWrite,
         GcConfiguration config,
         BrainCrusher? brainCrusher,
         CancellationToken ct,
@@ -549,7 +511,7 @@ public sealed class GenerateContextUseCase
         {
             var finalBytes = Encoding.UTF8.GetBytes(finalOutput);
 
-            if (unsafeDirectWrite || isAppend)
+            if (isAppend)
             {
                 var fileMode = isAppend ? FileMode.Append : FileMode.Create;
                 await using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, true);
@@ -568,7 +530,7 @@ public sealed class GenerateContextUseCase
         }
 
         // No pipeline — stream directly to file
-        if (unsafeDirectWrite || isAppend)
+        if (isAppend)
         {
             var fileMode = isAppend ? FileMode.Append : FileMode.Create;
             await using var fs = new FileStream(outputFile, fileMode, FileAccess.Write, FileShare.None, 4096, true);

@@ -501,27 +501,7 @@ public static class Program
             logger.Info($"Cluster mode: scanning {clusterDir} for git repositories...");
 
             var result = await useCase.ExecuteClusterAsync(
-                clusterDir,
-                config,
-                cliArgs.Paths,
-                cliArgs.Excludes,
-                cliArgs.Extensions,
-                cliArgs.OutputFile,
-                cliArgs.Append,
-                cliArgs.ExcludeLineIfStart,
-                cliArgs.BrainMode,
-                cliArgs.Compress,
-                cliArgs.NoCache,
-                cliArgs.ExcludePathPatterns,
-                cliArgs.IncludePathPatterns,
-                cliArgs.ExcludeContentPatterns,
-                cliArgs.IncludeContentPatterns,
-                ct,
-                profileReporter,
-                cliArgs.UnsafeDirectWrite,
-                cliArgs.ChangedSince,
-                cliArgs.ShardInfo,
-                chunkOutput);
+                clusterDir, config, cliArgs.ToRunOptions(profileReporter, chunkOutput), ct);
 
             if (!result.IsSuccess)
             {
@@ -533,27 +513,7 @@ public static class Program
         }
 
         var normalResult = await useCase.ExecuteAsync(
-            currentDirectory,
-            config,
-            cliArgs.Paths,
-            cliArgs.Excludes,
-            cliArgs.Extensions,
-            cliArgs.OutputFile,
-            cliArgs.Append,
-            cliArgs.ExcludeLineIfStart,
-            cliArgs.BrainMode,
-            cliArgs.Compress,
-            cliArgs.NoCache,
-            cliArgs.ExcludePathPatterns,
-            cliArgs.IncludePathPatterns,
-            cliArgs.ExcludeContentPatterns,
-            cliArgs.IncludeContentPatterns,
-            ct,
-            profileReporter,
-            cliArgs.UnsafeDirectWrite,
-            cliArgs.ChangedSince,
-            cliArgs.ShardInfo,
-            chunkOutput);
+            currentDirectory, config, cliArgs.ToRunOptions(profileReporter, chunkOutput), ct);
 
         if (!normalResult.IsSuccess)
         {

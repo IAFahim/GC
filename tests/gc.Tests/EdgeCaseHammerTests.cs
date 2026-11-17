@@ -263,11 +263,7 @@ namespace MyApp
         var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
 
         var result = await useCase.ExecuteAsync(
-            "/tmp", new GcConfiguration(),
-            Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
-            null, false, null, false, false, false,
-            null, null, null, null,
-            CancellationToken.None);
+            "/tmp", new GcConfiguration(), new RunOptions(), CancellationToken.None);
         Assert.True(result.IsSuccess);
     }
 
@@ -287,11 +283,7 @@ namespace MyApp
         await cts.CancelAsync();
 
         var result = await useCase.ExecuteAsync(
-            "/tmp", new GcConfiguration(),
-            Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
-            null, false, null, false, false, false,
-            null, null, null, null,
-            cts.Token);
+            "/tmp", new GcConfiguration(), new RunOptions(), cts.Token);
     }
 
     // =========================================================================

@@ -1,3 +1,5 @@
+using gc.Application.Services;
+using gc.Application.UseCases;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
 
@@ -98,4 +100,26 @@ public sealed class CliArguments
 
     /// <summary>Set when the user requests the raw completion script printed to stdout. Value is the shell name.</summary>
     public string? PrintCompletion { get; set; }
+
+    /// <summary>Builds the single options record handed to the use case after parsing.</summary>
+    public RunOptions ToRunOptions(ProfileReporter? reporter, ChunkOutputOptions? parts) => new()
+    {
+        Paths = Paths,
+        Excludes = Excludes,
+        Extensions = Extensions,
+        ExcludePathPatterns = ExcludePathPatterns,
+        IncludePathPatterns = IncludePathPatterns,
+        ExcludeContentPatterns = ExcludeContentPatterns,
+        IncludeContentPatterns = IncludeContentPatterns,
+        DropLinesStartingWith = ExcludeLineIfStart,
+        OutputFile = OutputFile,
+        Append = Append,
+        Brain = BrainMode,
+        Compress = Compress,
+        NoCache = NoCache,
+        ChangedSince = ChangedSince,
+        Shard = ShardInfo,
+        Parts = parts,
+        Reporter = reporter
+    };
 }

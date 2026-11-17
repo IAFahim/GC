@@ -284,6 +284,7 @@ public class PerformanceTests : IDisposable
             Arguments = args,
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };
@@ -307,6 +308,7 @@ public class PerformanceTests : IDisposable
             Arguments = $"{command} {string.Join(" ", args)}",
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };

@@ -66,6 +66,7 @@ public sealed class SubmoduleDiscoveryTests
         {
             WorkingDirectory = directory,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };

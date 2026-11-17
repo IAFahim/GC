@@ -41,7 +41,7 @@ public class BugFixTests
             // Assert
             Assert.True(result.IsSuccess, "Reading should succeed but streaming should fail size check");
 
-            var stream = result.Value;
+            using var stream = result.Value;
             var fileInfo = new FileInfo(tempFile);
             var maxFileSize = config.Limits.GetMaxFileSizeBytes();
 
@@ -274,7 +274,7 @@ public class BugFixTests
         // Check that header is included
         Assert.Contains("test.cs", generatedContent);
         Assert.Contains("```cs", generatedContent);
-        Assert.Contains("```\n", generatedContent);
+        Assert.Contains("```" + Environment.NewLine, generatedContent);
     }
 
     [Fact]

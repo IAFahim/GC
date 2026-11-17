@@ -227,6 +227,8 @@ public sealed class ConfigurationValidator
             var format = output.DefaultFormat.ToLowerInvariant();
             if (format != "markdown" && format != "plain" && format != "json")
                 warnings.Add($"Invalid DefaultFormat: '{output.DefaultFormat}'. Expected: markdown, plain, or json");
+            else if (format != "markdown")
+                warnings.Add($"DefaultFormat '{output.DefaultFormat}' is not implemented yet; gc writes Markdown.");
         }
     }
 

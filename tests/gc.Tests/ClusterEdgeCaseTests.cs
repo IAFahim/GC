@@ -538,6 +538,7 @@ public class ClusterEdgeCaseTests : IDisposable
             Arguments = $"{command} {string.Join(" ", args)}",
             WorkingDirectory = workingDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
@@ -561,6 +562,7 @@ public class ClusterEdgeCaseTests : IDisposable
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
                 RedirectStandardError = true
             })?.WaitForExit();
         else
@@ -572,6 +574,7 @@ public class ClusterEdgeCaseTests : IDisposable
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
                 RedirectStandardError = true
             })?.WaitForExit();
     }
@@ -584,6 +587,7 @@ public class ClusterEdgeCaseTests : IDisposable
             Arguments = args,
             WorkingDirectory = _testDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true

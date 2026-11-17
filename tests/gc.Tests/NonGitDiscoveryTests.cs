@@ -250,6 +250,7 @@ public class NonGitDiscoveryTests : IDisposable
             Arguments = args,
             WorkingDirectory = workingDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };

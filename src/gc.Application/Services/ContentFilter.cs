@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Text.RegularExpressions;
 using gc.Domain.Interfaces;
 
 namespace gc.Application.Services;
@@ -81,59 +80,23 @@ public sealed class ContentFilter
         return [.. fromConfig ?? [], .. fromCommandLine ?? []];
     }
 
-    private static (string[] Literals, Regex[] Wildcards) SplitWildcards(string[] patterns)
+    private static (string[] Literals, WildcardPattern[] Wildcards) SplitWildcards(string[] patterns)
     {
         var literals = new List<string>();
-        var wildcards = new List<Regex>();
+        var wildcards = new List<WildcardPattern>();
         foreach (var pattern in patterns)
         {
             if (pattern.AsSpan().IndexOfAny('*', '?') < 0) literals.Add(pattern);
-            else wildcards.Add(WildcardToRegex(pattern));
+            else wildcards.Add(new WildcardPattern(pattern));
         }
 
         return (literals.ToArray(), wildcards.ToArray());
     }
 
-    /// <summary>
-    ///     Compiles a "contains" wildcard: <c>*</c> is any text (including line breaks), <c>?</c> any one
-    ///     character. NonBacktracking keeps matching linear in the file size.
-    /// </summary>
-    internal static Regex WildcardToRegex(string pattern)
-    {
-        var sb = new StringBuilder();
-        var literal = new StringBuilder();
-        void FlushLiteral()
-        {
-            if (literal.Length == 0) return;
-            sb.Append(Regex.Escape(literal.ToString()));
-            literal.Clear();
-        }
-
-        foreach (var c in pattern)
-            switch (c)
-            {
-                case '*':
-                    FlushLiteral();
-                    sb.Append(".*");
-                    break;
-                case '?':
-                    FlushLiteral();
-                    sb.Append('.');
-                    break;
-                default:
-                    literal.Append(c);
-                    break;
-            }
-
-        FlushLiteral();
-        return new Regex(sb.ToString(),
-            RegexOptions.Singleline | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
-    }
-
-    private static bool MatchesAny(Regex[] patterns, string content)
+    private static bool MatchesAny(WildcardPattern[] patterns, string content)
     {
         foreach (var pattern in patterns)
-            if (pattern.IsMatch(content))
+            if (pattern.IsContainedIn(content))
                 return true;
         return false;
     }
@@ -187,5 +150,52 @@ public sealed class ContentFilter
         }
 
         return false;
+    }
+}
+
+/// <summary>
+///     A "contains" wildcard: <c>*</c> is any text (including line breaks), <c>?</c> any one character.
+///     Hand-written (no Regex) so it is trimming/AOT-safe and never backtracks catastrophically:
+///     the text between stars is found left to right, taking the earliest match each time.
+/// </summary>
+internal sealed class WildcardPattern
+{
+    private readonly string[] _segments;
+
+    public WildcardPattern(string pattern)
+    {
+        _segments = pattern.Split('*', StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    public bool IsContainedIn(string content)
+    {
+        var position = 0;
+        foreach (var segment in _segments)
+        {
+            var found = IndexOf(content, segment, position);
+            if (found < 0) return false;
+            position = found + segment.Length;
+        }
+
+        return true;
+    }
+
+    private static int IndexOf(string text, string segment, int start)
+    {
+        if (segment.AsSpan().IndexOf('?') < 0) return text.IndexOf(segment, start, StringComparison.Ordinal);
+        for (var i = start; i + segment.Length <= text.Length; i++)
+        {
+            var matches = true;
+            for (var k = 0; k < segment.Length; k++)
+                if (segment[k] != '?' && segment[k] != text[i + k])
+                {
+                    matches = false;
+                    break;
+                }
+
+            if (matches) return i;
+        }
+
+        return -1;
     }
 }

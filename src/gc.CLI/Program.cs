@@ -18,6 +18,17 @@ public static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        // The summary lines use a check mark and paths may be non-ASCII; the Windows default code page
+        // would turn them into '?' (also when output is redirected).
+        try
+        {
+            Console.OutputEncoding = new System.Text.UTF8Encoding(false);
+        }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or UnauthorizedAccessException)
+        {
+            // No console attached: keep the default.
+        }
+
         using var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
         {

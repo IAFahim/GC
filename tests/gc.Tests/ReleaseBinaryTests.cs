@@ -477,6 +477,7 @@ public class ReleaseBinaryTests : IDisposable
             Arguments = args,
             WorkingDirectory = directory,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };
@@ -565,6 +566,7 @@ public class ReleaseBinaryTests : IDisposable
             Arguments = string.Join(" ", args),
             WorkingDirectory = directory,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };

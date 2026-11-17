@@ -267,6 +267,14 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         $"File not found: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}"),
                                     threadToken);
                             }
+                            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+                            {
+                                // Same placeholder as the Linux fast path, so output does not depend on the platform.
+                                await channel.Writer.WriteAsync(
+                                    ReadResult.Failure(index,
+                                        $"File not found: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}"),
+                                    threadToken);
+                            }
                             catch (Exception ex)
                             {
                                 _logger.Error(

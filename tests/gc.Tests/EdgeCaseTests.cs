@@ -419,6 +419,7 @@ public class Test
             Arguments = args,
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
@@ -447,6 +448,7 @@ public class Test
             Arguments = $"{command} {string.Join(" ", args)}",
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };

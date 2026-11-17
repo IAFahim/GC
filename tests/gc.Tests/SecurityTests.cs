@@ -380,6 +380,7 @@ public class Test
             Arguments = args,
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };
@@ -403,6 +404,7 @@ public class Test
             Arguments = $"{command} {string.Join(" ", args)}",
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };
@@ -426,6 +428,7 @@ public class Test
             FileName = "chmod",
             Arguments = $"{permissions} {path}",
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };

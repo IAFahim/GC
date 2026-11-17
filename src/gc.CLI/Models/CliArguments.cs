@@ -35,8 +35,6 @@ public sealed class CliArguments
     public string OutputFile { get; set; } = string.Empty;
     public bool ShowHelp { get; set; }
     public bool ShowVersion { get; set; }
-    
-    
     public long MaxMemoryBytes { get; set; }
     public bool Verbose { get; set; }
     public bool Debug { get; set; }

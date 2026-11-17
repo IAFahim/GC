@@ -33,7 +33,10 @@ internal enum OptionKind
     MultiValue,
 
     /// A size option whose omitted value uses the attachment-safe default.
-    OptionalSize
+    OptionalSize,
+
+    /// A flag that may be followed by a *.json file name (--stats [file.json]).
+    OptionalFile
 }
 
 public sealed class CliParser
@@ -42,42 +45,52 @@ public sealed class CliParser
     // Static: the table, its delegates, and the token map are immutable and
     // identical for every parser, so build them once per process rather than
     // per `new CliParser()`.
+    //
+    // The documented surface is small: paths, -e, -x, -z, -o, -k, -a, -b, -l, --count, --stats.
+    // Older spellings stay accepted as hidden aliases so saved profiles, .gc files and history
+    // entries keep working; they are listed after each canonical token.
     private static readonly OptionSpec[] Options =
     [
         // ── Flags ──
         new(["-h", "--help"], OptionKind.Flag, (a, _) => a.ShowHelp = true),
         new(["--version"], OptionKind.Flag, (a, _) => a.ShowVersion = true),
-        new(["--test"], OptionKind.Flag, (a, _) => a.RunTests = true),
-        new(["--benchmark"], OptionKind.Flag, (a, _) => a.RunRealBenchmark = true),
         new(["-v", "--verbose"], OptionKind.Flag, (a, _) => a.Verbose = true),
         new(["--debug"], OptionKind.Flag, (a, _) => a.Debug = true),
         new(["--init-config"], OptionKind.Flag, (a, _) => a.InitConfig = true),
         new(["--validate-config"], OptionKind.Flag, (a, _) => a.ValidateConfig = true),
         new(["--dump-config"], OptionKind.Flag, (a, _) => a.DumpConfig = true),
-        new(["--append"], OptionKind.Flag, (a, _) => a.Append = true),
-        new(["--no-append"], OptionKind.Flag, (a, _) => a.Append = false),
+        new(["-a", "--append"], OptionKind.Flag, (a, _) => a.Append = true),
         new(["--no-sort"], OptionKind.Flag, (a, _) => a.NoSort = true),
-        new(["-f", "--force"], OptionKind.Flag, (a, _) => a.Force = true),
+        // Plain filesystem walk instead of `git ls-files`. -f / --force are the old spellings.
+        new(["--no-git", "-f", "--force"], OptionKind.Flag, (a, _) => a.NoGit = true),
         new(["--no-clipboard"], OptionKind.Flag, (a, _) => a.NoClipboard = true),
         new(["--history"], OptionKind.Flag, (a, _) => a.ShowHistory = true),
         new(["-b", "--brain", "brain"], OptionKind.Flag, (a, _) => a.BrainMode = true),
         new(["-c", "--compress", "compress"], OptionKind.Flag, (a, _) => a.Compress = true),
         new(["--no-cache"], OptionKind.Flag, (a, _) => a.NoCache = true),
         new(["--cluster"], OptionKind.Flag, (a, _) => a.Cluster = true),
-        new(["--dry-run", "--list"], OptionKind.Flag, (a, _) => a.DryRun = true),
+        // Show the files only. --dry-run is the old spelling.
+        new(["-l", "--list", "--dry-run"], OptionKind.Flag, (a, _) => a.List = true),
         new(["--count", "--tokens-only"], OptionKind.Flag, (a, _) => a.CountTokens = true),
-        // Timing profiler. NOTE: bare "--profile <name>" is intercepted earlier by CliArgumentResolver
-        // to apply a saved named profile, so the timing flag uses a distinct token to avoid a collision.
-        new(["--profile-timing"], OptionKind.Flag, (a, _) => a.Profile = true),
-        new(["--profile-json"], OptionKind.SingleValue, (a, v) =>
+        // Timings, optionally written as JSON when a *.json file follows. The older
+        // --profile-timing / --profile-json / --json-stats spellings fold into this one option.
+        // NOTE: bare "--profile <name>" is intercepted earlier by CliArgumentResolver to apply a saved
+        // named profile, which is why the timing flag never used that token.
+        new(["--stats", "--profile-timing"], OptionKind.OptionalFile, (a, v) =>
         {
-            a.Profile = true;
-            a.ProfileOutput = v;
+            a.ShowStats = true;
+            if (v != null) a.StatsOutput = v;
         }),
-        new(["--unsafe-direct-write"], OptionKind.Flag, (a, _) => a.UnsafeDirectWrite = true),
+        new(["--json-stats", "--profile-json"], OptionKind.SingleValue, (a, v) =>
+        {
+            a.ShowStats = true;
+            a.StatsOutput = v;
+        }),
+        // Legacy no-ops kept only so old saved arguments still parse: appending is opt-in via -a and
+        // writes are always transactional unless appending.
+        new(["--no-append", "--unsafe-direct-write"], OptionKind.Flag, (_, _) => { }),
         // Install shell completion (auto-detects $SHELL). "" is the auto sentinel; null = not requested.
         new(["--install-completion"], OptionKind.Flag, (a, _) => a.InstallCompletion = ""),
-        new(["--stats"], OptionKind.Flag, (a, _) => a.ShowStats = true),
         new(["--temp"], OptionKind.Flag, (a, _) => a.TempOutput = true),
         new(["--submodules", "--recurse-submodules", "-r"], OptionKind.Flag, (a, _) => a.RecurseSubmodules = true),
         new(["--unity", "-u"], OptionKind.Flag, (a, _) => a.Presets = [..a.Presets, "unity-source"]),
@@ -87,14 +100,9 @@ public sealed class CliParser
             else if (ChunkSize.TryParse(v, out var bytes)) a.SplitBytes = bytes;
             else a.SplitError = v;
         }),
-        new(["--json-stats"], OptionKind.SingleValue, (a, v) =>
-        {
-            a.ShowStats = true;
-            a.StatsOutput = v;
-        }),
 
         // ── Single-value options ──
-        new(["-s", "-o", "--output", "spit"], OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
+        new(["-o", "--output", "spit", "-s"], OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
         new(["--root"], OptionKind.SingleValue, (a, v) => a.RootPath = v),
         new(["--output-dir"], OptionKind.SingleValue, (a, v) => a.OutputDirectory = v),
         new(["--max-memory"], OptionKind.SingleValue, (a, v) =>
@@ -126,23 +134,22 @@ public sealed class CliParser
         }),
 
         // ── Multi-value options (accumulate) ──
-        new(["-g", "-p", "--paths", "grab"], OptionKind.MultiValue,
+        // What to collect. Plain bare words land here too; an entry with * ? or [ is a glob.
+        // -p / --paths / --include-path are the old spellings of the same thing.
+        new(["-g", "-p", "--paths", "--include-path", "grab"], OptionKind.MultiValue,
             (a, v) => a.Paths = [..a.Paths, (v ?? "").Replace('\\', '/')]),
-        new(["-t", "-e", "--extension", "--extensions", "type"], OptionKind.MultiValue,
+        new(["-e", "-t", "--ext", "--extension", "--extensions", "type"], OptionKind.MultiValue,
             (a, v) => ProcessExtensions(v ?? "", a)),
-        new(["-y", "-x", "--exclude", "--excludes", "yeet"], OptionKind.MultiValue,
+        // Skip a folder, file or glob. --exclude-path is the old spelling.
+        new(["-x", "-y", "--exclude", "--excludes", "--exclude-path", "yeet"], OptionKind.MultiValue,
             (a, v) => a.Excludes = [..a.Excludes, (v ?? "").Replace('\\', '/')]),
         new(["--preset", "--presets"], OptionKind.MultiValue,
             (a, v) => a.Presets = [..a.Presets, (v ?? "").ToLowerInvariant()]),
-        new(["-z", "--exclude-line-if-start", "zap"], OptionKind.MultiValue, (a, v) =>
+        new(["-z", "--drop-lines", "--exclude-line-if-start", "zap"], OptionKind.MultiValue, (a, v) =>
         {
             var val = v == "\\n" ? "\n" : v;
             a.ExcludeLineIfStart = [..a.ExcludeLineIfStart, val ?? ""];
         }),
-        new(["--exclude-path"], OptionKind.MultiValue,
-            (a, v) => a.ExcludePathPatterns = [..a.ExcludePathPatterns, (v ?? "").Replace('\\', '/')]),
-        new(["--include-path"], OptionKind.MultiValue,
-            (a, v) => a.IncludePathPatterns = [..a.IncludePathPatterns, (v ?? "").Replace('\\', '/')]),
         new(["--exclude-content"], OptionKind.MultiValue,
             (a, v) => a.ExcludeContentPatterns = [..a.ExcludeContentPatterns, v ?? ""]),
         new(["--include-content"], OptionKind.MultiValue,
@@ -176,6 +183,7 @@ public sealed class CliParser
         OptionSpec? pendingSingleValue = null;
         OptionSpec? activeMultiValue = null;
         OptionSpec? pendingOptionalSize = null;
+        OptionSpec? pendingOptionalFile = null;
         var unknownFlags = new List<string>();
 
         foreach (var arg in args)
@@ -221,6 +229,17 @@ public sealed class CliParser
                 }
             }
 
+            if (pendingOptionalFile != null)
+            {
+                var optional = pendingOptionalFile.Value;
+                pendingOptionalFile = null;
+                if (arg.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && !arg.StartsWith('-'))
+                {
+                    optional.Apply(result, arg);
+                    continue;
+                }
+            }
+
             if (arg.StartsWith("--split=", StringComparison.OrdinalIgnoreCase) ||
                 (arg.Length > 2 && arg.StartsWith("-k", StringComparison.OrdinalIgnoreCase) && char.IsAsciiDigit(arg[2])))
             {
@@ -249,6 +268,11 @@ public sealed class CliParser
                     case OptionKind.OptionalSize:
                         spec.Apply(result, null);
                         pendingOptionalSize = spec;
+                        activeMultiValue = null;
+                        break;
+                    case OptionKind.OptionalFile:
+                        spec.Apply(result, null);
+                        pendingOptionalFile = spec;
                         activeMultiValue = null;
                         break;
                 }

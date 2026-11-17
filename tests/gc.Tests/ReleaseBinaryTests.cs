@@ -111,32 +111,6 @@ public class ReleaseBinaryTests : IDisposable
     }
 
     [Fact]
-    public void CurrentBuild_TestCommand_Works()
-    {
-        _output.WriteLine("Testing test command...");
-
-        var result = RunGC("--test");
-
-        Assert.Equal(0, result.ExitCode);
-        Assert.Contains("Running gc test suite", result.StandardOutput);
-
-        _output.WriteLine("✅ Test command works");
-    }
-
-    [Fact]
-    public void CurrentBuild_BenchmarkCommand_Works()
-    {
-        _output.WriteLine("Testing benchmark command...");
-
-        var result = RunGC("--benchmark");
-
-        Assert.Equal(0, result.ExitCode);
-        Assert.Contains("Benchmark", result.StandardOutput);
-
-        _output.WriteLine("✅ Benchmark command works");
-    }
-
-    [Fact]
     public void CurrentBuild_NoGitRepository_ShowsError()
     {
         _output.WriteLine("Testing behavior without git repository...");

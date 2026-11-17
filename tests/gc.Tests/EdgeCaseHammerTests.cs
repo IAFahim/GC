@@ -329,23 +329,19 @@ namespace MyApp
     }
 
     [Fact]
-    public void CliParser_TestFlag_SetsRunTests()
+    public void CliParser_TestFlag_IsRejected()
     {
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--test" }, new GcConfiguration());
-        Assert.True(result.IsSuccess);
-        Assert.NotNull(result.Value);
-        Assert.True(result.Value.RunTests);
+        Assert.False(result.IsSuccess);
     }
 
     [Fact]
-    public void CliParser_BenchmarkFlag_SetsRunBenchmark()
+    public void CliParser_BenchmarkFlag_IsRejected()
     {
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--benchmark" }, new GcConfiguration());
-        Assert.True(result.IsSuccess);
-        Assert.NotNull(result.Value);
-        Assert.True(result.Value.RunRealBenchmark);
+        Assert.False(result.IsSuccess);
     }
 
     [Fact]

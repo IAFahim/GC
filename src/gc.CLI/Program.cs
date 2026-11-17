@@ -6,13 +6,11 @@ using gc.CLI.Services;
 using gc.Domain.Interfaces;
 using gc.Domain.Models;
 using gc.Domain.Models.Configuration;
-using gc.Infrastructure.Benchmark;
 using gc.Infrastructure.Configuration;
 using gc.Infrastructure.Discovery;
 using gc.Infrastructure.IO;
 using gc.Infrastructure.Logging;
 using gc.Infrastructure.System;
-using gc.Infrastructure.Testing;
 
 namespace gc.CLI;
 
@@ -46,7 +44,13 @@ public static class Program
         var config = configResult.Value ?? new GcConfiguration();
         logger.ApplyConfiguration(config.Logging);
 
+        if (config.Output.DefaultFormat is { } format && !format.Equals("markdown", StringComparison.OrdinalIgnoreCase))
+            logger.Warning($"output.defaultFormat '{format}' is not implemented; gc writes Markdown.");
+
         var configDir = configLoader.GetConfigDirectory();
+        foreach (var legacy in SettingsStore.FindLegacyFiles(configDir, currentDirectory))
+            logger.Warning($"Old settings source in use: {legacy}. Move it into {SettingsStore.UserFileName} " +
+                           $"(user) or {SettingsStore.ProjectFileName} (project).");
         string[] resolvedArgs;
         bool shouldExit;
         int exitCode;
@@ -128,18 +132,6 @@ public static class Program
             return CompletionInstaller.Install(logger, shell);
         }
 
-        if (cliArgs.RunTests)
-        {
-            TestRunner.RunTests();
-            return 0;
-        }
-
-        if (cliArgs.RunRealBenchmark)
-        {
-            await RealBenchmark.RunRealBenchmarkAsync(logger);
-            return 0;
-        }
-
         if (!string.IsNullOrEmpty(cliArgs.ExportSchema))
             try
             {
@@ -186,8 +178,7 @@ public static class Program
         var validator = new ConfigurationValidator();
         var configService = new ConfigurationService(logger, validator);
 
-        var needsReporter = cliArgs.Profile || cliArgs.ShowStats || !string.IsNullOrEmpty(cliArgs.StatsOutput) ||
-                            !string.IsNullOrEmpty(cliArgs.ProfileOutput);
+        var needsReporter = cliArgs.ShowStats || !string.IsNullOrEmpty(cliArgs.StatsOutput);
         var profileReporter = needsReporter ? new ProfileReporter() : null;
 
         var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
@@ -216,34 +207,18 @@ public static class Program
         {
             profileReporter.Stop();
 
-            if (cliArgs.Profile || cliArgs.ShowStats) logger.Info("\n" + profileReporter.ToMarkdown());
+            if (cliArgs.ShowStats) logger.Info("\n" + profileReporter.ToMarkdown());
 
-            if (!string.IsNullOrEmpty(cliArgs.ProfileOutput) || !string.IsNullOrEmpty(cliArgs.StatsOutput))
-            {
-                var reportJson = profileReporter.ToJson();
-
-                if (!string.IsNullOrEmpty(cliArgs.ProfileOutput))
-                    try
-                    {
-                        await File.WriteAllTextAsync(cliArgs.ProfileOutput, reportJson, cts.Token);
-                        logger.Info($"Profile JSON written to {cliArgs.ProfileOutput}");
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"Failed to write profile JSON: {ex.Message}");
-                    }
-
-                if (!string.IsNullOrEmpty(cliArgs.StatsOutput))
-                    try
-                    {
-                        await File.WriteAllTextAsync(cliArgs.StatsOutput, reportJson, cts.Token);
-                        logger.Info($"Stats JSON written to {cliArgs.StatsOutput}");
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error($"Failed to write stats JSON: {ex.Message}");
-                    }
-            }
+            if (!string.IsNullOrEmpty(cliArgs.StatsOutput))
+                try
+                {
+                    await File.WriteAllTextAsync(cliArgs.StatsOutput, profileReporter.ToJson(), cts.Token);
+                    logger.Info($"Stats JSON written to {cliArgs.StatsOutput}");
+                }
+                catch (Exception ex)
+                {
+                    logger.Error($"Failed to write stats JSON: {ex.Message}");
+                }
         }
 
         if (exitCode == 0)
@@ -305,7 +280,9 @@ public static class Program
         else if (cliArgs.TempOutput && string.IsNullOrEmpty(cliArgs.OutputFile))
             cliArgs.OutputFile = Path.Combine(Path.GetTempPath(), "gc-" + Guid.NewGuid().ToString("N")[..12], "context.md");
 
-        if (cliArgs.InitConfig) return (await configService.InitializeConfigAsync()).IsSuccess ? 0 : 1;
+        if (cliArgs.InitConfig)
+            return (await configService.InitializeConfigAsync(
+                Path.Combine(currentDirectory, SettingsStore.ProjectFileName))).IsSuccess ? 0 : 1;
         if (cliArgs.ValidateConfig)
         {
             var validationResult = configService.ValidateConfig(config);
@@ -314,7 +291,7 @@ public static class Program
 
         if (cliArgs.DumpConfig) return configService.DumpConfig(config).IsSuccess ? 0 : 1;
 
-        if (cliArgs.Force)
+        if (cliArgs.NoGit)
             config = config with
             {
                 Discovery = config.Discovery with
@@ -364,8 +341,8 @@ public static class Program
             return 0;
         }
 
-        // Dry-run: just print the files that would be processed
-        if (cliArgs.DryRun)
+        // --list: just print the files that would be processed
+        if (cliArgs.List)
         {
             var discovery = new FileDiscovery(logger);
             var filter2 = new FileFilter(logger);
@@ -435,7 +412,8 @@ public static class Program
 
             var generator = new MarkdownGenerator(logger);
             var compiled = new ContentFilter(logger).CompilePatterns(
-                cliArgs.ExcludeContentPatterns, cliArgs.IncludeContentPatterns);
+                ContentFilter.Merge(config.Filters?.ExcludeContentPatterns, cliArgs.ExcludeContentPatterns),
+                ContentFilter.Merge(config.Filters?.IncludeContentPatterns, cliArgs.IncludeContentPatterns));
             var contents = filterResult.Value!.Select(e => new FileContent(e, null, e.Size));
             var counted = await generator.GenerateMarkdownStreamingAsync(contents, Stream.Null, config, compiled,
                 cliArgs.ExcludeLineIfStart, cliArgs.BrainMode ? new BrainCrusher() : null, ct);
@@ -527,82 +505,68 @@ public static class Program
     private static void PrintHelp()
     {
         Console.WriteLine(@"gc - Git Copy (Elite C# Edition)
-USAGE: gc [OPTIONS]
+USAGE: gc [PATHS...] [OPTIONS]      gc @profile [OPTIONS]
 
-DISCOVERY:
-    <folder-or-file>                 Collect that folder or file directly
+WHAT TO COLLECT:
+    <folder-or-file>                 Collect that folder or file directly (globs like src/**/*.cs work too)
+    -e, --ext <list>                 Only these extensions (cs,md or -e cs -e md)
+    -x, --exclude <list>             Skip a folder, file or glob
+    -z, --drop-lines <list>          Drop lines that start with this text
     --root <folder>                  Choose a discovery root without changing directory
     -r, --submodules                 Include initialized registered submodules
-    -f, --force                      Force filesystem discovery (ignore git)
-    -d, --depth <number>             Maximum directory depth to penetrate
-
-FILTERING:
+    --no-git                         Walk the filesystem instead of asking git
     -u, --unity                      src + Unity Runtime/Editor; skip tests and samples
-    -g, grab, -p, --paths <paths>    Filter by starting paths
-    -t, type, -e, --extension <ext>  Filter by extension
-    -y, yeet, -x, --exclude <path>   Exclude folder, path or pattern
-    -z, zap, --exclude-line-if-start Exclude lines starting with this string
-    --exclude-path <pattern>         Exclude paths matching glob pattern
-    --include-path <pattern>         Include only paths matching glob pattern
-    --exclude-content <keyword>      Exclude files containing this keyword
-    --include-content <keyword>      Include only files containing this keyword
-    --changed-since <ref>            Only include files changed since git ref
+    --exclude-content <keyword>      Skip files containing this text (* and ? allowed)
+    --include-content <keyword>      Only files containing this text (* and ? allowed)
+    --changed-since <ref>            Only files changed since a git ref
     --explain-filter <path>          Explain why a file is included or excluded
-    --preset <name>                  Use a built-in preset (web,backend,dotnet,etc)
+    -d, --depth <number>             Maximum directory depth
 
-OUTPUT:
-    -k, --split [size]               Markdown parts, 50KB by default (KB=1000 bytes)
+WHERE IT GOES:
+    -o, --output <file>              Write a file instead of the clipboard
+    -k, --split [size]               Markdown parts, 50KB by default (KB=1000 bytes); the clipboard pages them
+    -a, --append                     Add to what is already there
+    -b, --brain                      Minify
+    -c, --compress                   Structural compression using sqz (session dedup)
     --temp                           Save to the OS temp folder; print its path
     --output-dir <folder>            Destination for size-limited parts
-    -s, -o, spit, --output <file>    Save output to file instead of clipboard
-    --no-clipboard                   Disable copying output to clipboard
-    -b, brain, --brain               Universal minification + Dynamic BPE fallback
-    -c, compress, --compress         Structural compression using sqz (session dedup)
-    --no-cache                       Disable sqz dedup cache (fresh output)
-    --append                         Append to current clipboard/file content
-    --no-append                      Do not append (default)
+    --no-clipboard                   Do not copy to the clipboard
+    --no-cache                       Disable the sqz dedup cache
     --no-sort                        Do not sort output by file path
-    --dry-run, --list                Preview files to be included without generating output
-    --count, --tokens-only           Show token count estimate without generating output
-    --profile-timing                 Print stage timing profile after execution
-    --profile-json <file>            Write machine-readable profile JSON to file
-    --stats                          Show detailed execution statistics
-    --json-stats <file>              Write execution statistics to JSON file
-    --unsafe-direct-write            Disable transactional file writes (write directly to target)
 
-CLUSTER MODE:
-    horde, --cluster                 Enable cluster mode (batch process repos)
-    --cluster-dir <path>             Directory to scan for repos (default: CWD)
-    --cluster-depth <number>         Max depth to scan for repos (default: 2)
+LOOK, DO NOT WRITE:
+    -l, --list                       Show the files only
+    --count                          Token estimate only
+    --stats [file.json]              Timings; with a file, also write them as JSON
 
-SHARD MODE:
-    --shard <N.M>                    Process shard N of M pieces (e.g. 1.3, 2.3)
+CLUSTER AND SHARD:
+    horde, --cluster                 Process every repo under a folder
+    --cluster-dir <path>             Folder to scan for repos (default: current)
+    --cluster-depth <number>         How deep to look for repos (default: 2)
+    --shard <N.M>                    Process piece N of M (e.g. 1.3)
 
-    Smart grouping by module/folder, then by file size for balanced shards.
-
-    The file listing at the end always shows all files in the repo.
-
-CONFIGURATION:
-    --init-config                    Initialize global configuration
-    init [args...]                   Initialize local configuration (.gc file) in CWD
-    --save                           Save current/merged arguments as the default for CWD
-    --save-profile <name> [args...]  Save the provided arguments as a named profile
-    --profile <name>                 Apply a named profile's arguments
-    --list-profiles                  List all saved profiles
-    --validate-config                Validate configuration
-    --dump-config                    Show configuration
-    --export-schema <file>           Export configuration JSON schema to file
+SETTINGS (two files, one format):
+    gc.json (user) and .gc.json (project). Each holds settings, defaults (arguments
+    always applied) and profiles (name to arguments). Project overrides user.
+    @name                            Use a profile: gc @unity-source, gc @docs -o out.md
+    --preset <name>                  Same as @name for a built-in preset (web,backend,dotnet,unity...)
+    init [args...]                   Write .gc.json here with these arguments as defaults
+    --init-config                    Write an empty .gc.json (settings, defaults, profiles)
+    --save                           Save the typed arguments as this folder's defaults
+    --save-profile <name> [args...]  Save arguments as a user profile
+    --list-profiles                  List project, user and built-in profiles
+    --validate-config                Validate the merged settings
+    --dump-config                    Show the merged settings
+    --export-schema <file>           Export the settings JSON schema
 
 SHELL COMPLETION:
     --install-completion             Install tab-completion for your shell (auto-detects bash/zsh/fish)
-    --print-completion <shell>       Print the completion script to stdout (bash|zsh|fish)
+    --print-completion <shell>       Print the completion script (bash|zsh|fish)
 
 OTHER:
     --history [N]                    Show run history (optionally re-run entry N)
-    -v, --verbose                    Enable verbose logging
-    --debug                          Enable debug logging
-    --test                           Run tests
-    --benchmark                      Run benchmark
+    -v, --verbose                    Verbose logging
+    --debug                          Debug logging
     --version                        Show version information
     -h, --help                       Show this help message");
     }

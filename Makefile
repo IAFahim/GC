@@ -55,7 +55,7 @@ publish:
 
 # Run benchmarks
 bench:
-	dotnet run --project src/gc.CLI/gc.CLI.csproj -c Release -- --benchmark
+	dotnet run --project benchmarks/gc.Benchmarks/gc.Benchmarks.csproj -c Release -- --real
 
 # Lint: check formatting without changing files
 lint:

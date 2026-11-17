@@ -7,7 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Smaller flag surface (#14).** The documented options are paths, `-e/--ext`, `-x/--exclude`, `-z/--drop-lines`, `-o/--output`, `-k/--split`, `-a/--append`, `-b/--brain`, `-l/--list`, `--count`, and `--stats [file.json]`. These older spellings still work and are hidden from help, so saved profiles, `.gc` files and history keep running:
+  - `-p`, `--paths` and `--include-path` are plain paths (a path with `*`, `?` or `[` is a glob)
+  - `--exclude-path` is `-x`
+  - `-s` is `-o`
+  - `-f` / `--force` is `--no-git`
+  - `--dry-run` is `--list`
+  - `--profile-timing`, `--profile-json <file>` and `--json-stats <file>` are `--stats [file.json]`
+- **Two settings files, one format (#14).** `gc.json` (user config folder) and `.gc.json` (project) each hold `settings`, `defaults` (arguments always applied) and `profiles` (name to arguments). Presets are built-in profiles, used as `gc @unity-source` or `gc @web`. `gc init`, `--save`, `--save-profile` and `--init-config` write these files; `.gc` is no longer both a file and a folder. The old `config.json` layers, `.gc` arguments file, `directory_defaults.json` and `profiles.json` are still read, with a warning naming each one.
+- One `RunOptions` record is passed to `GenerateContextUseCase.ExecuteAsync` / `ExecuteClusterAsync` instead of 21 parameters (#14).
+- `schema.json` now describes the settings-file format and includes settings it was missing (`discovery.cluster`, `discovery.maxDepth`, `discovery.recurseSubmodules`, the path and content patterns); a test keeps it in sync (#14).
+
+### Added
+
+- `--no-git`, `-l`, `-a`, `-e/--ext` and `--drop-lines` as the canonical spellings; `gc @name` profiles; `gc --list-profiles` lists project, user and built-in profiles.
+- `*` and `?` wildcards in `--include-content` / `--exclude-content` (plain keywords stay literal and fast), as the docs already claimed (#14).
+
+### Removed
+
+- `--test` and `--benchmark`. The end-to-end benchmark moved to `dotnet run --project benchmarks/gc.Benchmarks -c Release -- --real` (the Makefile and benchmark workflow use it) (#14).
+- `--no-append` and `--unsafe-direct-write` have no effect any more (still accepted so old arguments parse): appending is opt-in with `-a`, and every non-append write is transactional (#14).
+- The unused `gc.Generators` project and the `GenerateConfigurationAccessors` attribute. Nothing built or referenced them (#14).
+
 ### Fixed
+
+- Settings that nothing read now work (#14): `filters.excludeContentPatterns` / `includeContentPatterns`, `filters.additionalExtensions` (allowed alongside an active extension filter), `discovery.useGit` (`false` is `--no-git`), `cluster.includeRootFiles`, `markdown.languageDetection` (`filename`, `content` uses the shebang of extensionless files), `output.includeStats` (`false` drops the figures from the summary line). `output.defaultFormat` other than `markdown` now warns that only Markdown is produced.
 
 - `--count` now runs the real generator into a null sink, so it resolves files against the root (`gc src --count` no longer prints 0) and reflects `-b`, `-z` and content filters (#14)
 - `FileReader` resolves entries against their root instead of the process folder (#14)

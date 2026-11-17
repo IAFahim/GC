@@ -64,18 +64,18 @@ public sealed class CliParserFlagTests
 
     // 5
     [Fact]
-    public void Parse_TestFlag()
+    public void Parse_TestFlag_IsNoLongerAnOption()
     {
-        var result = Parse("--test");
-        Assert.True(result.RunTests);
+        var parsed = new CliParser().Parse(["--test"], new GcConfiguration());
+        Assert.False(parsed.IsSuccess);
     }
 
     // 6
     [Fact]
-    public void Parse_BenchmarkFlag()
+    public void Parse_BenchmarkFlag_IsNoLongerAnOption()
     {
-        var result = Parse("--benchmark");
-        Assert.True(result.RunRealBenchmark);
+        var parsed = new CliParser().Parse(["--benchmark"], new GcConfiguration());
+        Assert.False(parsed.IsSuccess);
     }
 
     // 7
@@ -189,16 +189,19 @@ public sealed class ConfigurationServiceTests
     public async Task InitializeConfigAsync_CreatesDirectoryAndFile()
     {
         var tmp = CreateTempDir();
-        var configDir = Path.Combine(tmp, ".gc");
+        var settingsPath = Path.Combine(tmp, ".gc.json");
         try
         {
             var logger = new RecordingLogger();
             var sut = new ConfigurationService(logger, new ConfigurationValidator());
-            var result = await sut.InitializeConfigAsync(configDir);
+            var result = await sut.InitializeConfigAsync(settingsPath);
 
             Assert.True(result.IsSuccess, result.Error ?? "Init failed");
-            Assert.True(Directory.Exists(configDir), ".gc directory should exist");
-            Assert.True(File.Exists(Path.Combine(configDir, "config.json")), "config.json should exist");
+            Assert.True(File.Exists(settingsPath), ".gc.json should exist");
+            var text = await File.ReadAllTextAsync(settingsPath);
+            Assert.Contains("\"settings\"", text);
+            Assert.Contains("\"defaults\"", text);
+            Assert.Contains("\"profiles\"", text);
         }
         finally
         {
@@ -211,18 +214,18 @@ public sealed class ConfigurationServiceTests
     public async Task InitializeConfigAsync_ConfigExists_ReturnsFailure()
     {
         var tmp = CreateTempDir();
-        var configDir = Path.Combine(tmp, ".gc");
+        var settingsPath = Path.Combine(tmp, ".gc.json");
         try
         {
             var logger = new RecordingLogger();
             var sut = new ConfigurationService(logger, new ConfigurationValidator());
 
             // First call succeeds
-            var first = await sut.InitializeConfigAsync(configDir);
+            var first = await sut.InitializeConfigAsync(settingsPath);
             Assert.True(first.IsSuccess);
 
             // Second call should fail
-            var second = await sut.InitializeConfigAsync(configDir);
+            var second = await sut.InitializeConfigAsync(settingsPath);
             Assert.False(second.IsSuccess);
             Assert.NotNull(second.Error);
         }
@@ -237,16 +240,15 @@ public sealed class ConfigurationServiceTests
     public async Task InitializeConfigAsync_CustomConfigDir()
     {
         var tmp = CreateTempDir();
-        var customDir = Path.Combine(tmp, "my-custom-config");
+        var customPath = Path.Combine(tmp, "my-custom-config", "settings.json");
         try
         {
             var logger = new RecordingLogger();
             var sut = new ConfigurationService(logger, new ConfigurationValidator());
-            var result = await sut.InitializeConfigAsync(customDir);
+            var result = await sut.InitializeConfigAsync(customPath);
 
             Assert.True(result.IsSuccess, result.Error ?? "Init failed");
-            Assert.True(Directory.Exists(customDir));
-            Assert.True(File.Exists(Path.Combine(customDir, "config.json")));
+            Assert.True(File.Exists(customPath));
         }
         finally
         {

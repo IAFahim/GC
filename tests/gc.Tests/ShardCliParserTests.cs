@@ -114,7 +114,7 @@ public class ShardCliParserTests
         var result = parser.Parse(args, config);
 
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value!.DryRun);
+        Assert.True(result.Value!.List);
         Assert.NotNull(result.Value.ShardInfo);
         Assert.Equal(3, result.Value.ShardInfo.Slice);
         Assert.Equal(5, result.Value.ShardInfo.Of);

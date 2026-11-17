@@ -61,7 +61,7 @@ Set your preferred workflow once in a project:
 gc init -u -k --temp -e cs
 ```
 
-After that, use **`gc`** for the project, **`gc src`** for a folder, or **`gc file.cs`** for one file. The saved options are also found when selecting that project from another directory. The Unity source preset includes initialized registered submodules and skips tests, samples, build output and local worktrees. Keep the `.gc` file with the project to use the same short commands on another PC.
+This writes a `.gc.json` file in the project (see [Settings](#settings)). After that, use **`gc`** for the project, **`gc src`** for a folder, or **`gc file.cs`** for one file. The saved options are also found when selecting that project from another directory. The Unity source preset includes initialized registered submodules and skips tests, samples, build output and local worktrees. Keep `.gc.json` with the project to use the same short commands on another PC.
 
 Use `--output-dir <new-or-empty-folder>` for a specific parts folder, or `--temp` without splitting for a single temporary Markdown file. Existing nonempty part folders are preserved. Normal commands without splitting keep their existing single-file/clipboard behavior.
 
@@ -72,16 +72,16 @@ Split output streams uncompressed source. Combining `-k` with `--brain` or `--co
 gc
 
 # Copy only C# files from src/
-gc --paths src --extension cs
+gc src -e cs
 
 # Exclude node_modules and tests
-gc --exclude node_modules "tests/*"
+gc -x node_modules "tests/*"
 
 # Save to a file
-gc --output context.md
+gc -o context.md
 
-# Use a preset
-gc --preset web
+# Use a profile (a built-in preset, or one you saved)
+gc @web
 ```
 
 ### Fun Keywords
@@ -90,13 +90,13 @@ gc --preset web
 
 | Keyword | Flag | Purpose |
 |---|---|---|
-| `grab` | `--paths` | Folders to include |
-| `type` | `--extension` | File extensions to include |
-| `yeet` | `--exclude` | Paths or patterns to skip |
-| `zap` | `--exclude-line-if-start` | Filter out specific line starts |
-| `brain` | `--brain` | Activate Brain Mode |
-| `compress` | `--compress` | Activate sqz compression |
-| `spit` | `--output` | Save to a file |
+| `grab` | (paths) | What to collect |
+| `type` | `-e` | File extensions to include |
+| `yeet` | `-x` | Paths or patterns to skip |
+| `zap` | `-z` | Drop lines that start with this text |
+| `brain` | `-b` | Minify |
+| `compress` | `-c` | Activate sqz compression |
+| `spit` | `-o` | Save to a file |
 | `horde` | `--cluster` | Enable Cluster Mode |
 
 **Example:**
@@ -165,50 +165,52 @@ patterns shown here. Do NOT use abbreviated symbols or short-form in your
 output. Respond as if you received uncompressed source.]
 ```
 
-This header is automatically prepended to all compressed output so LLMs respond with real code, not symbols.
+This header is automatically prepended to compressed output so LLMs respond with real code, not symbols. It describes only what actually ran: with `--brain` alone it explains the `GC_DICT` shorthand and does not mention sqz markers.
 
 ## All Options
 
-### Discovery & Filtering
+Run `gc --help` for the same list. Older spellings keep working but are not shown here (see the [changelog](CHANGELOG.md)).
+
+### What to collect
 
 | Option | Keyword | Description |
 |---|---|---|
-| `-p, --paths` | `grab` | Folders to include (e.g., `src libs`) |
-| `-e, --extension` | `type` | File extensions to include (e.g., `js,ts`) |
-| `-x, --exclude` | `yeet` | Paths or patterns to skip |
-| `-z, --exclude-line-if-start` | `zap` | Filter out lines starting with these strings |
-| `--preset` | - | Use predefined configurations (`dotnet`, `web`, `python`, etc.) |
+| (paths) | `grab` | Folders, files or globs to collect, e.g. `gc src libs` or `gc "src/**/*.cs"` |
+| `-e, --ext` | `type` | Only these extensions (`cs,md` or `-e cs -e md`) |
+| `-x, --exclude` | `yeet` | Skip a folder, file or glob |
+| `-z, --drop-lines` | `zap` | Drop lines that start with this text |
+| `--exclude-content` | - | Skip files containing this text (`*` any text, `?` one character) |
+| `--include-content` | - | Only files containing this text (`*` and `?` work too) |
+| `--root` | - | Choose a discovery root without changing directory |
+| `-r, --submodules` | - | Include initialized registered submodules |
+| `--no-git` | - | Walk the filesystem instead of asking git |
+| `-u, --unity` | - | `src` + Unity `Runtime`/`Editor`; skip tests and samples |
 | `-d, --depth` | - | Maximum directory depth |
-| `-f, --force` | - | Force filesystem discovery (ignore git) |
-| `--exclude-path` | - | Exclude paths matching a glob pattern |
-| `--include-path` | - | Include only paths matching a glob pattern |
-| `--exclude-content` | - | Exclude files containing a keyword |
-| `--include-content` | - | Include only files containing a keyword |
-| `--changed-since` | - | Only include files changed since a git ref |
+| `--changed-since` | - | Only files changed since a git ref |
 | `--explain-filter` | - | Explain why a given file is included or excluded |
 
-### Output
+### Where it goes
 
 | Option | Keyword | Description |
 |---|---|---|
-| `-o, --output` | `spit` | Write to a file instead of clipboard |
-| `--no-clipboard` | - | Don't copy output to the clipboard |
-| `--append` | - | Append to existing clipboard/file content |
-| `--no-append` | - | Don't append (default) |
-| `--no-sort` | - | Disable alphabetical sorting of files |
-| `--dry-run`, `--list` | - | Preview which files would be included, no output generated |
-| `--count`, `--tokens-only` | - | Show a token-count estimate without generating output |
-| `--stats` | - | Print detailed execution statistics |
-| `-v, --verbose` | - | Enable verbose logging |
-| `--debug` | - | Enable debug logging |
-
-### Compression
-
-| Option | Keyword | Description |
-|---|---|---|
-| `-b, --brain` | `brain` | Universal Minification + Dynamic BPE |
+| `-o, --output` | `spit` | Write a file instead of the clipboard |
+| `-k, --split [size]` | - | Markdown parts, 50KB by default; the clipboard pages them |
+| `-a, --append` | - | Add to what is already there |
+| `-b, --brain` | `brain` | Minify (universal minification + dynamic BPE) |
 | `-c, --compress` | `compress` | Structural compression via `sqz` |
-| `--no-cache` | - | Disable `sqz` session cache for a fresh run |
+| `--no-cache` | - | Disable the `sqz` session cache for a fresh run |
+| `--no-clipboard` | - | Do not copy to the clipboard |
+| `--no-sort` | - | Disable alphabetical sorting of files |
+| `--max-memory` | - | Limit output size (e.g., `100MB`, `500KB`) |
+
+### Look, do not write
+
+| Option | Description |
+|---|---|
+| `-l, --list` | Show the files only |
+| `--count` | Token estimate only |
+| `--stats [file.json]` | Timings; with a file, also write them as JSON |
+| `-v, --verbose` / `--debug` | More logging |
 
 ### Cluster Mode (Multi-Repo)
 
@@ -216,17 +218,21 @@ This header is automatically prepended to all compressed output so LLMs respond 
 |---|---|---|
 | `--cluster` | `horde` | Enable cluster mode |
 | `--cluster-dir` | - | Directory to scan for repos (default: CWD) |
-| `--cluster-depth` | - | Max depth to search for git repos (default: 5) |
+| `--cluster-depth` | - | Max depth to search for git repos (default: 2) |
 
-### Configuration & History
+### Settings & history
 
 | Option | Description |
 |---|---|
+| `@name` | Use a profile |
+| `init [args]` | Write `.gc.json` here with these arguments as defaults |
+| `--init-config` | Write an empty `.gc.json` |
+| `--save` | Save the typed arguments as this folder's defaults |
+| `--save-profile <name> [args]` | Save arguments as a user profile |
+| `--list-profiles` | List project, user and built-in profiles |
+| `--validate-config` / `--dump-config` | Check or print the merged settings |
+| `--export-schema <file>` | Write the JSON schema for settings files |
 | `--history [N]` | Show history or re-run session N |
-| `--init-config` | Generate a default `gc.json` |
-| `--validate-config` | Check your config for errors |
-| `--dump-config` | Print the current active configuration |
-| `--max-memory` | Limit output size (e.g., `100MB`, `500KB`) |
 
 ### Shell Completion
 
@@ -234,6 +240,30 @@ This header is automatically prepended to all compressed output so LLMs respond 
 |---|---|
 | `--install-completion` | Install tab-completion for your shell (auto-detects bash/zsh/fish) |
 | `--print-completion <shell>` | Print the completion script to stdout (`bash`, `zsh`, or `fish`) |
+
+## Settings
+
+Settings live in two files that share one format:
+
+| File | Where | Holds |
+|---|---|---|
+| `gc.json` | your user config folder (`%APPDATA%\gc`, or `~/.config/gc`) | your own settings, defaults and profiles |
+| `.gc.json` | the project folder (found from any subfolder, up to the Git root) | the project's settings, defaults and profiles |
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/IAFahim/GC/main/schema.json",
+  "settings": { "markdown": { "languageDetection": "filename" } },
+  "defaults": ["-e", "cs", "-x", "bin"],
+  "profiles": { "docs": ["-e", "md", "-x", "node_modules"] }
+}
+```
+
+- **`settings`** override the built-in configuration (project over user). Every key has an effect; `gc --dump-config` prints the merged result and `gc --export-schema schema.json` writes the schema for editor completion.
+- **`defaults`** are arguments applied on every run, before the ones you type (user first, then project).
+- **`profiles`** are named argument lists, used as `gc @docs -o out.md`. Lookup order: project, user, then built-in presets (`gc @web` is `--preset web`; `gc @unity-source` is `-u`). `gc --list-profiles` shows them all.
+
+Older sources still work: `config.json` layers, a `.gc` arguments file, `directory_defaults.json` and `profiles.json`. gc prints a warning naming each one; move its content into the two files above.
 
 ## Cluster Mode
 
@@ -266,8 +296,11 @@ dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -r <your-platform-id> --self-
 
 ### Run tests
 ```bash
-dotnet test tests/gc.Tests/gc.Tests.csproj --filter "FullyQualifiedName!~ReleaseBinary"
+dotnet build gc.sln -c Debug
+dotnet test tests/gc.Tests/gc.Tests.csproj -c Debug --filter "FullyQualifiedName!~ReleaseBinary"
 ```
+
+Some tests start the built `gc` executable, so build the Debug configuration first. End-to-end timings: `dotnet run --project benchmarks/gc.Benchmarks -c Release -- --real`.
 
 ## License
 

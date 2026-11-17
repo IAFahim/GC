@@ -35,8 +35,8 @@ public sealed class CliArguments
     public string OutputFile { get; set; } = string.Empty;
     public bool ShowHelp { get; set; }
     public bool ShowVersion { get; set; }
-    public bool RunTests { get; set; }
-    public bool RunRealBenchmark { get; set; }
+    
+    
     public long MaxMemoryBytes { get; set; }
     public bool Verbose { get; set; }
     public bool Debug { get; set; }
@@ -45,7 +45,7 @@ public sealed class CliArguments
     public bool DumpConfig { get; set; }
     public bool Append { get; set; }
     public bool NoSort { get; set; }
-    public bool Force { get; set; }
+    public bool NoGit { get; set; }
     public bool NoClipboard { get; set; }
     public int? Depth { get; set; }
     public bool ShowHistory { get; set; }
@@ -63,13 +63,11 @@ public sealed class CliArguments
     public string[] ExcludeContentPatterns { get; set; } = [];
     public string[] IncludeContentPatterns { get; set; } = [];
 
-    public bool DryRun { get; set; }
+    public bool List { get; set; }
 
     public bool CountTokens { get; set; }
 
-    public bool Profile { get; set; }
 
-    public string? ProfileOutput { get; set; }
 
     public bool Cluster { get; set; }
 
@@ -77,7 +75,6 @@ public sealed class CliArguments
 
     public int? ClusterDepth { get; set; }
 
-    public bool UnsafeDirectWrite { get; set; }
 
     public bool ShowStats { get; set; }
 

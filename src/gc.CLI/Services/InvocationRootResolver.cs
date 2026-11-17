@@ -20,6 +20,7 @@ public static class InvocationRootResolver
                 i++;
                 continue;
             }
+            if (arguments[i].Length > 1 && arguments[i][0] == '@') continue;
             filtered.Add(arguments[i]);
         }
         var parsed = new CliParser().Parse(filtered.ToArray(), BuiltInPresets.GetDefaultConfiguration());

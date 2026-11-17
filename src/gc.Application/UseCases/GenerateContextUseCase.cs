@@ -232,7 +232,12 @@ public sealed class GenerateContextUseCase
         var totalFiles = sorted.Sum(s => s.Entries.Count);
         profileReporter?.RecordMetric("TotalFiles", totalFiles.ToString());
 
-        var allContents = BuildClusterContents(sorted, clusterConfig, clusterRoot);
+        List<FileEntry> rootFiles = clusterConfig.IncludeRootFiles == true
+            ? FindClusterRootFiles(clusterRoot, config, options)
+            : [];
+        totalFiles += rootFiles.Count;
+        var allContents = rootFiles.Select(e => new FileContent(e, null, e.Size))
+            .Concat(BuildClusterContents(sorted, clusterConfig, clusterRoot));
 
         _logger.Success($"Processing {totalFiles} files from {sorted.Count} repos...");
 
@@ -248,6 +253,25 @@ public sealed class GenerateContextUseCase
         }
 
         return await WriteOutputAsync(allContents, totalFiles, clusterRoot, config, options, ct);
+    }
+
+    // cluster.includeRootFiles: loose files that sit directly in the cluster folder, outside any repo.
+    private List<FileEntry> FindClusterRootFiles(string clusterRoot, GcConfiguration config, RunOptions options)
+    {
+        if (!Directory.Exists(clusterRoot)) return [];
+        try
+        {
+            var names = Directory.EnumerateFiles(clusterRoot).Select(Path.GetFileName).Where(n => n != null).Select(n => n!)
+                .ToList();
+            var filtered = _filter.FilterFiles(names, config, options.Paths, options.Excludes, options.Extensions,
+                options.ExcludePathPatterns, options.IncludePathPatterns, clusterRoot);
+            return filtered.IsSuccess ? filtered.Value!.ToList() : [];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.Warning($"Could not list files in the cluster folder: {ex.Message}");
+            return [];
+        }
     }
 
     private IEnumerable<FileContent> BuildClusterContents(
@@ -320,8 +344,9 @@ public sealed class GenerateContextUseCase
         var brainMode = options.Brain;
         var compress = options.Compress;
         var noCache = options.NoCache;
-        var excludeContentPatterns = options.ExcludeContentPatterns;
-        var includeContentPatterns = options.IncludeContentPatterns;
+        // Content patterns from the settings files apply on top of the ones typed on the command line.
+        var excludeContentPatterns = ContentFilter.Merge(config.Filters?.ExcludeContentPatterns, options.ExcludeContentPatterns);
+        var includeContentPatterns = ContentFilter.Merge(config.Filters?.IncludeContentPatterns, options.IncludeContentPatterns);
         var profileReporter = options.Reporter;
         var chunkOutput = options.Parts;
 
@@ -485,6 +510,12 @@ public sealed class GenerateContextUseCase
             profileReporter);
     }
 
+    // output.includeStats = false keeps the headline and drops the file count, size and token figures.
+    private static string Summarize(GcConfiguration config, string headline, string stats)
+    {
+        return config.Output?.IncludeStats == false ? headline : $"{headline}: {stats}";
+    }
+
     private async Task<Result> EmitToFile(
         List<FileContent> filteredList,
         int actualFileCount,
@@ -524,7 +555,7 @@ public sealed class GenerateContextUseCase
 
             var action = isAppend ? "Appended to" : "Exported to";
             _logger.Success(
-                $"✔ {action} {outputFile}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{TokenEstimator.EstimateTokens(finalOutput)}");
+                Summarize(config, $"✔ {action} {outputFile}", $"{actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{TokenEstimator.EstimateTokens(finalOutput)}"));
             profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
             return Result.Success();
         }
@@ -543,7 +574,7 @@ public sealed class GenerateContextUseCase
             var emittedCount = (_generator as MarkdownGenerator)?.LastEmittedFileCount ?? actualFileCount;
             var action = isAppend ? "Appended to" : "Exported to";
             _logger.Success(
-                $"✔ {action} {outputFile}: {emittedCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
+                Summarize(config, $"✔ {action} {outputFile}", $"{emittedCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}"));
             profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         }
         else
@@ -559,7 +590,7 @@ public sealed class GenerateContextUseCase
             var estimatedTokens = (_generator as MarkdownGenerator)?.LastEstimatedTokens ?? (genResult.Value / 4);
             var emittedCount = (_generator as MarkdownGenerator)?.LastEmittedFileCount ?? actualFileCount;
             _logger.Success(
-                $"✔ Exported to {outputFile}: {emittedCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
+                Summarize(config, $"✔ Exported to {outputFile}", $"{emittedCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}"));
             profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         }
 
@@ -597,7 +628,7 @@ public sealed class GenerateContextUseCase
 
             var prefix = noClipboard ? "✔ [Clipboard Skipped]" : "✔ Copied";
             _logger.Success(
-                $"{prefix}: {actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{TokenEstimator.EstimateTokens(finalOutput)}");
+                Summarize(config, prefix, $"{actualFileCount} files | Size: {Formatting.FormatSize(finalBytes.Length)}{transformInfo} | Tokens: ~{TokenEstimator.EstimateTokens(finalOutput)}"));
             profileReporter?.RecordMetric("OutputSize", finalBytes.Length.ToString());
             return Result.Success();
         }
@@ -622,7 +653,7 @@ public sealed class GenerateContextUseCase
         var emittedCount = (_generator as MarkdownGenerator)?.LastEmittedFileCount ?? actualFileCount;
         var prefix2 = noClipboard ? "✔ [Clipboard Skipped]" : "✔ Copied";
         _logger.Success(
-            $"{prefix2}: {emittedCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}");
+            Summarize(config, prefix2, $"{emittedCount} files | Size: {Formatting.FormatSize(genResult.Value)} | Tokens: ~{estimatedTokens}"));
         profileReporter?.RecordMetric("OutputSize", genResult.Value.ToString());
         return Result.Success();
     }

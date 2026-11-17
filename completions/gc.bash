@@ -9,70 +9,72 @@ _gc_completion() {
 	local flags=(
 		"-h" "--help" "--version"
 		"-v" "--verbose" "--debug"
-		"-f" "--force" "--no-sort"
+		"--no-git" "--no-sort"
 		"-b" "--brain" "-c" "--compress" "--no-cache"
-		"--cluster" "--dry-run" "--list" "--count" "--tokens-only"
-		"--init-config" "--validate-config" "--dump-config" "--list-profiles"
+		"--cluster" "-l" "--list" "--count"
+		"--init-config" "--validate-config" "--dump-config" "--list-profiles" "--save"
 		"--history" "--no-clipboard"
-		"--no-append" "--append"
-		"--stats" "--profile-timing" "--unsafe-direct-write"
+		"-a" "--append"
+		"--stats"
 		"--install-completion"
-		"--test" "--benchmark"
-		"-u" "--unity" "-r" "--submodules" "--recurse-submodules" "--temp" "-k" "--split"
+		"-u" "--unity" "-r" "--submodules" "--temp" "-k" "--split"
 	)
 
 	local flags_with_args=(
-		"-g" "-p" "--paths" "--Paths"
-		"-t" "-e" "--extension" "--extensions" "--Extension" "--Extensions"
-		"-y" "-x" "--exclude" "--excludes" "--Exclude" "--Excludes"
-		"-z" "--exclude-line-if-start"
-		"-s" "-o" "--output" "--Output"
-		"--max-memory" "--Max-Memory"
-		"-d" "--depth" "--Depth"
-		"--preset" "--presets"
+		"-e" "--ext"
+		"-x" "--exclude"
+		"-z" "--drop-lines"
+		"-o" "--output"
+		"--max-memory"
+		"-d" "--depth"
+		"--preset"
 		"--cluster-dir" "--cluster-depth"
-		"--exclude-path" "--include-path"
 		"--exclude-content" "--include-content"
 		"--changed-since" "--explain-filter" "--shard"
-		"--export-schema" "--profile-json" "--json-stats"
+		"--export-schema" "--save-profile"
 		"--print-completion"
 		"--root" "--output-dir"
 	)
 
-	local keywords=("grab" "type" "yeet" "zap" "spit" "brain" "compress" "horde")
+	local keywords=("grab" "type" "yeet" "zap" "spit" "brain" "compress" "horde" "init")
+	local presets="unity-source unity dotnet web backend python rust go java ruby php minimal"
 
 	case $cur in
 	-*)
 		COMPREPLY=($(compgen -W "${flags[*]} ${flags_with_args[*]}" -- "$cur"))
 		;;
+	@*)
+		COMPREPLY=($(compgen -W "$(for p in $presets; do echo "@$p"; done)" -- "$cur"))
+		;;
 	*)
 		# Check if previous word is a flag that expects an argument
 		case $prev in
-		-g | -p | --paths | --Paths | grab | --root | --output-dir)
+		grab | --root | --output-dir)
 			_filedir
 			;;
-		-t | -e | --extension | --extensions | --ext | type)
-			COMPREPLY=($(compgen -W "cs py js ts go rs java rb php sh" -- "$cur"))
+		-e | --ext | type)
+			COMPREPLY=($(compgen -W "cs py js ts go rs java rb php sh md" -- "$cur"))
 			;;
-		-y | -x | --exclude | --exclude | yeet)
+		-x | --exclude | yeet)
 			COMPREPLY=($(compgen -d -- "$cur"))
 			;;
-		-z | --exclude-line-if-start | zap)
-			;;
-		-s | -o | --output | spit)
+		-z | --drop-lines | zap) ;;
+		-o | --output | spit)
 			COMPREPLY=($(compgen -f -- "$cur"))
 			;;
-		--max-memory | --Max-Memory)
+		--max-memory)
 			COMPREPLY=($(compgen -W "100MB 500MB 1GB 5GB" -- "$cur"))
 			;;
 		-k | --split)
 			_filedir
 			COMPREPLY+=($(compgen -W "50KB 100KB 200KB" -- "$cur"))
 			;;
-		-d | --depth | --Depth)
+		--stats)
+			_filedir json
 			;;
-		--preset | --presets)
-			COMPREPLY=($(compgen -W "unity-source unity dotnet web python rust go java ruby php minimal" -- "$cur"))
+		-d | --depth) ;;
+		--preset)
+			COMPREPLY=($(compgen -W "$presets" -- "$cur"))
 			;;
 		--print-completion)
 			COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur"))
@@ -80,10 +82,7 @@ _gc_completion() {
 		--cluster-dir)
 			COMPREPLY=($(compgen -d -- "$cur"))
 			;;
-		--exclude-path | --include-path)
-			;;
-		--exclude-content | --include-content)
-			;;
+		--exclude-content | --include-content) ;;
 		*)
 			_filedir
 			COMPREPLY+=($(compgen -W "${keywords[*]}" -- "$cur"))

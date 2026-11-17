@@ -73,6 +73,16 @@ public sealed class ConfigurationLoader
                 config = MergeConfiguration(config, projectResult.Value, "Project");
         }
 
+        // The two current settings files win over the older sources above: user, then project.
+        var userSettings = await SettingsStore.LoadAsync(SettingsStore.UserPath(GetConfigDirectory()));
+        if (userSettings.Settings != null)
+            config = MergeConfiguration(config, userSettings.Settings, "User settings");
+
+        var projectSettings = await SettingsStore.LoadAsync(
+            SettingsStore.FindProjectPath(rootPath ?? Directory.GetCurrentDirectory()));
+        if (projectSettings.Settings != null)
+            config = MergeConfiguration(config, projectSettings.Settings, "Project settings");
+
         return Result<GcConfiguration>.Success(config);
     }
 

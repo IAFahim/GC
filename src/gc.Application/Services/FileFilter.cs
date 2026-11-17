@@ -35,7 +35,7 @@ public sealed class FileFilter
         string? rootPath = null,
         string? absoluteRootPath = null)
     {
-        var activeExtensions = ResolveActiveExtensions(extensionFilters);
+        var activeExtensions = ResolveActiveExtensions(extensionFilters, config.Filters?.AdditionalExtensions);
         var extensionLookup = activeExtensions.GetAlternateLookup<ReadOnlySpan<char>>();
 
         var systemIgnored = config.Filters?.SystemIgnoredPatterns ?? Array.Empty<string>();
@@ -45,10 +45,12 @@ public sealed class FileFilter
         var normalizedSearchPaths = searchPaths.Select(p => p.Replace('\\', '/').TrimEnd('/')).ToArray();
         var searchPathContainsForms = new string[normalizedSearchPaths.Length];
         var exactFileSearchPaths = new bool[normalizedSearchPaths.Length];
+        var globSearchPaths = new bool[normalizedSearchPaths.Length];
         for (var i = 0; i < normalizedSearchPaths.Length; i++)
         {
             searchPathContainsForms[i] = "/" + normalizedSearchPaths[i] + "/";
-            exactFileSearchPaths[i] = rootPath != null &&
+            globSearchPaths[i] = IsGlobPattern(normalizedSearchPaths[i]);
+            exactFileSearchPaths[i] = !globSearchPaths[i] && rootPath != null &&
                 File.Exists(Path.Combine(absoluteRootPath ?? rootPath, normalizedSearchPaths[i]));
         }
 
@@ -62,7 +64,7 @@ public sealed class FileFilter
             var matchPath = path;
             if (rootPath != null && Path.IsPathFullyQualified(path))
                 matchPath = Path.GetRelativePath(Path.GetFullPath(absoluteRootPath ?? rootPath), path).Replace('\\', '/');
-            if (!IsValidPath(matchPath, normalizedSearchPaths, searchPathContainsForms, exactFileSearchPaths, systemIgnoredNormalized,
+            if (!IsValidPath(matchPath, normalizedSearchPaths, searchPathContainsForms, exactFileSearchPaths, globSearchPaths, systemIgnoredNormalized,
                     excludePatternsNormalized, activeExtensions, extensionLookup, mergedExcludePath, mergedIncludePath))
                 continue;
             if (TryCreateFileEntry(path, config, rootPath, absoluteRootPath, out var entry))
@@ -88,7 +90,7 @@ public sealed class FileFilter
         _logger.Info($"\n--- Analyzing filter pipeline for: {targetPath} ---");
         var pathNormalized = targetPath.Replace('\\', '/');
 
-        var activeExtensions = ResolveActiveExtensions(extensionFilters);
+        var activeExtensions = ResolveActiveExtensions(extensionFilters, config.Filters?.AdditionalExtensions);
         if (activeExtensions.Count > 0)
         {
             var fileNameSpan = GetFileNameSpan(pathNormalized.AsSpan());
@@ -187,7 +189,8 @@ public sealed class FileFilter
             {
                 var searchSpan = searchPath.AsSpan();
                 var normalizedSpan = pathNormalized.AsSpan();
-                if (normalizedSpan.Equals(searchSpan, StringComparison.OrdinalIgnoreCase) ||
+                if ((IsGlobPattern(searchPath) && GlobMatcher.IsMatch(normalizedSpan, searchSpan)) ||
+                    normalizedSpan.Equals(searchSpan, StringComparison.OrdinalIgnoreCase) ||
                     normalizedSpan.StartsWith(searchPath + "/", StringComparison.OrdinalIgnoreCase) ||
                     normalizedSpan.Contains(("/" + searchPath + "/").AsSpan(), StringComparison.OrdinalIgnoreCase))
                 {
@@ -212,6 +215,45 @@ public sealed class FileFilter
         _logger.Success($"[INCLUDED] File '{targetPath}' passes all path filters.");
     }
 
+    /// <summary>Reads the first line of a file and returns the interpreter named by a <c>#!</c> line, or null.</summary>
+    internal static string? SniffShebang(string absolutePath)
+    {
+        try
+        {
+            using var stream = new FileStream(absolutePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            Span<byte> buffer = stackalloc byte[128];
+            var read = stream.Read(buffer);
+            if (read < 3 || buffer[0] != (byte)'#' || buffer[1] != (byte)'!') return null;
+            var line = System.Text.Encoding.UTF8.GetString(buffer[2..read]);
+            var end = line.IndexOfAny(['\r', '\n']);
+            if (end >= 0) line = line[..end];
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return null;
+            var program = parts[0].EndsWith("/env", StringComparison.Ordinal) && parts.Length > 1 ? parts[1] : parts[0];
+            var name = program[(program.LastIndexOf('/') + 1)..].TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.');
+            return name switch
+            {
+                "node" or "nodejs" => "js",
+                "python" => "py",
+                "bash" or "sh" or "zsh" or "dash" => "sh",
+                "ruby" => "rb",
+                "perl" => "pl",
+                "" => null,
+                _ => name
+            };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>True when a path entry should be matched as a glob rather than as a folder or file.</summary>
+    internal static bool IsGlobPattern(string path)
+    {
+        return path.AsSpan().IndexOfAny('*', '?', '[') >= 0;
+    }
+
     private static string[] MergePatterns(string[]? cliPatterns, string[]? configPatterns)
     {
         if ((cliPatterns == null || cliPatterns.Length == 0) &&
@@ -233,6 +275,14 @@ public sealed class FileFilter
             var fileName = GetFileNameSpan(path);
             var languageKey = string.IsNullOrEmpty(extension) ? fileName.ToString().ToLowerInvariant() : extension;
             var language = ResolveLanguage(languageKey, config);
+            var detection = config.Markdown?.LanguageDetection;
+            if (detection == "filename")
+            {
+                // markdown.languageDetection = "filename": a known whole file name (Makefile, Dockerfile...) wins over the extension.
+                var byName = fileName.ToString().ToLowerInvariant();
+                if (config.LanguageMappings.ContainsKey(byName) || BuiltInPresets.LanguageMappings.ContainsKey(byName))
+                    language = ResolveLanguage(byName, config);
+            }
 
             // Compute root and relative path properly:
             // - rootPath is the repo root
@@ -274,6 +324,14 @@ public sealed class FileFilter
             catch (Exception ex)
             {
                 _logger.Debug($"Failed to get file size for {path}: {ex.Message}");
+            }
+
+            if (detection == "content" && string.IsNullOrEmpty(extension) &&
+                !config.LanguageMappings.ContainsKey(languageKey) && !BuiltInPresets.LanguageMappings.ContainsKey(languageKey))
+            {
+                // markdown.languageDetection = "content": an extensionless, unknown file is typed by its shebang line.
+                var sniffed = SniffShebang(string.IsNullOrEmpty(root) ? Path.GetFullPath(path) : Path.Combine(root, relative));
+                if (sniffed != null) language = ResolveLanguage(sniffed, config);
             }
 
             entry = new FileEntry(
@@ -327,14 +385,19 @@ public sealed class FileFilter
         return key;
     }
 
-    private static FrozenSet<string> ResolveActiveExtensions(IEnumerable<string> extensions)
+    // filters.additionalExtensions are always allowed on top of whatever extension filter is active
+    // (-e or a preset). With no extension filter everything is already allowed, so they add nothing.
+    private static FrozenSet<string> ResolveActiveExtensions(IEnumerable<string> extensions, string[]? additional)
     {
-        return extensions.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+        var all = extensions.ToList();
+        if (all.Count > 0 && additional is { Length: > 0 })
+            all.AddRange(additional.Select(e => e.Trim().TrimStart('.')).Where(e => e.Length > 0));
+        return all.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsValidPath(string path, string[] normalizedSearchPaths, string[] searchPathContainsForms, bool[] exactFileSearchPaths,
-        string[] systemIgnoredPatterns, string[] excludePatterns, FrozenSet<string> extensions,
+        bool[] globSearchPaths, string[] systemIgnoredPatterns, string[] excludePatterns, FrozenSet<string> extensions,
         FrozenSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, string[] excludePathPatterns,
         string[] includePathPatterns)
     {
@@ -385,6 +448,16 @@ public sealed class FileFilter
             for (var i = 0; i < normalizedSearchPaths.Length; i++)
             {
                 var searchSpan = normalizedSearchPaths[i].AsSpan();
+                if (globSearchPaths[i])
+                {
+                    // A plain path that contains * ? or [ selects by glob.
+                    if (GlobMatcher.IsMatch(normalizedSpan, searchSpan))
+                    {
+                        matchesSearchPath = true;
+                        break;
+                    }
+                    continue;
+                }
                 if (exactFileSearchPaths[i])
                 {
                     if (normalizedSpan.Equals(searchSpan, StringComparison.OrdinalIgnoreCase))

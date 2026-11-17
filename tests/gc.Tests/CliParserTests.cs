@@ -66,7 +66,7 @@ public class CliParserTests
 
         // Assert
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value!.Force);
+        Assert.True(result.Value!.NoGit);
     }
 
     [Fact]

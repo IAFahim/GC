@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using gc.CLI.Services;
+using gc.Infrastructure.Configuration;
 using Xunit;
 
 namespace gc.Tests;
@@ -32,7 +33,7 @@ public class CliArgumentResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_InitCommand_CreatesLocalGcFile()
+    public async Task ResolveAsync_InitCommand_CreatesProjectSettingsFile()
     {
         var tempDir = CreateTempDir();
         try
@@ -46,11 +47,9 @@ public class CliArgumentResolverTests
             Assert.Equal(0, exitCode);
             Assert.Empty(resolvedArgs);
 
-            var gcFilePath = Path.Combine(tempDir, ".gc");
-            Assert.True(File.Exists(gcFilePath));
-
-            var content = await File.ReadAllTextAsync(gcFilePath);
-            Assert.Equal("--extension cs -x bin", content);
+            var file = await SettingsStore.LoadAsync(Path.Combine(tempDir, SettingsStore.ProjectFileName));
+            Assert.Equal(new[] { "--extension", "cs", "-x", "bin" }, file.Defaults);
+            Assert.False(File.Exists(Path.Combine(tempDir, ".gc")), "the old .gc arguments file is no longer written");
         }
         finally
         {
@@ -59,7 +58,7 @@ public class CliArgumentResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_LoadsLocalGcFileFromHierarchy()
+    public async Task ResolveAsync_LoadsProjectDefaultsFromHierarchy()
     {
         var tempDir = CreateTempDir();
         var subDir = Path.Combine(tempDir, "sub", "deep");
@@ -67,22 +66,14 @@ public class CliArgumentResolverTests
         try
         {
             var configDir = Path.Combine(tempDir, "config");
-            var gcFilePath = Path.Combine(tempDir, ".gc");
-            await File.WriteAllTextAsync(gcFilePath, "--verbose --extension cs");
+            await File.WriteAllTextAsync(Path.Combine(tempDir, SettingsStore.ProjectFileName),
+                "{ \"defaults\": [\"--verbose\", \"--extension\", \"cs\"] }");
 
-            var originalArgs = new[] { "--output", "out.md" };
-
-            // Run resolution from the subDir; it should crawl up to find .gc in tempDir
-            var (resolvedArgs, shouldExit, exitCode) = await CliArgumentResolver.ResolveAsync(originalArgs, configDir, subDir);
+            var (resolvedArgs, shouldExit, _) =
+                await CliArgumentResolver.ResolveAsync(new[] { "--output", "out.md" }, configDir, subDir);
 
             Assert.False(shouldExit);
-            // Local .gc args (base) are merged with explicit command-line args.
-            Assert.Equal(5, resolvedArgs.Length);
-            Assert.Equal("--verbose", resolvedArgs[0]);
-            Assert.Equal("--extension", resolvedArgs[1]);
-            Assert.Equal("cs", resolvedArgs[2]);
-            Assert.Equal("--output", resolvedArgs[3]);
-            Assert.Equal("out.md", resolvedArgs[4]);
+            Assert.Equal(new[] { "--verbose", "--extension", "cs", "--output", "out.md" }, resolvedArgs);
         }
         finally
         {
@@ -91,29 +82,131 @@ public class CliArgumentResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_Profiles_SaveAndLoad()
+    public async Task ResolveAsync_UserDefaultsComeBeforeProjectDefaults()
+    {
+        var tempDir = CreateTempDir();
+        try
+        {
+            var configDir = Path.Combine(tempDir, "config");
+            Directory.CreateDirectory(configDir);
+            await File.WriteAllTextAsync(SettingsStore.UserPath(configDir), "{ \"defaults\": [\"-v\"] }");
+            await File.WriteAllTextAsync(Path.Combine(tempDir, SettingsStore.ProjectFileName),
+                "{ \"defaults\": [\"-e\", \"cs\"] }");
+
+            var (resolvedArgs, _, _) = await CliArgumentResolver.ResolveAsync(new[] { "-o", "x.md" }, configDir, tempDir);
+
+            Assert.Equal(new[] { "-v", "-e", "cs", "-o", "x.md" }, resolvedArgs);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ResolveAsync_LegacyGcArgumentsFile_StillApplies()
+    {
+        var tempDir = CreateTempDir();
+        var subDir = Path.Combine(tempDir, "sub");
+        Directory.CreateDirectory(subDir);
+        try
+        {
+            var configDir = Path.Combine(tempDir, "config");
+            await File.WriteAllTextAsync(Path.Combine(tempDir, ".gc"), "--verbose --extension cs");
+
+            var (resolvedArgs, _, _) = await CliArgumentResolver.ResolveAsync(new[] { "--output", "out.md" }, configDir, subDir);
+
+            Assert.Equal(new[] { "--verbose", "--extension", "cs", "--output", "out.md" }, resolvedArgs);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("--profile")]
+    [InlineData("@")]
+    public async Task ResolveAsync_Profiles_SaveAndLoad(string style)
     {
         var tempDir = CreateTempDir();
         try
         {
             var configDir = Path.Combine(tempDir, "config");
 
-            // 1. Save profile
             var saveArgs = new[] { "--save-profile", "myprofile", "--extension", "py", "--verbose" };
-            var (resolvedArgs1, shouldExit1, exitCode1) = await CliArgumentResolver.ResolveAsync(saveArgs, configDir, tempDir);
+            var (_, shouldExit1, exitCode1) = await CliArgumentResolver.ResolveAsync(saveArgs, configDir, tempDir);
             Assert.True(shouldExit1);
             Assert.Equal(0, exitCode1);
+            Assert.True(File.Exists(SettingsStore.UserPath(configDir)), "profiles are saved in the user settings file");
 
-            // 2. Load profile
-            var loadArgs = new[] { "--profile", "myprofile", "-o", "out.md" };
-            var (resolvedArgs2, shouldExit2, exitCode2) = await CliArgumentResolver.ResolveAsync(loadArgs, configDir, tempDir);
+            var loadArgs = style == "@"
+                ? new[] { "@myprofile", "-o", "out.md" }
+                : new[] { "--profile", "myprofile", "-o", "out.md" };
+            var (resolvedArgs, shouldExit2, _) = await CliArgumentResolver.ResolveAsync(loadArgs, configDir, tempDir);
             Assert.False(shouldExit2);
-            Assert.Equal(5, resolvedArgs2.Length);
-            Assert.Equal("--extension", resolvedArgs2[0]);
-            Assert.Equal("py", resolvedArgs2[1]);
-            Assert.Equal("--verbose", resolvedArgs2[2]);
-            Assert.Equal("-o", resolvedArgs2[3]);
-            Assert.Equal("out.md", resolvedArgs2[4]);
+            Assert.Equal(new[] { "--extension", "py", "--verbose", "-o", "out.md" }, resolvedArgs);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ResolveAsync_ProjectProfileWinsOverUserProfile()
+    {
+        var tempDir = CreateTempDir();
+        try
+        {
+            var configDir = Path.Combine(tempDir, "config");
+            Directory.CreateDirectory(configDir);
+            await File.WriteAllTextAsync(SettingsStore.UserPath(configDir), "{ \"profiles\": { \"docs\": [\"-e\", \"txt\"] } }");
+            await File.WriteAllTextAsync(Path.Combine(tempDir, SettingsStore.ProjectFileName),
+                "{ \"profiles\": { \"docs\": [\"-e\", \"md\"] } }");
+
+            var (resolvedArgs, _, _) = await CliArgumentResolver.ResolveAsync(new[] { "@docs" }, configDir, tempDir);
+
+            Assert.Equal(new[] { "-e", "md" }, resolvedArgs);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ResolveAsync_BuiltInPresetIsAProfile()
+    {
+        var tempDir = CreateTempDir();
+        try
+        {
+            var configDir = Path.Combine(tempDir, "config");
+
+            var (web, _, _) = await CliArgumentResolver.ResolveAsync(new[] { "@web" }, configDir, tempDir);
+            var (unity, _, _) = await CliArgumentResolver.ResolveAsync(new[] { "@unity-source" }, configDir, tempDir);
+
+            Assert.Equal(new[] { "--preset", "web" }, web);
+            Assert.Equal(new[] { "-u" }, unity);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ResolveAsync_UnknownProfile_Exits()
+    {
+        var tempDir = CreateTempDir();
+        try
+        {
+            var configDir = Path.Combine(tempDir, "config");
+
+            var (_, shouldExit, exitCode) = await CliArgumentResolver.ResolveAsync(new[] { "@nope" }, configDir, tempDir);
+
+            Assert.True(shouldExit);
+            Assert.Equal(1, exitCode);
         }
         finally
         {
@@ -129,20 +222,18 @@ public class CliArgumentResolverTests
         {
             var configDir = Path.Combine(tempDir, "config");
 
-            // 1. Save directory default using --save
-            var saveArgs = new[] { "--extension", "rs", "--save" };
-            var (resolvedArgs1, shouldExit1, exitCode1) = await CliArgumentResolver.ResolveAsync(saveArgs, configDir, tempDir);
+            var (resolvedArgs1, shouldExit1, _) =
+                await CliArgumentResolver.ResolveAsync(new[] { "--extension", "rs", "--save" }, configDir, tempDir);
             Assert.False(shouldExit1);
-            Assert.Equal(2, resolvedArgs1.Length);
-            Assert.Equal("--extension", resolvedArgs1[0]); // --save flag is stripped, value kept
-            Assert.Equal("rs", resolvedArgs1[1]);
+            Assert.Equal(new[] { "--extension", "rs" }, resolvedArgs1); // --save is stripped, value kept
 
-            // 2. Run gc in same directory with no arguments - should load default
-            var (resolvedArgs2, shouldExit2, exitCode2) = await CliArgumentResolver.ResolveAsync(Array.Empty<string>(), configDir, tempDir);
+            var saved = await SettingsStore.LoadAsync(Path.Combine(tempDir, SettingsStore.ProjectFileName));
+            Assert.Equal(new[] { "--extension", "rs" }, saved.Defaults);
+
+            var (resolvedArgs2, shouldExit2, _) =
+                await CliArgumentResolver.ResolveAsync(Array.Empty<string>(), configDir, tempDir);
             Assert.False(shouldExit2);
-            Assert.Equal(2, resolvedArgs2.Length);
-            Assert.Equal("--extension", resolvedArgs2[0]);
-            Assert.Equal("rs", resolvedArgs2[1]);
+            Assert.Equal(new[] { "--extension", "rs" }, resolvedArgs2);
         }
         finally
         {

@@ -24,6 +24,8 @@ public sealed class FileDiscovery : IFileDiscovery
         {
             var discoveryConfig = config.Discovery ?? new DiscoveryConfiguration();
             var mode = discoveryConfig.Mode?.ToLowerInvariant() ?? "auto";
+            // discovery.useGit = false is the settings-file spelling of --no-git.
+            if (discoveryConfig.UseGit == false) mode = "filesystem";
 
             if (mode == "git")
             {

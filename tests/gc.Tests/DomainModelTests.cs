@@ -471,8 +471,6 @@ public class DomainModelTests
         Assert.Equal(string.Empty, args.OutputFile);
         Assert.False(args.ShowHelp);
         Assert.False(args.ShowVersion);
-        Assert.False(args.RunTests);
-        Assert.False(args.RunRealBenchmark);
         Assert.Equal(0, args.MaxMemoryBytes);
         Assert.False(args.Verbose);
         Assert.False(args.Debug);
@@ -481,7 +479,7 @@ public class DomainModelTests
         Assert.False(args.DumpConfig);
         Assert.False(args.Append);
         Assert.False(args.NoSort);
-        Assert.False(args.Force);
+        Assert.False(args.NoGit);
         Assert.Null(args.Depth);
         Assert.False(args.ShowHistory);
         Assert.Null(args.HistoryIndex);

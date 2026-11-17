@@ -1,13 +1,14 @@
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using gc.Domain.Interfaces;
 
 namespace gc.Application.Services;
 
 /// <summary>
 ///     Filters files by content using fast keyword matching.
-///     Uses Aho-Corasick for exact keywords.
-///     The automaton is built once and reused across all match operations.
+///     Plain keywords use Aho-Corasick; a keyword containing * (any text) or ? (any one character)
+///     is matched as a wildcard pattern. The automaton is built once and reused across all files.
 /// </summary>
 public sealed class ContentFilter
 {
@@ -27,16 +28,14 @@ public sealed class ContentFilter
         if (excludePatterns.Length == 0 && includePatterns.Length == 0)
             return default; // IsEmpty == true
 
-        // Build Aho-Corasick automatons
-        AhoCorasick? excludeAc = null, includeAc = null;
+        var (excludeLiterals, excludeWildcards) = SplitWildcards(excludePatterns);
+        var (includeLiterals, includeWildcards) = SplitWildcards(includePatterns);
 
-        if (excludePatterns.Length > 0) excludeAc = new AhoCorasick(excludePatterns);
-
-        if (includePatterns.Length > 0) includeAc = new AhoCorasick(includePatterns);
-
-        // Capture into closures for the domain struct
-        var exAc = excludeAc;
-        var inAc = includeAc;
+        // Build Aho-Corasick automatons for the plain keywords
+        AhoCorasick? exAc = excludeLiterals.Length > 0 ? new AhoCorasick(excludeLiterals) : null;
+        AhoCorasick? inAc = includeLiterals.Length > 0 ? new AhoCorasick(includeLiterals) : null;
+        var hasInclude = includePatterns.Length > 0;
+        var hasWildcards = excludeWildcards.Length > 0 || includeWildcards.Length > 0;
 
         // A null automaton means "no patterns of this kind" -> treat as ASCII-safe.
         var excludeAscii = exAc?.IsAsciiOnly ?? true;
@@ -45,22 +44,20 @@ public sealed class ContentFilter
         bool shouldIncludeText(string content)
         {
             // Exclude check
-            if (exAc != null && AhoCorasickContainsAny(exAc, content))
-                return false;
+            if (exAc != null && AhoCorasickContainsAny(exAc, content)) return false;
+            if (MatchesAny(excludeWildcards, content)) return false;
 
             // Include check
-            if (inAc == null) return true;
-            if (AhoCorasickContainsAny(inAc, content))
-                return true;
-
-            return false;
+            if (!hasInclude) return true;
+            if (inAc != null && AhoCorasickContainsAny(inAc, content)) return true;
+            return MatchesAny(includeWildcards, content);
         }
 
         bool shouldIncludeBytes(byte[] buffer, int length)
         {
-            // Allocation-free fast path: when every pattern char is ASCII, each ASCII
-            // byte equals its UTF-16 char, so we can scan the raw bytes directly.
-            if (excludeAscii && includeAscii)
+            // Allocation-free fast path: when every pattern char is ASCII (and none is a wildcard),
+            // each ASCII byte equals its UTF-16 char, so we can scan the raw bytes directly.
+            if (!hasWildcards && excludeAscii && includeAscii)
             {
                 var span = buffer.AsSpan(0, length);
                 if (exAc != null && AhoCorasickContainsAnyAscii(exAc, span))
@@ -69,11 +66,76 @@ public sealed class ContentFilter
                 return AhoCorasickContainsAnyAscii(inAc, span);
             }
 
-            // Fallback preserves exact behavior for non-ASCII patterns.
+            // Wildcards and non-ASCII patterns need the decoded text.
             return shouldIncludeText(Encoding.UTF8.GetString(buffer, 0, length));
         }
 
         return new CompiledContentPatterns(shouldIncludeText, shouldIncludeBytes);
+    }
+
+    /// <summary>Combines patterns from the configuration file with the ones typed on the command line.</summary>
+    public static string[] Merge(string[]? fromConfig, string[]? fromCommandLine)
+    {
+        if ((fromConfig == null || fromConfig.Length == 0) && (fromCommandLine == null || fromCommandLine.Length == 0))
+            return [];
+        return [.. fromConfig ?? [], .. fromCommandLine ?? []];
+    }
+
+    private static (string[] Literals, Regex[] Wildcards) SplitWildcards(string[] patterns)
+    {
+        var literals = new List<string>();
+        var wildcards = new List<Regex>();
+        foreach (var pattern in patterns)
+        {
+            if (pattern.AsSpan().IndexOfAny('*', '?') < 0) literals.Add(pattern);
+            else wildcards.Add(WildcardToRegex(pattern));
+        }
+
+        return (literals.ToArray(), wildcards.ToArray());
+    }
+
+    /// <summary>
+    ///     Compiles a "contains" wildcard: <c>*</c> is any text (including line breaks), <c>?</c> any one
+    ///     character. NonBacktracking keeps matching linear in the file size.
+    /// </summary>
+    internal static Regex WildcardToRegex(string pattern)
+    {
+        var sb = new StringBuilder();
+        var literal = new StringBuilder();
+        void FlushLiteral()
+        {
+            if (literal.Length == 0) return;
+            sb.Append(Regex.Escape(literal.ToString()));
+            literal.Clear();
+        }
+
+        foreach (var c in pattern)
+            switch (c)
+            {
+                case '*':
+                    FlushLiteral();
+                    sb.Append(".*");
+                    break;
+                case '?':
+                    FlushLiteral();
+                    sb.Append('.');
+                    break;
+                default:
+                    literal.Append(c);
+                    break;
+            }
+
+        FlushLiteral();
+        return new Regex(sb.ToString(),
+            RegexOptions.Singleline | RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
+    }
+
+    private static bool MatchesAny(Regex[] patterns, string content)
+    {
+        foreach (var pattern in patterns)
+            if (pattern.IsMatch(content))
+                return true;
+        return false;
     }
 
     /// <summary>

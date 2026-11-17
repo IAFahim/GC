@@ -59,9 +59,11 @@ public static class Program
             logger.Warning($"output.defaultFormat '{format}' is not implemented; gc writes Markdown.");
 
         var configDir = configLoader.GetConfigDirectory();
-        foreach (var legacy in SettingsStore.FindLegacyFiles(configDir, currentDirectory))
-            logger.Warning($"Old settings source in use: {legacy}. Move it into {SettingsStore.UserFileName} " +
-                           $"(user) or {SettingsStore.ProjectFileName} (project).");
+        if (!args.Contains("--migrate-settings"))
+            foreach (var legacy in SettingsStore.FindLegacyFiles(configDir, currentDirectory,
+                         configLoader.GetSystemConfigDirectory()))
+                logger.Warning($"Ignoring old settings file {legacy}. Run gc --migrate-settings to move it into " +
+                               $"{SettingsStore.UserFileName} / {SettingsStore.ProjectFileName}.");
         string[] resolvedArgs;
         bool shouldExit;
         int exitCode;
@@ -563,6 +565,7 @@ SETTINGS (two files, one format):
     --preset <name>                  Same as @name for a built-in preset (web,backend,dotnet,unity...)
     init [args...]                   Write .gc.json here with these arguments as defaults
     --init-config                    Write an empty .gc.json (settings, defaults, profiles)
+    --migrate-settings               Move old config.json / .gc / profiles.json files into the two files
     --save                           Save the typed arguments as this folder's defaults
     --save-profile <name> [args...]  Save arguments as a user profile
     --list-profiles                  List project, user and built-in profiles

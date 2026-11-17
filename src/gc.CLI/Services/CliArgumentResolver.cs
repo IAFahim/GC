@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 using gc.Domain.Constants;
 using gc.Domain.Models.Configuration;
 using gc.Infrastructure.Configuration;
@@ -15,18 +14,10 @@ namespace gc.CLI.Services;
 ///     Settings live in two files of one format (<see cref="SettingsStore" />): the user file and the
 ///     project file. Each can hold <c>defaults</c> (arguments always applied) and <c>profiles</c>
 ///     (name to arguments, used as <c>gc @name</c>). Built-in presets are the lowest-priority profiles.
+///     Older sources are not read; <c>gc --migrate-settings</c> moves them into the two files.
 /// </summary>
 public static class CliArgumentResolver
 {
-    private const string LegacyProfileFile = "profiles.json";
-    private const string LegacyDirDefaultsFile = "directory_defaults.json";
-
-    private static StringComparer PathComparer =>
-        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-
-    private static string NormalizeDirKey(string directory) =>
-        Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
-
     public static string[] SplitArguments(string commandLine)
     {
         var args = new List<string>();
@@ -93,9 +84,12 @@ public static class CliArgumentResolver
             return (Array.Empty<string>(), true, 0);
         }
 
-        // 2. Profile saving and listing.
+        // 2. Migration and profile saving/listing.
         if (originalArgs.Length > 0)
         {
+            if (originalArgs[0].Equals("--migrate-settings", StringComparison.OrdinalIgnoreCase))
+                return (Array.Empty<string>(), true, await SettingsMigrator.RunAsync(configDir, currentDirectory));
+
             if (originalArgs[0].Equals("--save-profile", StringComparison.OrdinalIgnoreCase))
             {
                 if (originalArgs.Length < 3)
@@ -117,7 +111,7 @@ public static class CliArgumentResolver
 
             if (originalArgs[0].Equals("--list-profiles", StringComparison.OrdinalIgnoreCase))
             {
-                await ListProfilesAsync(configDir, userPath, projectPath);
+                await ListProfilesAsync(userPath, projectPath);
                 return (Array.Empty<string>(), true, 0);
             }
         }
@@ -151,7 +145,7 @@ public static class CliArgumentResolver
                 continue;
             }
 
-            var profileArgs = await FindProfileAsync(profileName, projectFile, userFile, configDir);
+            var profileArgs = FindProfile(profileName, projectFile, userFile);
             if (profileArgs == null)
             {
                 Console.Error.WriteLine($"Error: Profile '{profileName}' not found. Run gc --list-profiles to see the choices.");
@@ -171,14 +165,9 @@ public static class CliArgumentResolver
             else cleanedArgs.Add(arg);
         }
 
-        // 4. Defaults: user file, then project file. Older sources (a .gc arguments file, the
-        // per-folder directory_defaults.json) apply only while no project file defines defaults.
+        // 4. Defaults: user file, then project file.
         var baseArgs = new List<string>(userFile.Defaults);
-        string[] projectDefaults = projectFile.Defaults;
-        if (projectDefaults.Length == 0)
-            projectDefaults = LoadLocalGcFile(currentDirectory)
-                              ?? await LoadLegacyDirectoryDefaultAsync(configDir, currentDirectory)
-                              ?? [];
+        var projectDefaults = projectFile.Defaults;
         baseArgs.AddRange(projectDefaults);
 
         var mergedArgs = new List<string>(baseArgs);
@@ -198,15 +187,12 @@ public static class CliArgumentResolver
         return (mergedArgs.ToArray(), false, 0);
     }
 
-    /// <summary>Profile lookup order: project file, user file, built-in presets, then the old profiles.json.</summary>
-    private static async Task<string[]?> FindProfileAsync(string name, GcSettingsFile project, GcSettingsFile user,
-        string configDir)
+    /// <summary>Profile lookup order: project file, user file, then built-in presets.</summary>
+    private static string[]? FindProfile(string name, GcSettingsFile project, GcSettingsFile user)
     {
         if (SettingsStore.TryGetProfile(project, name, out var args)) return args;
         if (SettingsStore.TryGetProfile(user, name, out args)) return args;
-        var builtIn = BuiltInProfile(name);
-        if (builtIn != null) return builtIn;
-        return await LoadLegacyProfileAsync(configDir, name);
+        return BuiltInProfile(name);
     }
 
     /// <summary>Built-in presets are the lowest-priority profiles: <c>@web</c> is <c>--preset web</c>.</summary>
@@ -216,82 +202,14 @@ public static class CliArgumentResolver
         return BuiltInPresets.GetAllPresets().ContainsKey(name) ? ["--preset", name.ToLowerInvariant()] : null;
     }
 
-    private static string[]? LoadLocalGcFile(string startDir)
-    {
-        var current = new DirectoryInfo(startDir);
-        while (current != null)
-        {
-            var localGcPath = Path.Combine(current.FullName, ".gc");
-            if (File.Exists(localGcPath))
-            {
-                try
-                {
-                    return SplitArguments(File.ReadAllText(localGcPath));
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"Warning: Failed to read .gc file at {localGcPath}: {ex.Message}");
-                }
-            }
-            current = current.Parent;
-        }
-        return null;
-    }
-
-    private static async Task ListProfilesAsync(string configDir, string userPath, string? projectPath)
+    private static async Task ListProfilesAsync(string userPath, string? projectPath)
     {
         var project = await SettingsStore.LoadAsync(projectPath);
         var user = await SettingsStore.LoadAsync(userPath);
         Console.WriteLine("Profiles (use as gc @name):");
         foreach (var (key, value) in project.Profiles) Console.WriteLine($"  @{key} (project): {string.Join(" ", value)}");
         foreach (var (key, value) in user.Profiles) Console.WriteLine($"  @{key} (user): {string.Join(" ", value)}");
-        foreach (var legacy in await ReadLegacyProfilesAsync(configDir))
-            Console.WriteLine($"  @{legacy.Key} (profiles.json, old format): {string.Join(" ", legacy.Value)}");
         foreach (var (key, _) in BuiltInPresets.GetAllPresets())
             Console.WriteLine($"  @{key} (built-in): {string.Join(" ", BuiltInProfile(key)!)}");
-    }
-
-    private static async Task<Dictionary<string, string[]>> ReadLegacyProfilesAsync(string configDir)
-    {
-        var path = Path.Combine(configDir, LegacyProfileFile);
-        if (!File.Exists(path)) return new Dictionary<string, string[]>();
-        try
-        {
-            var json = await File.ReadAllTextAsync(path);
-            return JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray)
-                   ?? new Dictionary<string, string[]>();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            Console.Error.WriteLine($"Error loading profiles.json: {ex.Message}");
-            return new Dictionary<string, string[]>();
-        }
-    }
-
-    private static async Task<string[]?> LoadLegacyProfileAsync(string configDir, string name)
-    {
-        var profiles = new Dictionary<string, string[]>(await ReadLegacyProfilesAsync(configDir), StringComparer.OrdinalIgnoreCase);
-        return profiles.TryGetValue(name, out var args) ? args : null;
-    }
-
-    private static async Task<string[]?> LoadLegacyDirectoryDefaultAsync(string configDir, string directory)
-    {
-        var path = Path.Combine(configDir, LegacyDirDefaultsFile);
-        if (!File.Exists(path)) return null;
-        try
-        {
-            var json = await File.ReadAllTextAsync(path);
-            var loaded = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
-            if (loaded != null)
-            {
-                var defaults = new Dictionary<string, string[]>(loaded, PathComparer);
-                if (defaults.TryGetValue(NormalizeDirKey(directory), out var args)) return args;
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            Console.Error.WriteLine($"Error loading directory default: {ex.Message}");
-        }
-        return null;
     }
 }

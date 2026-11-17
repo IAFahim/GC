@@ -227,6 +227,7 @@ Run `gc --help` for the same list. Older spellings keep working but are not show
 | `@name` | Use a profile |
 | `init [args]` | Write `.gc.json` here with these arguments as defaults |
 | `--init-config` | Write an empty `.gc.json` |
+| `--migrate-settings` | Move old `config.json` / `.gc` / `profiles.json` files into the two files |
 | `--save` | Save the typed arguments as this folder's defaults |
 | `--save-profile <name> [args]` | Save arguments as a user profile |
 | `--list-profiles` | List project, user and built-in profiles |
@@ -263,7 +264,7 @@ Settings live in two files that share one format:
 - **`defaults`** are arguments applied on every run, before the ones you type (user first, then project).
 - **`profiles`** are named argument lists, used as `gc @docs -o out.md`. Lookup order: project, user, then built-in presets (`gc @web` is `--preset web`; `gc @unity-source` is `-u`). `gc --list-profiles` shows them all.
 
-Older sources still work: `config.json` layers, a `.gc` arguments file, `directory_defaults.json` and `profiles.json`. gc prints a warning naming each one; move its content into the two files above.
+Settings from before the two-file format (`config.json` layers, a `.gc` arguments file, `directory_defaults.json`, `profiles.json`) are no longer read. gc prints a warning naming each one it finds; run `gc --migrate-settings` to move them into the two files above (originals are renamed to `*.migrated`).
 
 ## Cluster Mode
 

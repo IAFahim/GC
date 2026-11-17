@@ -104,19 +104,17 @@ public class CliArgumentResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_LegacyGcArgumentsFile_StillApplies()
+    public async Task ResolveAsync_OldGcArgumentsFile_IsIgnored()
     {
         var tempDir = CreateTempDir();
-        var subDir = Path.Combine(tempDir, "sub");
-        Directory.CreateDirectory(subDir);
         try
         {
             var configDir = Path.Combine(tempDir, "config");
             await File.WriteAllTextAsync(Path.Combine(tempDir, ".gc"), "--verbose --extension cs");
 
-            var (resolvedArgs, _, _) = await CliArgumentResolver.ResolveAsync(new[] { "--output", "out.md" }, configDir, subDir);
+            var (resolvedArgs, _, _) = await CliArgumentResolver.ResolveAsync(new[] { "--output", "out.md" }, configDir, tempDir);
 
-            Assert.Equal(new[] { "--verbose", "--extension", "cs", "--output", "out.md" }, resolvedArgs);
+            Assert.Equal(new[] { "--output", "out.md" }, resolvedArgs);
         }
         finally
         {

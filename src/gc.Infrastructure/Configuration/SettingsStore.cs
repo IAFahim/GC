@@ -7,8 +7,8 @@ namespace gc.Infrastructure.Configuration;
 ///     Reads and writes the two settings files: the user file (<c>gc.json</c> in the config folder)
 ///     and the project file (<c>.gc.json</c> in or above the project root). Both use
 ///     <see cref="GcSettingsFile" />. Older sources (config.json layers, the <c>.gc</c> arguments file,
-///     directory_defaults.json, profiles.json) are still read for compatibility and reported by
-///     <see cref="FindLegacyFiles" />.
+///     directory_defaults.json, profiles.json) are no longer read; <see cref="FindLegacyFiles" /> reports them
+///     so <c>gc --migrate-settings</c> can be suggested.
 /// </summary>
 public static class SettingsStore
 {
@@ -93,8 +93,8 @@ public static class SettingsStore
         return false;
     }
 
-    /// <summary>Lists settings sources from before the two-file format that still exist.</summary>
-    public static IReadOnlyList<string> FindLegacyFiles(string configDir, string startDir)
+    /// <summary>Lists settings sources from before the two-file format that still exist (they are ignored).</summary>
+    public static IReadOnlyList<string> FindLegacyFiles(string configDir, string startDir, string? systemConfigDir = null)
     {
         var found = new List<string>();
         foreach (var name in new[] { "config.json", "profiles.json", "directory_defaults.json" })
@@ -102,6 +102,9 @@ public static class SettingsStore
             var path = Path.Combine(configDir, name);
             if (File.Exists(path)) found.Add(path);
         }
+
+        if (systemConfigDir != null && File.Exists(Path.Combine(systemConfigDir, "config.json")))
+            found.Add(Path.Combine(systemConfigDir, "config.json"));
 
         for (var dir = new DirectoryInfo(startDir); dir != null; dir = dir.Parent)
         {

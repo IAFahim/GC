@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Console output is UTF-8: the check mark in summary lines was printed as `?` on Windows, also when output was redirected (#14)
+- A missing file gives `File not found: ...` on every platform (it was the raw .NET message on Windows) (#14)
 - Settings that nothing read now work (#14): `filters.excludeContentPatterns` / `includeContentPatterns`, `filters.additionalExtensions` (allowed alongside an active extension filter), `discovery.useGit` (`false` is `--no-git`), `cluster.includeRootFiles`, `markdown.languageDetection` (`filename`, `content` uses the shebang of extensionless files), `output.includeStats` (`false` drops the figures from the summary line). `output.defaultFormat` other than `markdown` now warns that only Markdown is produced.
 
 - `--count` now runs the real generator into a null sink, so it resolves files against the root (`gc src --count` no longer prints 0) and reflects `-b`, `-z` and content filters (#14)

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `--count` now runs the real generator into a null sink, so it resolves files against the root (`gc src --count` no longer prints 0) and reflects `-b`, `-z` and content filters (#14)
+- `FileReader` resolves entries against their root instead of the process folder (#14)
+- Code fences are 3 backticks unless the content needs more (was always at least 4) (#14)
+- `-b` and `-z` no longer add an extra blank line before the closing fence; in-memory and streamed paths now share one layout (#14)
+- Files rejected by `--include-content` / `--exclude-content` no longer write a `[Skipped by content filter: ...]` line; it is logged at debug level (#14)
+- The AI header only describes the transforms that ran (brain-only output no longer mentions sqz markers) (#14)
+- `ClipboardService` no longer scans loaded assemblies in production; tests set `GC_TEST_MODE=true` (#14)
+
 ## [v1.8.0] - 2026-05-24
 
 ### Added

@@ -379,7 +379,7 @@ public static class Program
             var filterResult = filter2.FilterFiles(
                 discoveryResult.Value!, config,
                 cliArgs.Paths, cliArgs.Excludes, cliArgs.Extensions,
-                cliArgs.ExcludePathPatterns, cliArgs.IncludePathPatterns, currentDirectory);
+                cliArgs.ExcludePathPatterns, cliArgs.IncludePathPatterns, currentDirectory, currentDirectory);
 
             if (!filterResult.IsSuccess)
             {
@@ -409,12 +409,12 @@ public static class Program
             return 0;
         }
 
-        // Count tokens: quick scan only
+        // Count tokens: run the real generator into a null sink so the estimate reflects exactly what
+        // would be written (brain mode, line drops, content filters) and files resolve against the root.
         if (cliArgs.CountTokens)
         {
             var discovery = new FileDiscovery(logger);
             var filter2 = new FileFilter(logger);
-            var reader = new FileReader(logger);
             var discoveryResult = await discovery.DiscoverFilesAsync(currentDirectory, config, ct);
             if (!discoveryResult.IsSuccess)
             {
@@ -425,7 +425,7 @@ public static class Program
             var filterResult = filter2.FilterFiles(
                 discoveryResult.Value!, config,
                 cliArgs.Paths, cliArgs.Excludes, cliArgs.Extensions,
-                cliArgs.ExcludePathPatterns, cliArgs.IncludePathPatterns, currentDirectory);
+                cliArgs.ExcludePathPatterns, cliArgs.IncludePathPatterns, currentDirectory, currentDirectory);
 
             if (!filterResult.IsSuccess)
             {
@@ -433,30 +433,22 @@ public static class Program
                 return 1;
             }
 
-            var entries = filterResult.Value!.ToList();
-            long totalTokens = 0;
-            foreach (var entry in entries)
+            var generator = new MarkdownGenerator(logger);
+            var compiled = new ContentFilter(logger).CompilePatterns(
+                cliArgs.ExcludeContentPatterns, cliArgs.IncludeContentPatterns);
+            var contents = filterResult.Value!.Select(e => new FileContent(e, null, e.Size));
+            var counted = await generator.GenerateMarkdownStreamingAsync(contents, Stream.Null, config, compiled,
+                cliArgs.ExcludeLineIfStart, cliArgs.BrainMode ? new BrainCrusher() : null, ct);
+            if (!counted.IsSuccess)
             {
-                if (entry.Path.StartsWith('[')) continue; // Skip synthetic entries
-                try
-                {
-                    var contentResult = await reader.ReadAsync(entry, ct);
-                    if (contentResult.IsSuccess)
-                    {
-                        var fileContent = contentResult.Value;
-                        var text = fileContent.Content ?? fileContent.Entry.Path;
-                        totalTokens += TokenEstimator.EstimateTokens(text);
-                    }
-                }
-                catch
-                {
-                }
+                logger.Error(counted.Error!);
+                return 1;
             }
 
             // The token count is the explicit result of --count, not a log message: write it to
             // stdout so it always shows (logger.Info is suppressed at the default verbosity) and is
             // cleanly pipeable/greppable by scripts.
-            Console.WriteLine($"Estimated token count: {totalTokens:N0}");
+            Console.WriteLine($"Estimated token count: {generator.LastEstimatedTokens:N0}");
             return 0;
         }
 

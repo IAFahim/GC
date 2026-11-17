@@ -11,11 +11,25 @@ namespace gc.Application.UseCases;
 
 public sealed class GenerateContextUseCase
 {
-    private const string LlmContextHeader =
-        "[Context compressed by gc+sqz for efficiency. " +
-        "This contains the full source code — references like [→L], [×N], «A» are structural markers. " +
+    private const string LlmHeaderRules =
         "IMPORTANT: When writing code or answering, use the ORIGINAL full identifiers and patterns shown here. " +
         "Do NOT use abbreviated symbols or short-form in your output. Respond as if you received uncompressed source.]\n\n";
+
+    // Describe only the transforms that actually ran, so the model is not told about sqz markers
+    // ([→L], [×N], «A») when only brain mode was used.
+    public static string BuildLlmContextHeader(bool brain, bool sqz)
+    {
+        var source = (brain, sqz) switch
+        {
+            (true, true) => "[Context minified by gc brain mode and compressed by sqz. " +
+                            "This contains the full source code — symbols defined in the GC_DICT block and sqz references like [→L], [×N], «A» are structural markers. ",
+            (true, false) => "[Context minified by gc brain mode. " +
+                             "This contains the full source code — symbols defined in the GC_DICT block are shorthand for the original identifiers. ",
+            _ => "[Context compressed by gc+sqz for efficiency. " +
+                 "This contains the full source code — references like [→L], [×N], «A» are structural markers. "
+        };
+        return source + LlmHeaderRules;
+    }
 
     private readonly IClipboardService _clipboard;
     private readonly ContentFilter _contentFilter;
@@ -442,8 +456,8 @@ public sealed class GenerateContextUseCase
             // Prepend legend (from dynamic compressor) and LlmContextHeader uniformly
             finalOutput = pipelineResult.Legend + finalOutput;
 
-            if (brainMode || compress)
-                finalOutput = LlmContextHeader + finalOutput;
+            if (brainMode || sqzService != null)
+                finalOutput = BuildLlmContextHeader(brainMode, sqzService != null) + finalOutput;
 
             // Build logging info
             var parts = new List<string>();

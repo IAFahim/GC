@@ -188,7 +188,7 @@ public sealed class ContextPartsTests
                 Assert.True(result.IsSuccess, result.Error);
                 chunks.Complete();
             }
-            var contentStart = Encoding.UTF8.GetByteCount($"## File: Large.cs{Environment.NewLine}````cs{Environment.NewLine}");
+            var contentStart = Encoding.UTF8.GetByteCount($"## File: Large.cs{Environment.NewLine}```cs{Environment.NewLine}");
             using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "manifest.json")));
             using var restored = new MemoryStream();
             var continuations = 0;

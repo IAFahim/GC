@@ -61,9 +61,7 @@
     "outputFormat": {
       "type": "string",
       "enum": [
-        "markdown",
-        "plain",
-        "json"
+        "markdown"
       ],
       "description": "Default output format"
     },

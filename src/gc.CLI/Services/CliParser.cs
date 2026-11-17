@@ -103,6 +103,7 @@ public sealed class CliParser
 
         // ── Single-value options ──
         new(["-o", "--output", "spit", "-s"], OptionKind.SingleValue, (a, v) => a.OutputFile = v ?? ""),
+        new(["--format"], OptionKind.SingleValue, (a, v) => a.Format = v),
         new(["--root"], OptionKind.SingleValue, (a, v) => a.RootPath = v),
         new(["--output-dir"], OptionKind.SingleValue, (a, v) => a.OutputDirectory = v),
         new(["--max-memory"], OptionKind.SingleValue, (a, v) =>

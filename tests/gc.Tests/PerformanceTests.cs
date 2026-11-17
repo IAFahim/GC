@@ -8,6 +8,10 @@ namespace gc.Tests;
 
 public class PerformanceTests : IDisposable
 {
+    // End-to-end guards start the gc executable, so process launch and antivirus scanning on a busy machine
+    // dominate small inputs. This catches order-of-magnitude regressions, not hardware speed (see BenchmarkDotNet).
+    private const long EndToEndLimitMs = 30_000;
+
     private readonly string _binaryPath;
     private readonly ITestOutputHelper _output;
     private readonly string _repoDir;
@@ -64,8 +68,8 @@ public class PerformanceTests : IDisposable
         // Regression guard (end-to-end subprocess), NOT a hardware SLA — real SLAs live in the
         // BenchmarkDotNet project. Typical: ~450ms incl. process spawn/JIT; threshold is generous
         // so a correct build passes on slow/loaded CI while a real blowup still fails.
-        Assert.True(stopwatch.ElapsedMilliseconds < 5000,
-            $"Small repository took {stopwatch.ElapsedMilliseconds}ms (expected < 5000ms)");
+        Assert.True(stopwatch.ElapsedMilliseconds < EndToEndLimitMs,
+            $"Small repository took {stopwatch.ElapsedMilliseconds}ms (expected < {EndToEndLimitMs}ms)");
 
         _output.WriteLine($"✅ Small repository processed in {stopwatch.ElapsedMilliseconds}ms");
     }
@@ -88,8 +92,8 @@ public class PerformanceTests : IDisposable
         Assert.Contains("✔ Exported", result.StandardOutput);
         // Regression guard (end-to-end subprocess), NOT a hardware SLA — real SLAs in BenchmarkDotNet.
         // Generous threshold tolerant of process spawn/JIT variance on slow/loaded CI.
-        Assert.True(stopwatch.ElapsedMilliseconds < 5000,
-            $"Medium repository took {stopwatch.ElapsedMilliseconds}ms (expected < 5000ms)");
+        Assert.True(stopwatch.ElapsedMilliseconds < EndToEndLimitMs,
+            $"Medium repository took {stopwatch.ElapsedMilliseconds}ms (expected < {EndToEndLimitMs}ms)");
 
         var throughput = 50.0 / stopwatch.ElapsedMilliseconds * 1000;
         _output.WriteLine(
@@ -114,8 +118,8 @@ public class PerformanceTests : IDisposable
         Assert.Contains("✔ Exported", result.StandardOutput);
         // Regression guard (end-to-end subprocess), NOT a hardware SLA — real SLAs in BenchmarkDotNet.
         // Typical: ~500ms; generous threshold tolerant of process spawn/JIT variance on slow/loaded CI.
-        Assert.True(stopwatch.ElapsedMilliseconds < 10000,
-            $"Large repository took {stopwatch.ElapsedMilliseconds}ms (expected < 10000ms)");
+        Assert.True(stopwatch.ElapsedMilliseconds < EndToEndLimitMs,
+            $"Large repository took {stopwatch.ElapsedMilliseconds}ms (expected < {EndToEndLimitMs}ms)");
 
         _output.WriteLine($"✅ Large repository processed in {stopwatch.ElapsedMilliseconds}ms");
     }

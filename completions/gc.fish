@@ -21,6 +21,7 @@ complete -c gc -r -l preset -d "Use preset" -a "unity-source unity dotnet web ba
 
 # Where it goes
 complete -c gc -r -s o -l output -d "Write a file instead of the clipboard" -a "(__fish_complete_files)"
+complete -c gc -r -l format -d "Output format" -a "markdown plain json"
 complete -c gc -s k -l split -d "Markdown parts, 50 KB by default" -a "50KB 100KB 200KB"
 complete -c gc -s a -l append -d "Add to what is already there"
 complete -c gc -s b -l brain -d "Minify"

@@ -33,6 +33,8 @@ public sealed class CliArguments
     public string[] Presets { get; set; } = [];
     public string[] ExcludeLineIfStart { get; set; } = [];
     public string OutputFile { get; set; } = string.Empty;
+    /// <summary>--format markdown|plain|json; overrides output.defaultFormat.</summary>
+    public string? Format { get; set; }
     public bool ShowHelp { get; set; }
     public bool ShowVersion { get; set; }
     public long MaxMemoryBytes { get; set; }

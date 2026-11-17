@@ -61,9 +61,11 @@
     "outputFormat": {
       "type": "string",
       "enum": [
-        "markdown"
+        "markdown",
+        "plain",
+        "json"
       ],
-      "description": "Default output format"
+      "description": "Output format: markdown (default), plain (==> path <== blocks, no fences) or json ({ fileCount, files: [{ path, content }] })"
     },
     "configuration": {
       "type": "object",

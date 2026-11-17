@@ -195,6 +195,7 @@ Run `gc --help` for the same list. Older spellings keep working but are not show
 |---|---|---|
 | `-o, --output` | `spit` | Write a file instead of the clipboard |
 | `-k, --split [size]` | - | Markdown parts, 50KB by default; the clipboard pages them |
+| `--format <name>` | - | `markdown` (default), `plain` (`==> path <==` blocks, no fences) or `json` (`{ fileCount, files: [{ path, content }] }`); setting: `output.defaultFormat`. Not combinable with `-k` |
 | `-a, --append` | - | Add to what is already there |
 | `-b, --brain` | `brain` | Minify (universal minification + dynamic BPE) |
 | `-c, --compress` | `compress` | Structural compression via `sqz` |

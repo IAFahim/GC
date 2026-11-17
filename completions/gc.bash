@@ -31,7 +31,7 @@ _gc_completion() {
 		"--cluster-dir" "--cluster-depth"
 		"--exclude-content" "--include-content"
 		"--changed-since" "--explain-filter" "--shard"
-		"--export-schema" "--save-profile"
+		"--export-schema" "--save-profile" "--format"
 		"--print-completion"
 		"--root" "--output-dir"
 	)
@@ -75,6 +75,9 @@ _gc_completion() {
 		-d | --depth) ;;
 		--preset)
 			COMPREPLY=($(compgen -W "$presets" -- "$cur"))
+			;;
+		--format)
+			COMPREPLY=($(compgen -W "markdown plain json" -- "$cur"))
 			;;
 		--print-completion)
 			COMPREPLY=($(compgen -W "bash zsh fish" -- "$cur"))

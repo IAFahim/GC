@@ -57,6 +57,7 @@ _gc() {
         '--shard[Process shard N of M]:shard:'
         '--export-schema[Export settings JSON schema]:file:_files'
         '--save-profile[Save arguments as a user profile]:name:'
+        '--format[Output format]:format:(markdown plain json)'
         '--print-completion[Print completion script]:shell:(bash zsh fish)'
         '--root[Folder to collect]:folder:_files -/'
         '--output-dir[Parts folder]:folder:_files -/'

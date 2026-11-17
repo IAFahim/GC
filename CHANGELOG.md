@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `--no-git`, `-l`, `-a`, `-e/--ext` and `--drop-lines` as the canonical spellings; `gc @name` profiles; `gc --list-profiles` lists project, user and built-in profiles.
+- `--format markdown|plain|json` and `output.defaultFormat`: `plain` writes `==> path <==` blocks with each file's exact content (no fences or file listing); `json` writes `{ "fileCount", "files": [{ "path", "content" }] }`. Markdown parts (`-k`) stay Markdown-only (#14).
 - `*` and `?` wildcards in `--include-content` / `--exclude-content` (plain keywords stay literal and fast), as the docs already claimed (#14).
 
 ### Removed
@@ -35,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Console output is UTF-8: the check mark in summary lines was printed as `?` on Windows, also when output was redirected (#14)
 - A missing file gives `File not found: ...` on every platform (it was the raw .NET message on Windows) (#14)
-- Settings that nothing read now work (#14): `filters.excludeContentPatterns` / `includeContentPatterns`, `filters.additionalExtensions` (allowed alongside an active extension filter), `discovery.useGit` (`false` is `--no-git`), `cluster.includeRootFiles`, `markdown.languageDetection` (`filename`, `content` uses the shebang of extensionless files), `output.includeStats` (`false` drops the figures from the summary line). `output.defaultFormat` accepts only `markdown` (the only format gc produces); other values are reported by `--validate-config` and warned about at startup.
+- Settings that nothing read now work (#14): `filters.excludeContentPatterns` / `includeContentPatterns`, `filters.additionalExtensions` (allowed alongside an active extension filter), `discovery.useGit` (`false` is `--no-git`), `cluster.includeRootFiles`, `markdown.languageDetection` (`filename`, `content` uses the shebang of extensionless files), `output.includeStats` (`false` drops the figures from the summary line). `output.defaultFormat` now works: `markdown` (default), `plain` or `json`, also available as `--format`.
 
 - `--count` now runs the real generator into a null sink, so it resolves files against the root (`gc src --count` no longer prints 0) and reflects `-b`, `-z` and content filters (#14)
 - `FileReader` resolves entries against their root instead of the process folder (#14)

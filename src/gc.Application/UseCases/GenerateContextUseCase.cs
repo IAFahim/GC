@@ -354,6 +354,9 @@ public sealed class GenerateContextUseCase
             return Result.Failure("Split output requires uncompressed source. Remove --brain/--compress to keep memory bounded and source ranges accurate.");
         if (chunkOutput != null && appendMode)
             return Result.Failure("Split output cannot be appended; choose a new output folder.");
+        var format = ParseFormat(config.Output?.DefaultFormat);
+        if (chunkOutput != null && format != OutputFormat.Markdown)
+            return Result.Failure("Split output is Markdown only. Use --format markdown (or leave output.defaultFormat unset) with -k.");
 
         var sw = Stopwatch.StartNew();
 
@@ -404,7 +407,8 @@ public sealed class GenerateContextUseCase
         }
 
         var pipeline = new OutputPipeline(transforms);
-        var hasPipeline = transforms.Count > 0;
+        // plain and json are produced from the materialized generator output, so they take the pipeline path.
+        var hasPipeline = transforms.Count > 0 || format != OutputFormat.Markdown;
 
         profileReporter?.RecordStage("Preprocessing", sw.ElapsedTicks);
 
@@ -417,10 +421,12 @@ public sealed class GenerateContextUseCase
         if (hasPipeline)
         {
             await using var ms = new MemoryStream();
-            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, ms, config, compiled,
-                excludeLineIfStart, brainCrusherInstance, ct);
+            var structured = format == OutputFormat.Markdown ? null : new StructuredOutputStream(ms, format);
+            var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, structured != null ? structured : ms, config,
+                compiled, excludeLineIfStart, brainCrusherInstance, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
             if (!genResult.IsSuccess) return Result.Failure(genResult.Error!);
+            structured?.Complete();
 
             // Generator emits UTF-8 without BOM, so GetString over the buffer is byte-identical
             // to StreamReader but avoids the StreamReader allocation + intermediate char-buffer copy.
@@ -508,6 +514,17 @@ public sealed class GenerateContextUseCase
         return await EmitToClipboard(filteredList, actualFileCount, hasPipeline, finalOutput,
             compiled, excludeLineIfStart, transformInfo, config, appendMode, brainCrusherInstance, ct, sw,
             profileReporter);
+    }
+
+    /// <summary>Maps output.defaultFormat / --format to a format; anything unrecognised is Markdown.</summary>
+    public static OutputFormat ParseFormat(string? value)
+    {
+        return value?.Trim().ToLowerInvariant() switch
+        {
+            "plain" => OutputFormat.Plain,
+            "json" => OutputFormat.Json,
+            _ => OutputFormat.Markdown
+        };
     }
 
     // output.includeStats = false keeps the headline and drops the file count, size and token figures.

@@ -55,9 +55,6 @@ public static class Program
         var config = configResult.Value ?? new GcConfiguration();
         logger.ApplyConfiguration(config.Logging);
 
-        if (config.Output.DefaultFormat is { } format && !format.Equals("markdown", StringComparison.OrdinalIgnoreCase))
-            logger.Warning($"output.defaultFormat '{format}' is not implemented; gc writes Markdown.");
-
         var configDir = configLoader.GetConfigDirectory();
         if (!args.Contains("--migrate-settings"))
             foreach (var legacy in SettingsStore.FindLegacyFiles(configDir, currentDirectory,
@@ -331,6 +328,17 @@ public static class Program
                 }
             };
 
+        if (cliArgs.Format != null)
+        {
+            if (cliArgs.Format.ToLowerInvariant() is not ("markdown" or "plain" or "json"))
+            {
+                logger.Error($"Invalid --format '{cliArgs.Format}'. Use markdown, plain or json.");
+                return 1;
+            }
+
+            config = config with { Output = config.Output with { DefaultFormat = cliArgs.Format.ToLowerInvariant() } };
+        }
+
         if (cliArgs.NoSort)
             config = config with
             {
@@ -537,6 +545,7 @@ WHAT TO COLLECT:
 
 WHERE IT GOES:
     -o, --output <file>              Write a file instead of the clipboard
+    --format <name>                  markdown (default), plain (==> path <== blocks) or json; settings: output.defaultFormat
     -k, --split [size]               Markdown parts, 50KB by default (KB=1000 bytes); the clipboard pages them
     -a, --append                     Add to what is already there
     -b, --brain                      Minify

@@ -1,0 +1,77 @@
+name: Verify issue 14 (temporary)
+
+# One-off Linux verification for the issue #14 branch; removed again right after it has run.
+on:
+  push:
+    branches: [fix/issue-14-half-finished]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - run: dotnet restore gc.sln
+
+      - name: Format
+        run: dotnet format gc.sln --verify-no-changes --no-restore --verbosity minimal
+
+      - name: Build Release
+        run: dotnet build gc.sln --configuration Release --no-restore
+
+      - name: Test (Release, as build.yml does)
+        run: dotnet test tests/gc.Tests/gc.Tests.csproj --no-restore --configuration Release --filter "FullyQualifiedName!~ReleaseBinary" --verbosity minimal
+
+      - name: Build Debug
+        run: dotnet build gc.sln --configuration Debug --no-restore
+
+      - name: Test (Debug, includes tests that run the built gc)
+        run: dotnet test tests/gc.Tests/gc.Tests.csproj --no-build --configuration Debug --filter "FullyQualifiedName!~ReleaseBinary" --verbosity minimal
+
+  nativeaot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Native toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish NativeAOT
+        run: dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -r linux-x64 --self-contained -p:PublishAot=true -o ./publish
+
+      - name: Smoke test the native binary
+        run: |
+          set -ex
+          GC=$PWD/publish/gc
+          $GC --version
+          d=$(mktemp -d); cd $d; git init -q
+          mkdir src docs
+          printf 'class A { }\n' > src/a.cs
+          printf 'class B { /* secret-key */ }\n' > src/b.cs
+          printf '# hi\n' > docs/r.md
+          git add -A
+          export XDG_CONFIG_HOME=$d/cfg
+          $GC init -e cs --no-clipboard
+          cat .gc.json
+          $GC -l
+          $GC src --count
+          $GC "docs/*.md" -l --no-git -e md
+          $GC src --exclude-content 'secret*key' -o out.md --stats stats.json
+          test "$(grep -c '^class' out.md)" = "1"
+          grep -q '"totalMs"' stats.json
+          $GC --save-profile mine -e md
+          $GC @mine -l
+          $GC --list-profiles
+          $GC @web -l
+          $GC src -b -o brain.md
+          head -c 300 brain.md

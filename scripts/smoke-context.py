@@ -80,10 +80,10 @@ with tempfile.TemporaryDirectory(prefix="gc context smoke ") as name:
     assert b"NeverInclude" not in restored
 
     temp_single_out = run(root, "--temp", "-e", "cs", repo / "Runtime/Runner.cs")
-    temp_match = re.search(r"Exported to (.+?):", temp_single_out)
+    temp_match = re.search(r"Exported to (.+?context\.md)", temp_single_out)
     assert temp_match, temp_single_out
     temp_file = Path(temp_match.group(1).strip())
-    assert temp_file.is_file() and "RuntimeMarker" in temp_file.read_text(encoding="utf-8")
+    assert temp_file.is_file() and "RuntimeMarker" in temp_file.read_text(encoding="utf-8"), (temp_file, temp_single_out)
     shutil.rmtree(temp_file.parent)
 
     json_file = root / "out.json"

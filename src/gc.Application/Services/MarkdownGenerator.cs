@@ -136,31 +136,17 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 // is derived from open() failing with ENOENT; any other errno falls through to
                                 // the managed File.OpenHandle so its typed exception reproduces today's
                                 // [Error reading file: <ex.Message>] bytes verbatim via the catch below.
-                                SafeFileHandle? handle = null;
-                                if (OperatingSystem.IsLinux())
+                                // O_NONBLOCK: on Linux and macOS, a FIFO/named pipe with no writer would
+                                // otherwise block open() forever and hang the whole pipeline. It is a no-op
+                                // for regular file reads, so this only changes the special-file case.
+                                SafeFileHandle? handle = TryOpenUnixHandle(absolutePath, out var notFound);
+                                if (notFound)
                                 {
-                                    // O_NONBLOCK: a FIFO/named pipe with no writer would otherwise block
-                                    // open() forever and hang the whole pipeline. It is a no-op for regular
-                                    // file reads, so this only changes the pathological special-file case.
-                                    var fd = LinuxFastPath.open(absolutePath,
-                                        LinuxFastPath.O_RDONLY | LinuxFastPath.O_NONBLOCK | LinuxFastPath.O_NOATIME |
-                                        LinuxFastPath.O_CLOEXEC);
-                                    if (fd < 0)
-                                        fd = LinuxFastPath.open(absolutePath,
-                                            LinuxFastPath.O_RDONLY | LinuxFastPath.O_NONBLOCK | LinuxFastPath.O_CLOEXEC);
-                                    if (fd >= 0)
-                                    {
-                                        handle = new SafeFileHandle(fd, true);
-                                    }
-                                    else if (Marshal.GetLastPInvokeError() == LinuxFastPath.ENOENT)
-                                    {
-                                        await channel.Writer.WriteAsync(
-                                            ReadResult.Failure(index,
-                                                $"File not found: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}"),
-                                            threadToken);
-                                        return;
-                                    }
-                                    // else: fall through to the managed open below.
+                                    await channel.Writer.WriteAsync(
+                                        ReadResult.Failure(index,
+                                            $"File not found: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}"),
+                                        threadToken);
+                                    return;
                                 }
 
                                 handle ??= File.OpenHandle(absolutePath, FileMode.Open, FileAccess.Read,
@@ -859,6 +845,37 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
         }
 
         return longestRun;
+    }
+
+    private static SafeFileHandle? TryOpenUnixHandle(string absolutePath, out bool notFound)
+    {
+        notFound = false;
+        int fd;
+        int enoent;
+        if (OperatingSystem.IsLinux())
+        {
+            fd = LinuxFastPath.open(absolutePath,
+                LinuxFastPath.O_RDONLY | LinuxFastPath.O_NONBLOCK | LinuxFastPath.O_NOATIME |
+                LinuxFastPath.O_CLOEXEC);
+            if (fd < 0)
+                fd = LinuxFastPath.open(absolutePath,
+                    LinuxFastPath.O_RDONLY | LinuxFastPath.O_NONBLOCK | LinuxFastPath.O_CLOEXEC);
+            enoent = LinuxFastPath.ENOENT;
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            fd = MacOsFastPath.open(absolutePath,
+                MacOsFastPath.O_RDONLY | MacOsFastPath.O_NONBLOCK | MacOsFastPath.O_CLOEXEC);
+            enoent = MacOsFastPath.ENOENT;
+        }
+        else
+        {
+            return null;
+        }
+
+        if (fd >= 0) return new SafeFileHandle(fd, true);
+        if (Marshal.GetLastPInvokeError() == enoent) notFound = true;
+        return null;
     }
 
     // Result of a single file's parallel read + precomputed per-file work, reassembled in index order

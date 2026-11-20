@@ -3,22 +3,21 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
+using gc.Domain.Constants;
 using gc.Domain.Models.Configuration;
+using gc.Infrastructure.Configuration;
 
 namespace gc.CLI.Services;
 
+/// <summary>
+///     Turns the typed command line into the final argument list.
+///     Settings live in two files of one format (<see cref="SettingsStore" />): the user file and the
+///     project file. Each can hold <c>defaults</c> (arguments always applied) and <c>profiles</c>
+///     (name to arguments, used as <c>gc @name</c>). Built-in presets are the lowest-priority profiles.
+///     Older sources are not read; <c>gc --migrate-settings</c> moves them into the two files.
+/// </summary>
 public static class CliArgumentResolver
 {
-    private static readonly string ProfileFile = "profiles.json";
-    private static readonly string DirDefaultsFile = "directory_defaults.json";
-
-    private static StringComparer PathComparer =>
-        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-
-    private static string NormalizeDirKey(string directory) =>
-        Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
-
     public static string[] SplitArguments(string commandLine)
     {
         var args = new List<string>();
@@ -71,33 +70,26 @@ public static class CliArgumentResolver
         string configDir,
         string currentDirectory)
     {
-        // 1. Handle "init" command
+        var userPath = SettingsStore.UserPath(configDir);
+        var projectPath = SettingsStore.FindProjectPath(currentDirectory);
+
+        // 1. `gc init [args]` writes the project file in the current folder.
         if (originalArgs.Length > 0 && originalArgs[0].Equals("init", StringComparison.OrdinalIgnoreCase))
         {
-            var localGcPath = Path.Combine(currentDirectory, ".gc");
-            static string EscapeArg(string a)
-            {
-                var esc = a.Replace("\\", "\\\\").Replace("\"", "\\\"");
-                var needsQuote = a.Length == 0 || a.AsSpan().IndexOfAny(" \t\"'".AsSpan()) >= 0;
-                return needsQuote ? $"\"{esc}\"" : esc;
-            }
-            var content = string.Join(" ", originalArgs.Skip(1).Select(EscapeArg));
-            try
-            {
-                await File.WriteAllTextAsync(localGcPath, content);
-                Console.WriteLine($"✓ Initialized local configuration in {localGcPath}");
-                return (Array.Empty<string>(), true, 0);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Error initializing .gc file: {ex.Message}");
-                return (Array.Empty<string>(), true, 1);
-            }
+            var target = Path.Combine(currentDirectory, SettingsStore.ProjectFileName);
+            var existing = await SettingsStore.LoadAsync(File.Exists(target) ? target : null);
+            var saved = await SettingsStore.SaveAsync(target, existing with { Defaults = originalArgs.Skip(1).ToArray() });
+            if (!saved) return (Array.Empty<string>(), true, 1);
+            Console.WriteLine($"✓ Initialized project settings in {target}");
+            return (Array.Empty<string>(), true, 0);
         }
 
-        // 2. Handle profile saving & listing before applying default directories / profiles
+        // 2. Migration and profile saving/listing.
         if (originalArgs.Length > 0)
         {
+            if (originalArgs[0].Equals("--migrate-settings", StringComparison.OrdinalIgnoreCase))
+                return (Array.Empty<string>(), true, await SettingsMigrator.RunAsync(configDir, currentDirectory));
+
             if (originalArgs[0].Equals("--save-profile", StringComparison.OrdinalIgnoreCase))
             {
                 if (originalArgs.Length < 3)
@@ -105,251 +97,119 @@ public static class CliArgumentResolver
                     Console.Error.WriteLine("Error: --save-profile requires a profile name and at least one argument.");
                     return (Array.Empty<string>(), true, 1);
                 }
-                var profileName = originalArgs[1];
-                var profileArgs = originalArgs.Skip(2).ToArray();
-                var success = await SaveProfileAsync(configDir, profileName, profileArgs);
-                return (Array.Empty<string>(), true, success ? 0 : 1);
+
+                var profileName = originalArgs[1].TrimStart('@');
+                var user = await SettingsStore.LoadAsync(userPath);
+                var profiles = new Dictionary<string, string[]>(user.Profiles, StringComparer.OrdinalIgnoreCase)
+                {
+                    [profileName] = originalArgs.Skip(2).ToArray()
+                };
+                var ok = await SettingsStore.SaveAsync(userPath, user with { Profiles = new Dictionary<string, string[]>(profiles) });
+                if (ok) Console.WriteLine($"✓ Profile '{profileName}' saved. Use it as: gc @{profileName}");
+                return (Array.Empty<string>(), true, ok ? 0 : 1);
             }
 
             if (originalArgs[0].Equals("--list-profiles", StringComparison.OrdinalIgnoreCase))
             {
-                await ListProfilesAsync(configDir);
+                await ListProfilesAsync(userPath, projectPath);
                 return (Array.Empty<string>(), true, 0);
             }
         }
 
-        // 3. Resolve profiles if --profile is present
+        // 3. Expand @name (and the older --profile name) wherever they appear.
+        var userFile = await SettingsStore.LoadAsync(userPath);
+        var projectFile = await SettingsStore.LoadAsync(projectPath);
         var finalArgs = new List<string>();
         for (var i = 0; i < originalArgs.Length; i++)
         {
-            if (originalArgs[i].Equals("--profile", StringComparison.OrdinalIgnoreCase))
+            var arg = originalArgs[i];
+            string? profileName = null;
+            if (arg.Equals("--profile", StringComparison.OrdinalIgnoreCase))
             {
                 if (i + 1 >= originalArgs.Length)
                 {
                     Console.Error.WriteLine("Error: --profile requires a name.");
                     return (Array.Empty<string>(), true, 1);
                 }
-                var profileName = originalArgs[i + 1];
-                var profileArgs = await LoadProfileAsync(configDir, profileName);
-                if (profileArgs == null)
-                {
-                    Console.Error.WriteLine($"Error: Profile '{profileName}' not found.");
-                    return (Array.Empty<string>(), true, 1);
-                }
-                finalArgs.AddRange(profileArgs);
-                i++; // Skip name
+
+                profileName = originalArgs[++i].TrimStart('@');
             }
-            else
+            else if (arg.Length > 1 && arg[0] == '@')
             {
-                finalArgs.Add(originalArgs[i]);
+                profileName = arg[1..];
             }
+
+            if (profileName == null)
+            {
+                finalArgs.Add(arg);
+                continue;
+            }
+
+            var profileArgs = FindProfile(profileName, projectFile, userFile);
+            if (profileArgs == null)
+            {
+                Console.Error.WriteLine($"Error: Profile '{profileName}' not found. Run gc --list-profiles to see the choices.");
+                return (Array.Empty<string>(), true, 1);
+            }
+
+            finalArgs.AddRange(profileArgs);
         }
 
-        // Check if saving directory default (flag "--save").
-        // Note: "-s" is the short form of "spit"/--output and must NOT be treated as save.
+        // --save writes the merged arguments as this folder's defaults.
+        // Note: "-s" is an old spelling of -o/--output and must NOT be treated as save.
         var saveDirDefault = false;
         var cleanedArgs = new List<string>();
         foreach (var arg in finalArgs)
         {
-            if (arg.Equals("--save", StringComparison.OrdinalIgnoreCase))
-            {
-                saveDirDefault = true;
-            }
-            else
-            {
-                cleanedArgs.Add(arg);
-            }
+            if (arg.Equals("--save", StringComparison.OrdinalIgnoreCase)) saveDirDefault = true;
+            else cleanedArgs.Add(arg);
         }
 
-        // If no arguments remain (or we have arguments but not overriding defaults),
-        // we check local .gc file first, and directory default second.
-        var baseArgs = new List<string>();
+        // 4. Defaults: user file, then project file.
+        var baseArgs = new List<string>(userFile.Defaults);
+        var projectDefaults = projectFile.Defaults;
+        baseArgs.AddRange(projectDefaults);
 
-        // Find local .gc file in current directory or parents
-        var localGcArgs = LoadLocalGcFile(currentDirectory);
-        if (localGcArgs != null && localGcArgs.Length > 0)
-        {
-            baseArgs.AddRange(localGcArgs);
-        }
-        else
-        {
-            // If no local .gc file, fall back to directory-specific default from directory_defaults.json
-            var dirDefaultArgs = await LoadDirectoryDefaultAsync(configDir, currentDirectory);
-            if (dirDefaultArgs != null)
-            {
-                baseArgs.AddRange(dirDefaultArgs);
-            }
-        }
-
-        // Merge: base args + explicitly passed command line arguments
         var mergedArgs = new List<string>(baseArgs);
         mergedArgs.AddRange(cleanedArgs);
 
-        // If the save flag was specified, persist the merged args as directory default
         if (saveDirDefault)
         {
-            // Do not save the save flag itself
-            var success = await SaveDirectoryDefaultAsync(configDir, currentDirectory, mergedArgs.ToArray());
-            if (!success)
-            {
-                return (Array.Empty<string>(), true, 1);
-            }
-            Console.WriteLine($"✓ Default arguments saved for directory: {currentDirectory}");
+            var target = projectPath ?? Path.Combine(currentDirectory, SettingsStore.ProjectFileName);
+            var existing = projectFile;
+            // Save only what was typed on top of the user defaults, so the user file is not copied into the project.
+            var saved = await SettingsStore.SaveAsync(target,
+                existing with { Defaults = projectDefaults.Concat(cleanedArgs).ToArray() });
+            if (!saved) return (Array.Empty<string>(), true, 1);
+            Console.WriteLine($"✓ Default arguments saved in {target}");
         }
 
         return (mergedArgs.ToArray(), false, 0);
     }
 
-    private static string[]? LoadLocalGcFile(string startDir)
+    /// <summary>Profile lookup order: project file, user file, then built-in presets.</summary>
+    private static string[]? FindProfile(string name, GcSettingsFile project, GcSettingsFile user)
     {
-        var current = new DirectoryInfo(startDir);
-        while (current != null)
-        {
-            var localGcPath = Path.Combine(current.FullName, ".gc");
-            if (File.Exists(localGcPath))
-            {
-                try
-                {
-                    var text = File.ReadAllText(localGcPath);
-                    return SplitArguments(text);
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"Warning: Failed to read .gc file at {localGcPath}: {ex.Message}");
-                }
-            }
-            current = current.Parent;
-        }
-        return null;
+        if (SettingsStore.TryGetProfile(project, name, out var args)) return args;
+        if (SettingsStore.TryGetProfile(user, name, out args)) return args;
+        return BuiltInProfile(name);
     }
 
-    private static async Task<bool> SaveProfileAsync(string configDir, string name, string[] args)
+    /// <summary>Built-in presets are the lowest-priority profiles: <c>@web</c> is <c>--preset web</c>.</summary>
+    internal static string[]? BuiltInProfile(string name)
     {
-        try
-        {
-            Directory.CreateDirectory(configDir);
-            var path = Path.Combine(configDir, ProfileFile);
-            var profiles = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
-            if (File.Exists(path))
-            {
-                var json = await File.ReadAllTextAsync(path);
-                var loaded = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
-                if (loaded != null)
-                {
-                    profiles = new Dictionary<string, string[]>(loaded, StringComparer.OrdinalIgnoreCase);
-                }
-            }
-            profiles[name] = args;
-            var newJson = JsonSerializer.Serialize(profiles, GcIndentedJsonContext.Default.DictionaryStringStringArray);
-            await File.WriteAllTextAsync(path, newJson);
-            Console.WriteLine($"✓ Profile '{name}' saved successfully.");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error saving profile: {ex.Message}");
-            return false;
-        }
+        if (name.Equals("unity-source", StringComparison.OrdinalIgnoreCase)) return ["-u"];
+        return BuiltInPresets.GetAllPresets().ContainsKey(name) ? ["--preset", name.ToLowerInvariant()] : null;
     }
 
-    private static async Task<string[]?> LoadProfileAsync(string configDir, string name)
+    private static async Task ListProfilesAsync(string userPath, string? projectPath)
     {
-        var path = Path.Combine(configDir, ProfileFile);
-        if (!File.Exists(path)) return null;
-        try
-        {
-            var json = await File.ReadAllTextAsync(path);
-            var profiles = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
-            if (profiles != null && profiles.TryGetValue(name, out var args))
-            {
-                return args;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error loading profile: {ex.Message}");
-        }
-        return null;
-    }
-
-    private static async Task ListProfilesAsync(string configDir)
-    {
-        var path = Path.Combine(configDir, ProfileFile);
-        if (!File.Exists(path))
-        {
-            Console.WriteLine("No profiles found.");
-            return;
-        }
-        try
-        {
-            var json = await File.ReadAllTextAsync(path);
-            var profiles = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
-            if (profiles == null || profiles.Count == 0)
-            {
-                Console.WriteLine("No profiles found.");
-                return;
-            }
-            Console.WriteLine("Available Profiles:");
-            foreach (var kvp in profiles)
-            {
-                Console.WriteLine($"  {kvp.Key}: {string.Join(" ", kvp.Value)}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error listing profiles: {ex.Message}");
-        }
-    }
-
-    private static async Task<bool> SaveDirectoryDefaultAsync(string configDir, string directory, string[] args)
-    {
-        try
-        {
-            Directory.CreateDirectory(configDir);
-            var path = Path.Combine(configDir, DirDefaultsFile);
-            var defaults = new Dictionary<string, string[]>(PathComparer);
-            if (File.Exists(path))
-            {
-                var json = await File.ReadAllTextAsync(path);
-                var loaded = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
-                if (loaded != null)
-                {
-                    defaults = new Dictionary<string, string[]>(loaded, PathComparer);
-                }
-            }
-            defaults[NormalizeDirKey(directory)] = args;
-            var newJson = JsonSerializer.Serialize(defaults, GcIndentedJsonContext.Default.DictionaryStringStringArray);
-            await File.WriteAllTextAsync(path, newJson);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error saving directory default: {ex.Message}");
-            return false;
-        }
-    }
-
-    private static async Task<string[]?> LoadDirectoryDefaultAsync(string configDir, string directory)
-    {
-        var path = Path.Combine(configDir, DirDefaultsFile);
-        if (!File.Exists(path)) return null;
-        try
-        {
-            var json = await File.ReadAllTextAsync(path);
-            var loaded = JsonSerializer.Deserialize(json, GcJsonSerializerContext.Default.DictionaryStringStringArray);
-            if (loaded != null)
-            {
-                var defaults = new Dictionary<string, string[]>(loaded, PathComparer);
-                if (defaults.TryGetValue(NormalizeDirKey(directory), out var args))
-                {
-                    return args;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error loading directory default: {ex.Message}");
-        }
-        return null;
+        var project = await SettingsStore.LoadAsync(projectPath);
+        var user = await SettingsStore.LoadAsync(userPath);
+        Console.WriteLine("Profiles (use as gc @name):");
+        foreach (var (key, value) in project.Profiles) Console.WriteLine($"  @{key} (project): {string.Join(" ", value)}");
+        foreach (var (key, value) in user.Profiles) Console.WriteLine($"  @{key} (user): {string.Join(" ", value)}");
+        foreach (var (key, _) in BuiltInPresets.GetAllPresets())
+            Console.WriteLine($"  @{key} (built-in): {string.Join(" ", BuiltInProfile(key)!)}");
     }
 }

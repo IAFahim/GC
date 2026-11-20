@@ -263,11 +263,7 @@ namespace MyApp
         var useCase = new GenerateContextUseCase(discovery, filter, contentFilter, generator, clipboard, logger);
 
         var result = await useCase.ExecuteAsync(
-            "/tmp", new GcConfiguration(),
-            Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
-            null, false, null, false, false, false,
-            null, null, null, null,
-            CancellationToken.None);
+            "/tmp", new GcConfiguration(), new RunOptions(), CancellationToken.None);
         Assert.True(result.IsSuccess);
     }
 
@@ -287,11 +283,7 @@ namespace MyApp
         await cts.CancelAsync();
 
         var result = await useCase.ExecuteAsync(
-            "/tmp", new GcConfiguration(),
-            Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>(),
-            null, false, null, false, false, false,
-            null, null, null, null,
-            cts.Token);
+            "/tmp", new GcConfiguration(), new RunOptions(), cts.Token);
     }
 
     // =========================================================================
@@ -337,23 +329,19 @@ namespace MyApp
     }
 
     [Fact]
-    public void CliParser_TestFlag_SetsRunTests()
+    public void CliParser_TestFlag_IsRejected()
     {
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--test" }, new GcConfiguration());
-        Assert.True(result.IsSuccess);
-        Assert.NotNull(result.Value);
-        Assert.True(result.Value.RunTests);
+        Assert.False(result.IsSuccess);
     }
 
     [Fact]
-    public void CliParser_BenchmarkFlag_SetsRunBenchmark()
+    public void CliParser_BenchmarkFlag_IsRejected()
     {
         var parser = new CliParser();
         var result = parser.Parse(new[] { "--benchmark" }, new GcConfiguration());
-        Assert.True(result.IsSuccess);
-        Assert.NotNull(result.Value);
-        Assert.True(result.Value.RunRealBenchmark);
+        Assert.False(result.IsSuccess);
     }
 
     [Fact]

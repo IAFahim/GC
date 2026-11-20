@@ -24,6 +24,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
     private static readonly SearchValues<byte> NullByte = SearchValues.Create(0);
 
+    private static readonly char[] TrimChars = [' ', '\t', '\r', '\n'];
+
     [ThreadStatic] private static StringBuilder? t_lineExclusionBuilder;
 
     private readonly ILogger _logger;
@@ -265,6 +267,14 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         $"File not found: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}"),
                                     threadToken);
                             }
+                            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+                            {
+                                // Same placeholder as the Linux fast path, so output does not depend on the platform.
+                                await channel.Writer.WriteAsync(
+                                    ReadResult.Failure(index,
+                                        $"File not found: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}"),
+                                    threadToken);
+                            }
                             catch (Exception ex)
                             {
                                 _logger.Error(
@@ -363,8 +373,10 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
 
                                 var contentBytes = Utf8NoBom.GetByteCount(actualContent);
 
+                                // Same layout as the streamed path: an empty body gets no blank line before the fence.
+                                var hasBody = actualContent.Length > 0;
                                 long entryTotalBytes = headerBytes + fenceLineBytes + contentBytes + closingFenceBytes +
-                                                       newlineBytes * 2;
+                                                       newlineBytes + (hasBody ? newlineBytes : 0);
 
                                 if (totalBytes + entryTotalBytes > maxMemoryBytes)
                                 {
@@ -393,7 +405,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     await writer.FlushAsync(token);
                                     boundaries.EndContent();
                                 }
-                                await WriteStringLineAsync(writer, "", token);
+                                if (hasBody) await WriteStringLineAsync(writer, "", token);
                                 await WriteStringLineAsync(writer, fence, token);
                                 await WriteStringLineAsync(writer, "", token);
                                 if (boundaries != null)
@@ -445,11 +457,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 // Apply compiled content filter to preview bytes — fast reject for streaming files.
                                 if (!contentFilter.IsEmpty && !contentFilter.ShouldInclude(ready.Buffer!, ready.Length))
                                 {
-                                    var errorMsg =
-                                        $"[Skipped by content filter: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}]";
-                                    await WriteMetadataLineAsync(writer, boundaries, errorMsg, token);
-                                    totalBytes += Utf8NoBom.GetByteCount(errorMsg) + NewlineByteCount;
-                                    estimatedTokensAccumulator += TokenEstimator.EstimateTokens(errorMsg);
+                                    _logger.Debug(
+                                        $"Skipped by content filter: {SanitizePathForOutput(content.Entry.DisplayPath ?? content.Entry.RelativePath)}");
                                     continue;
                                 }
 
@@ -475,10 +484,10 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                 if (brainCrusher != null)
                                 {
                                     var rawText = Utf8NoBom.GetString(ready.Buffer!, 0, ready.Length);
-                                    crushedContent = brainCrusher.CrushBlock(rawText, content.Entry.Language);
-                                    contentBytesWritten = crushedContent.Length > 0
-                                        ? Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount
-                                        : 0;
+                                    // Trim like the in-memory and plain paths so every path ends with one newline.
+                                    crushedContent = brainCrusher.CrushBlock(rawText, content.Entry.Language)
+                                        .TrimEnd(TrimChars);
+                                    contentBytesWritten = Utf8NoBom.GetByteCount(crushedContent);
                                 }
                                 else if (hasExclude)
                                 {
@@ -514,9 +523,8 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                         first = false;
                                     }
 
-                                    crushedContent = sb.ToString();
-                                    contentBytesWritten = crushedContent.Length > 0
-                                        ? Utf8NoBom.GetByteCount(crushedContent) + NewlineByteCount : 0;
+                                    crushedContent = sb.ToString().TrimEnd(TrimChars);
+                                    contentBytesWritten = Utf8NoBom.GetByteCount(crushedContent);
                                 }
                                 else
                                 {
@@ -614,7 +622,6 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
                                     await writer.FlushAsync(token);
                                     boundaries.EndContent();
                                 }
-                                if (crushedContent is { Length: > 0 }) await WriteStringLineAsync(writer, "", token);
                                 if (needsTrailingNewline) await WriteStringLineAsync(writer, "", token);
                                 await WriteStringLineAsync(writer, fence, token);
                                 await WriteStringLineAsync(writer, "", token);
@@ -817,7 +824,7 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     private static string GetFenceForContent(string content)
     {
         var span = content.AsSpan();
-        var longestRun = 3;
+        var longestRun = 2;
         var i = 0;
         while (true)
         {
@@ -834,12 +841,12 @@ public sealed class MarkdownGenerator : IMarkdownGenerator
     }
 
     // For streaming: scan the full byte span for the longest backtick run, returning the run length
-    // (>= 3). The caller emits run+1 backticks. Computed in the parallel worker so the scan is not
+    // (>= 2, so the caller's run+1 yields the 3-backtick minimum). The caller emits run+1 backticks. Computed in the parallel worker so the scan is not
     // serialized on the reader; the fence string itself is built cheaply on the reader.
     private static int GetFenceRunForBytes(byte[] buffer, int length)
     {
         var span = buffer.AsSpan(0, length);
-        var longestRun = 3;
+        var longestRun = 2;
         var i = 0;
         while (true)
         {

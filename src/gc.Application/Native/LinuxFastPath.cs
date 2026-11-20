@@ -15,7 +15,7 @@ public static class LinuxFastPath
     public const int ENOENT = 2;
 
     [DllImport("libc", SetLastError = true)]
-    public static extern int open(string pathname, int flags);
+    public static extern int open([MarshalAs(UnmanagedType.LPUTF8Str)] string pathname, int flags);
 
     [DllImport("libc", SetLastError = true)]
     public static extern int posix_fadvise(int fd, long offset, long len, int advice);

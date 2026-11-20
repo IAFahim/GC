@@ -281,29 +281,10 @@ public sealed class ClipboardService : IClipboardService
         Linux
     }
 
+    // Tests opt out of touching the real clipboard by setting GC_TEST_MODE=true (the test project does
+    // this in a module initializer). No assembly scanning in production.
     private static bool IsRunningInTest()
     {
-        if (Environment.GetEnvironmentVariable("GC_TEST_MODE") == "true") return true;
-
-        try
-        {
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            for (var i = 0; i < assemblies.Length; i++)
-            {
-                var name = assemblies[i].FullName;
-                if (name != null && (name.Contains("xunit", StringComparison.OrdinalIgnoreCase) ||
-                                     name.Contains("Microsoft.VisualStudio.TestPlatform", StringComparison.OrdinalIgnoreCase) ||
-                                     name.Contains("testhost", StringComparison.OrdinalIgnoreCase)))
-                {
-                    return true;
-                }
-            }
-        }
-        catch
-        {
-            // Ignore reflection errors
-        }
-
-        return false;
+        return Environment.GetEnvironmentVariable("GC_TEST_MODE") == "true";
     }
 }

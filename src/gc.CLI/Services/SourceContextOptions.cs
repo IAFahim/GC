@@ -10,7 +10,7 @@ public static class SourceContextOptions
 {
     private static readonly string[] SourceExcludes =
     [
-        "Tests", "tests", "test", "Tests~", "**/*.Tests/**", "EditorTests", "PlayModeTests",
+        "Tests", "tests", "test", "Tests~", "*.Tests", "*.Tests.*", "EditorTests", "EditModeTests", "PlayModeTests",
         "Samples~", "Samples", "samples", "Benchmarks", "benchmarks", "bin", "obj",
         "Library", "Temp", "Logs", "UserSettings", "worktrees", ".local"
     ];

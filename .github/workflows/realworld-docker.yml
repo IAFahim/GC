@@ -57,21 +57,21 @@ jobs:
           cd /tmp/real-repo
           
           # Test 1: Full dump to output file
-          /app/gc-bin/gc -o full_dump.md --force
+          /app/gc-bin/gc -o full_dump.md --no-git
           if [ ! -s full_dump.md ]; then
              echo "Failed Test 1: Full dump file is empty or missing"
              exit 1
           fi
           
           # Test 2: Preset dotnet
-          /app/gc-bin/gc --preset dotnet -o preset_dump.md --force
+          /app/gc-bin/gc @dotnet -o preset_dump.md --no-git
           if [ ! -s preset_dump.md ]; then
              echo "Failed Test 2: Preset dump file is empty or missing"
              exit 1
           fi
           
           # Test 3: Exclude line start logic
-          /app/gc-bin/gc -p src -e cs -o excluded_lines_dump.md --exclude-line-if-start // --force
+          /app/gc-bin/gc src -e cs -o excluded_lines_dump.md -z // --no-git
           if grep -E "^[[:space:]]*\/\/" excluded_lines_dump.md; then
              echo "Failed Test 3: Excluded lines (//) were found in output"
              exit 1

@@ -167,7 +167,7 @@ public class CliParserExtendedTests
     {
         var result = _parser.Parse(["-f", "--verbose", "--debug", "--no-sort"], _config);
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value!.Force);
+        Assert.True(result.Value!.NoGit);
         Assert.True(result.Value!.Verbose);
         Assert.True(result.Value!.Debug);
         Assert.True(result.Value!.NoSort);
@@ -193,7 +193,7 @@ public class CliParserExtendedTests
         // Everything after "--" should be treated as a bare path
         var result = _parser.Parse(["--force", "--", "--unknown", "path1"], _config);
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value!.Force);
+        Assert.True(result.Value!.NoGit);
         Assert.Contains("--unknown", result.Value!.Paths);
         Assert.Contains("path1", result.Value!.Paths);
     }
@@ -210,7 +210,7 @@ public class CliParserExtendedTests
         Assert.Equal(string.Empty, result.Value!.OutputFile);
         Assert.False(result.Value!.ShowHelp);
         Assert.False(result.Value!.ShowVersion);
-        Assert.False(result.Value!.Force);
+        Assert.False(result.Value!.NoGit);
         Assert.False(result.Value!.Verbose);
         Assert.False(result.Value!.Debug);
         Assert.False(result.Value!.Append);
@@ -245,7 +245,7 @@ public class CliParserExtendedTests
     {
         var result = _parser.Parse(["--Force"], _config);
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value!.Force);
+        Assert.True(result.Value!.NoGit);
     }
 
     [Fact]
@@ -303,7 +303,7 @@ public class CliParserExtendedTests
         var result = _parser.Parse(["--output", "file.txt", "--force"], _config);
         Assert.True(result.IsSuccess);
         Assert.Equal("file.txt", result.Value!.OutputFile);
-        Assert.True(result.Value!.Force);
+        Assert.True(result.Value!.NoGit);
     }
 
     [Fact]

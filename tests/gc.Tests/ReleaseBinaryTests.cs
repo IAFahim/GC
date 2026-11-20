@@ -29,7 +29,11 @@ public class ReleaseBinaryTests : IDisposable
 
         var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
-        _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
+        _binaryPath = new[] { "Debug", "Release" }
+            .Select(configuration => Path.Combine(projectRoot, "src", "gc.CLI", "bin", configuration, "net10.0", binaryName))
+            .Where(File.Exists)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault() ?? Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
 
         if (!File.Exists(_binaryPath))
             throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
@@ -108,32 +112,6 @@ public class ReleaseBinaryTests : IDisposable
         Assert.True(result.ExitCode == 0 || result.StandardOutput.Contains("gc"));
 
         _output.WriteLine("✅ Version flag handled correctly");
-    }
-
-    [Fact]
-    public void CurrentBuild_TestCommand_Works()
-    {
-        _output.WriteLine("Testing test command...");
-
-        var result = RunGC("--test");
-
-        Assert.Equal(0, result.ExitCode);
-        Assert.Contains("Running gc test suite", result.StandardOutput);
-
-        _output.WriteLine("✅ Test command works");
-    }
-
-    [Fact]
-    public void CurrentBuild_BenchmarkCommand_Works()
-    {
-        _output.WriteLine("Testing benchmark command...");
-
-        var result = RunGC("--benchmark");
-
-        Assert.Equal(0, result.ExitCode);
-        Assert.Contains("Benchmark", result.StandardOutput);
-
-        _output.WriteLine("✅ Benchmark command works");
     }
 
     [Fact]
@@ -503,6 +481,7 @@ public class ReleaseBinaryTests : IDisposable
             Arguments = args,
             WorkingDirectory = directory,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };
@@ -591,6 +570,7 @@ public class ReleaseBinaryTests : IDisposable
             Arguments = string.Join(" ", args),
             WorkingDirectory = directory,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };

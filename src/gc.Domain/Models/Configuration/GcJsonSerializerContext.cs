@@ -22,8 +22,8 @@ namespace gc.Domain.Models.Configuration;
 [JsonSerializable(typeof(Dictionary<string, object>))]
 [JsonSerializable(typeof(Dictionary<string, double>))]
 [JsonSerializable(typeof(Dictionary<string, long>))]
-[JsonSerializable(typeof(DefaultConfigOptions))]
 [JsonSerializable(typeof(List<HistoryEntry>))]
+[JsonSerializable(typeof(GcSettingsFile))]
 public partial class GcJsonSerializerContext : JsonSerializerContext
 {
 }
@@ -37,6 +37,7 @@ public partial class GcJsonSerializerContext : JsonSerializerContext
     ReadCommentHandling = JsonCommentHandling.Skip,
     AllowTrailingCommas = true)]
 [JsonSerializable(typeof(GcConfiguration))]
+[JsonSerializable(typeof(GcSettingsFile))]
 [JsonSerializable(typeof(Dictionary<string, string[]>))]
 public partial class GcIndentedJsonContext : JsonSerializerContext
 {

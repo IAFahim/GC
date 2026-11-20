@@ -18,40 +18,32 @@ public sealed class ConfigurationService
         _validator = validator;
     }
 
-    public async Task<Result> InitializeConfigAsync(string configDir = ".gc")
+    /// <summary>Creates an empty project settings file (settings, defaults, profiles) at <paramref name="path" />.</summary>
+    public async Task<Result> InitializeConfigAsync(string path = ".gc.json")
     {
-        var configPath = Path.Combine(configDir, "config.json");
-
-        if (!Directory.Exists(configDir))
+        if (File.Exists(path))
         {
-            Directory.CreateDirectory(configDir);
-            _logger.Info($"Created directory: {configDir}");
+            _logger.Info($"Settings file already exists: {path}");
+            return Result.Failure($"Settings file already exists: {path}. Manual intervention required to overwrite.");
         }
-
-        if (File.Exists(configPath))
-        {
-            _logger.Info($"Configuration file already exists: {configPath}");
-            return Result.Failure(
-                $"Configuration file already exists: {configPath}. Manual intervention required to overwrite.");
-        }
-
-        return await WriteDefaultConfigAsync(configPath);
-    }
-
-    private async Task<Result> WriteDefaultConfigAsync(string configPath)
-    {
-        var defaultConfig = new DefaultConfigOptions();
 
         try
         {
-            var json = JsonSerializer.Serialize(defaultConfig, GcJsonSerializerContext.Default.DefaultConfigOptions);
-            await File.WriteAllTextAsync(configPath, json, new UTF8Encoding(false));
-            _logger.Info($"✓ Configuration file created: {configPath}");
+            var directory = Path.GetDirectoryName(Path.GetFullPath(path));
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+                _logger.Info($"Created directory: {directory}");
+            }
+
+            var skeleton = string.Join('\n', "{", "  \"settings\": {},", "  \"defaults\": [],", "  \"profiles\": {}", "}", "");
+            await File.WriteAllTextAsync(path, skeleton, new UTF8Encoding(false));
+            _logger.Info($"✓ Settings file created: {path}");
             return Result.Success();
         }
         catch (Exception ex)
         {
-            return Result.Failure($"Failed to create configuration file: {ex.Message}");
+            return Result.Failure($"Failed to create settings file: {ex.Message}");
         }
     }
 

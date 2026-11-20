@@ -49,73 +49,17 @@ public sealed class ConfigurationLoader
         var config = BuiltInPresets.GetDefaultConfiguration();
         _logger.Debug("Loaded built-in default configuration");
 
-        var systemConfigPath = Path.Combine(GetSystemConfigDirectory(), "config.json");
-        if (File.Exists(systemConfigPath))
-        {
-            var systemResult = await LoadConfigFromFileAsync(systemConfigPath);
-            if (systemResult.IsSuccess && systemResult.Value != null)
-                config = MergeConfiguration(config, systemResult.Value, "System");
-        }
+        // Settings come from two files only: the user file, then the project file (project wins).
+        var userSettings = await SettingsStore.LoadAsync(SettingsStore.UserPath(GetConfigDirectory()));
+        if (userSettings.Settings != null)
+            config = MergeConfiguration(config, userSettings.Settings, "User settings");
 
-        var userConfigPath = Path.Combine(GetConfigDirectory(), "config.json");
-        if (File.Exists(userConfigPath))
-        {
-            var userResult = await LoadConfigFromFileAsync(userConfigPath);
-            if (userResult.IsSuccess && userResult.Value != null)
-                config = MergeConfiguration(config, userResult.Value, "User");
-        }
-
-        var projectConfigPath = FindProjectConfig(rootPath);
-        if (projectConfigPath != null)
-        {
-            var projectResult = await LoadConfigFromFileAsync(projectConfigPath);
-            if (projectResult.IsSuccess && projectResult.Value != null)
-                config = MergeConfiguration(config, projectResult.Value, "Project");
-        }
+        var projectSettings = await SettingsStore.LoadAsync(
+            SettingsStore.FindProjectPath(rootPath ?? Directory.GetCurrentDirectory()));
+        if (projectSettings.Settings != null)
+            config = MergeConfiguration(config, projectSettings.Settings, "Project settings");
 
         return Result<GcConfiguration>.Success(config);
-    }
-
-    public string? FindProjectConfig(string? rootPath = null)
-    {
-        var currentDir = rootPath ?? Directory.GetCurrentDirectory();
-        var gitRoot = FindGitRoot(currentDir);
-
-        var searchDir = currentDir;
-        while (searchDir != null && searchDir != Path.GetPathRoot(searchDir))
-        {
-            var configPath = Path.Combine(searchDir, ".gc", "config.json");
-            if (File.Exists(configPath))
-            {
-                _logger.Debug($"Found project config at: {configPath}");
-                return configPath;
-            }
-
-            if (gitRoot != null && string.Equals(searchDir, gitRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.Debug($"Stopped config search at git root: {gitRoot}");
-                break;
-            }
-
-            var parentDir = Directory.GetParent(searchDir)?.FullName;
-            if (parentDir == null) break;
-            searchDir = parentDir;
-        }
-
-        return null;
-    }
-
-    private string? FindGitRoot(string startDir)
-    {
-        var currentDir = startDir;
-        while (currentDir != null && currentDir != Path.GetPathRoot(currentDir))
-        {
-            var gitDir = Path.Combine(currentDir, ".git");
-            if (Directory.Exists(gitDir) || File.Exists(gitDir)) return currentDir;
-            currentDir = Directory.GetParent(currentDir)?.FullName;
-        }
-
-        return null;
     }
 
     public async Task<Result<GcConfiguration>> LoadConfigFromFileAsync(string filePath)

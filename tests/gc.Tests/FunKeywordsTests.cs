@@ -243,7 +243,7 @@ public class FunKeywordsTests
         Assert.Contains("src", result.Value!.Paths);
         Assert.True(result.Value.Verbose);
         Assert.True(result.Value.BrainMode);
-        Assert.True(result.Value.Force);
+        Assert.True(result.Value.NoGit);
     }
 
     [Fact]

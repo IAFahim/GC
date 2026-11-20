@@ -7,7 +7,7 @@ using gc.Domain.Models.Configuration;
 using gc.Infrastructure.Configuration;
 using gc.Infrastructure.Discovery;
 
-namespace gc.Infrastructure.Benchmark;
+namespace gc.Benchmarks;
 
 public sealed class RealBenchmark
 {

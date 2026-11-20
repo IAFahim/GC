@@ -400,8 +400,7 @@ public class ApplicationCoverageTests
         discovery.FilesPerDirectory["/repo"] = ["src/file1.cs"];
         var config = DefaultConfig();
 
-        var result = await useCase.ExecuteAsync("/repo", config, [], [], [], null,
-            brainMode: true);
+        var result = await useCase.ExecuteAsync("/repo", config, new RunOptions { Brain = true });
 
         Assert.True(result.IsSuccess);
         Assert.Equal(1, clipboard.CopyCallCount);
@@ -420,8 +419,7 @@ public class ApplicationCoverageTests
 
         try
         {
-            var result = await useCase.ExecuteAsync("/repo", config, [], [], [], tempFile,
-                brainMode: true);
+            var result = await useCase.ExecuteAsync("/repo", config, new RunOptions { OutputFile = tempFile, Brain = true });
 
             Assert.True(result.IsSuccess);
             Assert.True(File.Exists(tempFile));
@@ -451,8 +449,7 @@ public class ApplicationCoverageTests
             // Create the file with some initial content
             await File.WriteAllTextAsync(tempFile, "INITIAL CONTENT\n");
 
-            var result = await useCase.ExecuteAsync("/repo", config, [], [], [], tempFile,
-                true);
+            var result = await useCase.ExecuteAsync("/repo", config, new RunOptions { OutputFile = tempFile, Append = true });
 
             Assert.True(result.IsSuccess);
 

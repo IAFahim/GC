@@ -8,8 +8,15 @@ namespace gc.Benchmarks;
 /// </summary>
 public static class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
+        // `--real` runs the end-to-end repository benchmark (what `gc --benchmark` used to do).
+        if (args.Contains("--real"))
+        {
+            await RealBenchmark.RunRealBenchmarkAsync(new gc.Infrastructure.Logging.ConsoleLogger());
+            return;
+        }
+
         Console.WriteLine("=== gc Performance Benchmark Suite ===");
         Console.WriteLine();
         Console.WriteLine("This suite benchmarks the hot paths of the gc application:");

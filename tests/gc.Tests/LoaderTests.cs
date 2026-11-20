@@ -929,15 +929,14 @@ public class LoaderTests
     // ---------------------------------------------------------------
 
     [Fact]
-    public async Task LoadConfigAsync_PartialProjectConfig_DoesNotThrow_AndKeepsDefaults()
+    public async Task LoadConfigAsync_PartialProjectSettings_DoesNotThrow_AndKeepsDefaults()
     {
         // A project config containing ONLY a version - every top-level section omitted.
         var json = """{ "version": "2.0.0" }""";
 
         var tempRoot = Path.Combine(Path.GetTempPath(), "gc_regr_" + Guid.NewGuid().ToString("N"));
-        var gcDir = Path.Combine(tempRoot, ".gc");
-        Directory.CreateDirectory(gcDir);
-        File.WriteAllText(Path.Combine(gcDir, "config.json"), json);
+        Directory.CreateDirectory(tempRoot);
+        File.WriteAllText(Path.Combine(tempRoot, ".gc.json"), "{ \"settings\": " + json + " }");
 
         var originalCwd = Directory.GetCurrentDirectory();
         try

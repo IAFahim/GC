@@ -26,7 +26,11 @@ public class SecurityTests : IDisposable
 
         var isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
-        _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
+        _binaryPath = new[] { "Debug", "Release" }
+            .Select(configuration => Path.Combine(projectRoot, "src", "gc.CLI", "bin", configuration, "net10.0", binaryName))
+            .Where(File.Exists)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault() ?? Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
 
         if (!File.Exists(_binaryPath))
             throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
@@ -380,6 +384,7 @@ public class Test
             Arguments = args,
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };
@@ -403,6 +408,7 @@ public class Test
             Arguments = $"{command} {string.Join(" ", args)}",
             WorkingDirectory = _repoDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };
@@ -426,6 +432,7 @@ public class Test
             FileName = "chmod",
             Arguments = $"{permissions} {path}",
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false
         };

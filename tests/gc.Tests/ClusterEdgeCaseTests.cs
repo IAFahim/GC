@@ -28,7 +28,11 @@ public class ClusterEdgeCaseTests : IDisposable
         var isWindows = RuntimeInformation
             .IsOSPlatform(OSPlatform.Windows);
         var binaryName = isWindows ? "gc.exe" : "gc";
-        _binaryPath = Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
+        _binaryPath = new[] { "Debug", "Release" }
+            .Select(configuration => Path.Combine(projectRoot, "src", "gc.CLI", "bin", configuration, "net10.0", binaryName))
+            .Where(File.Exists)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault() ?? Path.Combine(projectRoot, "src", "gc.CLI", "bin", "Debug", "net10.0", binaryName);
 
         if (!File.Exists(_binaryPath))
             throw new Exception($"Could not find binary at {_binaryPath}. Please build the project first.");
@@ -538,6 +542,7 @@ public class ClusterEdgeCaseTests : IDisposable
             Arguments = $"{command} {string.Join(" ", args)}",
             WorkingDirectory = workingDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
@@ -561,6 +566,7 @@ public class ClusterEdgeCaseTests : IDisposable
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
                 RedirectStandardError = true
             })?.WaitForExit();
         else
@@ -572,6 +578,7 @@ public class ClusterEdgeCaseTests : IDisposable
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
                 RedirectStandardError = true
             })?.WaitForExit();
     }
@@ -584,6 +591,7 @@ public class ClusterEdgeCaseTests : IDisposable
             Arguments = args,
             WorkingDirectory = _testDir,
             RedirectStandardOutput = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true

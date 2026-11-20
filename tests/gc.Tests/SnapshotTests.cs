@@ -83,23 +83,11 @@ public class SnapshotTests : IDisposable
         var result = await useCase.ExecuteAsync(
             testDir,
             config,
-            Array.Empty<string>(),
-            new[] { "expected.golden", "actual.md" },
-            Array.Empty<string>(),
-            outputPath,
-            false,
-            null,
-            false,
-            false,
-            false,
-            null,
-            null,
-            null,
-            null,
-            CancellationToken.None,
-            null,
-            true
-        );
+            new RunOptions
+            {
+                Excludes = new[] { "expected.golden", "actual.md" },
+                OutputFile = outputPath
+            });
 
         Assert.True(result.IsSuccess, result.Error ?? "Unknown error");
 

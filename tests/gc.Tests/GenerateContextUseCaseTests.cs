@@ -52,10 +52,8 @@ public class GenerateContextUseCaseTests
         var config = DefaultConfig();
         var options = new ChunkOutputOptions(50000, root + "-parts");
         var result = cluster
-            ? await useCase.ExecuteClusterAsync(root, config, [], [], [], null,
-                brainMode: brain, compress: !brain, chunkOutput: options)
-            : await useCase.ExecuteAsync(root, config, [], [], [], null,
-                brainMode: brain, compress: !brain, chunkOutput: options);
+            ? await useCase.ExecuteClusterAsync(root, config, new RunOptions { Brain = brain, Compress = !brain, Parts = options })
+            : await useCase.ExecuteAsync(root, config, new RunOptions { Brain = brain, Compress = !brain, Parts = options });
         Assert.False(result.IsSuccess);
         Assert.Contains("Split output requires uncompressed source", result.Error);
         Assert.Empty(generator.ProcessedContents);
@@ -70,7 +68,7 @@ public class GenerateContextUseCaseTests
         discovery.FilesPerDirectory["/repo"] = ["src/file1.cs", "src/file2.cs"];
         var config = DefaultConfig();
 
-        var result = await useCase.ExecuteAsync("/repo", config, [], [], [], null);
+        var result = await useCase.ExecuteAsync("/repo", config, new RunOptions());
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2, generator.ProcessedContents.Count);
@@ -84,7 +82,7 @@ public class GenerateContextUseCaseTests
         discovery.FilesPerDirectory["/repo"] = [];
         var config = DefaultConfig();
 
-        var result = await useCase.ExecuteAsync("/repo", config, [], [], [], null);
+        var result = await useCase.ExecuteAsync("/repo", config, new RunOptions());
 
         Assert.True(result.IsSuccess);
         Assert.Empty(generator.ProcessedContents);
@@ -100,7 +98,7 @@ public class GenerateContextUseCaseTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var result = await useCase.ExecuteAsync("/repo", config, [], [], [], null, ct: cts.Token);
+        var result = await useCase.ExecuteAsync("/repo", config, new RunOptions(), cts.Token);
 
         Assert.False(result.IsSuccess);
         Assert.Contains("cancelled", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -119,7 +117,7 @@ public class GenerateContextUseCaseTests
         try
         {
             var badOutput = Path.Combine(tempFile, "sub", "out.md");
-            var result = await useCase.ExecuteAsync("/repo", config, [], [], [], badOutput);
+            var result = await useCase.ExecuteAsync("/repo", config, new RunOptions { OutputFile = badOutput });
 
             Assert.False(result.IsSuccess);
             Assert.Contains("Failed to write output", result.Error!, StringComparison.OrdinalIgnoreCase);
@@ -137,7 +135,7 @@ public class GenerateContextUseCaseTests
         discovery.DiscoverShouldFail = true;
         var config = DefaultConfig();
 
-        var result = await useCase.ExecuteAsync("/repo", config, [], [], [], null);
+        var result = await useCase.ExecuteAsync("/repo", config, new RunOptions());
 
         Assert.False(result.IsSuccess);
         Assert.Equal("Discovery failed", result.Error);
@@ -151,7 +149,7 @@ public class GenerateContextUseCaseTests
         generator.ShouldFail = true;
         var config = DefaultConfig();
 
-        var result = await useCase.ExecuteAsync("/repo", config, [], [], [], null);
+        var result = await useCase.ExecuteAsync("/repo", config, new RunOptions());
 
         Assert.False(result.IsSuccess);
         Assert.Equal("Generator failed", result.Error);
@@ -165,7 +163,7 @@ public class GenerateContextUseCaseTests
         clipboard.ShouldFail = true;
         var config = DefaultConfig();
 
-        var result = await useCase.ExecuteAsync("/repo", config, [], [], [], null);
+        var result = await useCase.ExecuteAsync("/repo", config, new RunOptions());
 
         Assert.False(result.IsSuccess);
         Assert.Equal("Clipboard failed", result.Error);
@@ -180,7 +178,7 @@ public class GenerateContextUseCaseTests
         var tempFile = Path.Combine(Path.GetTempPath(), $"gc-test-{Guid.NewGuid()}.md");
         try
         {
-            var result = await useCase.ExecuteAsync("/repo", config, [], [], [], tempFile);
+            var result = await useCase.ExecuteAsync("/repo", config, new RunOptions { OutputFile = tempFile });
 
             Assert.True(result.IsSuccess);
             Assert.Equal(0, clipboard.CopyCallCount);
@@ -200,8 +198,7 @@ public class GenerateContextUseCaseTests
         var config = DefaultConfig();
         var excludePatterns = new[] { "//", "/*" };
 
-        var result = await useCase.ExecuteAsync("/repo", config, [], [], [], null,
-            excludeLineIfStart: excludePatterns);
+        var result = await useCase.ExecuteAsync("/repo", config, new RunOptions { DropLinesStartingWith = excludePatterns });
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(generator.CapturedExcludeLineIfStart);
@@ -219,7 +216,7 @@ public class GenerateContextUseCaseTests
             Limits = new LimitsConfiguration { MaxFiles = 3 }
         };
 
-        var result = await useCase.ExecuteAsync("/repo", config, [], [], [], null);
+        var result = await useCase.ExecuteAsync("/repo", config, new RunOptions());
 
         Assert.True(result.IsSuccess);
         Assert.Equal(3, generator.ProcessedContents.Count);
@@ -234,7 +231,7 @@ public class GenerateContextUseCaseTests
         discovery.ReposToReturn = [];
         var config = DefaultConfig();
 
-        var result = await useCase.ExecuteClusterAsync("/cluster", config, [], [], [], null);
+        var result = await useCase.ExecuteClusterAsync("/cluster", config, new RunOptions());
 
         Assert.True(result.IsSuccess);
         Assert.Empty(generator.ProcessedContents);
@@ -255,7 +252,7 @@ public class GenerateContextUseCaseTests
         discovery.FilesPerDirectory["/cluster/repo2"] = ["file2.cs"];
         var config = DefaultConfig();
 
-        var result = await useCase.ExecuteClusterAsync("/cluster", config, [], [], [], null);
+        var result = await useCase.ExecuteClusterAsync("/cluster", config, new RunOptions());
 
         Assert.True(result.IsSuccess);
         // 2 files (no headers because IncludeRepoHeader defaults to null in patched config)
@@ -272,8 +269,7 @@ public class GenerateContextUseCaseTests
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        var result = await useCase.ExecuteClusterAsync("/cluster", config, [], [], [], null,
-            ct: cts.Token);
+        var result = await useCase.ExecuteClusterAsync("/cluster", config, new RunOptions(), cts.Token);
 
         Assert.False(result.IsSuccess);
         Assert.Contains("cancelled", result.Error, StringComparison.OrdinalIgnoreCase);
@@ -291,7 +287,7 @@ public class GenerateContextUseCaseTests
         generator.ShouldFail = true;
         var config = DefaultConfig();
 
-        var result = await useCase.ExecuteClusterAsync("/cluster", config, [], [], [], null);
+        var result = await useCase.ExecuteClusterAsync("/cluster", config, new RunOptions());
 
         Assert.False(result.IsSuccess);
         Assert.Equal("Generator failed", result.Error);
@@ -316,7 +312,7 @@ public class GenerateContextUseCaseTests
             }
         };
 
-        var result = await useCase.ExecuteClusterAsync("/cluster", config, [], [], [], null);
+        var result = await useCase.ExecuteClusterAsync("/cluster", config, new RunOptions());
 
         Assert.True(result.IsSuccess);
         // alpha header + a.cs + beta separator/header + b.cs = 4
@@ -348,7 +344,7 @@ public class GenerateContextUseCaseTests
             }
         };
 
-        var result = await useCase.ExecuteClusterAsync("/cluster", config, [], [], [], null);
+        var result = await useCase.ExecuteClusterAsync("/cluster", config, new RunOptions());
 
         Assert.True(result.IsSuccess);
         // Only repo1 contributes: 1 header + 1 file = 2 (repo2 skipped)
@@ -368,7 +364,7 @@ public class GenerateContextUseCaseTests
         discovery.FailDirectories.Add("/cluster/bad");
         var config = DefaultConfig();
 
-        var result = await useCase.ExecuteClusterAsync("/cluster", config, [], [], [], null);
+        var result = await useCase.ExecuteClusterAsync("/cluster", config, new RunOptions());
 
         Assert.True(result.IsSuccess);
         // good repo contributes its files
@@ -397,7 +393,7 @@ public class GenerateContextUseCaseTests
             }
         };
 
-        await useCase.ExecuteClusterAsync("/c", config, [], [], [], null);
+        await useCase.ExecuteClusterAsync("/c", config, new RunOptions());
 
         // 1 header + 1 file = 2
         Assert.Equal(2, generator.ProcessedContents.Count);
@@ -424,7 +420,7 @@ public class GenerateContextUseCaseTests
             }
         };
 
-        await useCase.ExecuteClusterAsync("/c", config, [], [], [], null);
+        await useCase.ExecuteClusterAsync("/c", config, new RunOptions());
 
         Assert.Single(generator.ProcessedContents);
         var fileItem = generator.ProcessedContents[0];
@@ -452,7 +448,7 @@ public class GenerateContextUseCaseTests
             }
         };
 
-        await useCase.ExecuteClusterAsync("/c", config, [], [], [], null);
+        await useCase.ExecuteClusterAsync("/c", config, new RunOptions());
 
         // Only active repo: 1 header + 1 file = 2
         Assert.Equal(2, generator.ProcessedContents.Count);

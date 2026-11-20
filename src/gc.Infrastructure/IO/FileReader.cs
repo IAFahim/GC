@@ -43,9 +43,9 @@ public sealed class FileReader : IFileReader
     {
         try
         {
-            if (!File.Exists(entry.Path)) return Result<FileContent>.Failure($"File not found: {entry.Path}");
+            if (!File.Exists(entry.AbsolutePath)) return Result<FileContent>.Failure($"File not found: {entry.Path}");
 
-            using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
+            using var stream = new FileStream(entry.AbsolutePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
                 true);
 
             return await ReadDecodedAsync(entry, stream, stream.Length, ct);
@@ -192,15 +192,15 @@ public sealed class FileReader : IFileReader
     {
         try
         {
-            if (!File.Exists(entry.Path)) return Result<FileContent>.Failure($"File not found: {entry.Path}");
+            if (!File.Exists(entry.AbsolutePath)) return Result<FileContent>.Failure($"File not found: {entry.Path}");
 
-            var fileInfo = new FileInfo(entry.Path);
+            var fileInfo = new FileInfo(entry.AbsolutePath);
             var maxFileSize = limits.GetMaxFileSizeBytes();
             if (fileInfo.Length > maxFileSize)
                 return Result<FileContent>.Failure(
                     $"File size ({fileInfo.Length} bytes) exceeds maximum allowed size ({maxFileSize} bytes): {entry.Path}");
 
-            using var stream = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
+            using var stream = new FileStream(entry.AbsolutePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 4096,
                 true);
 
             return await ReadDecodedAsync(entry, stream, stream.Length, ct);

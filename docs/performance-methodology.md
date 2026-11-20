@@ -15,9 +15,8 @@ Every millisecond spent is time the user waits. Every confirmed millisecond save
 
 ## 2. Profiling and Metrics
 GC provides built-in tools for tracking its own performance:
-- `--profile`: Prints a human-readable markdown table of execution stages (Discovery, Filtering, Preprocessing, Generation, Transformation, Clipboard) and their corresponding timings in milliseconds.
-- `--stats`: Outputs execution metadata including the number of discovered files, brain mode replacements, and final output size.
-- `--profile-json <file>` and `--json-stats <file>`: Exports these metrics to a machine-readable format for ingestion by continuous regression testing pipelines.
+- `--stats`: Prints a human-readable table of execution stages (Discovery, Filtering, Preprocessing, Generation, Transformation, Clipboard) with timings in milliseconds, plus execution metadata including the number of discovered files, brain mode replacements, and final output size.
+- `--stats <file.json>`: Exports these metrics to a machine-readable format for ingestion by continuous regression testing pipelines.
 
 ## 3. Hot Paths and known bottlenecks
 ### Discovery
@@ -33,4 +32,4 @@ GC provides built-in tools for tracking its own performance:
 - **Streaming Files:** Files over the 10MB threshold are streamed safely via bounded `SafeFileHandle` chunking, ensuring constant memory bounds.
 
 ## 4. Regression Gates (CI)
-Future implementations should integrate the `--profile-json` output into GitHub actions to enforce a hard boundary against merge requests that regress the median performance by > 5% on standard benchmark repos.
+Future implementations should integrate the `--stats <file.json>` output into GitHub actions to enforce a hard boundary against merge requests that regress the median performance by > 5% on standard benchmark repos.

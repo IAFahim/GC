@@ -344,4 +344,108 @@ public sealed class ContextPartsTests
         }
         finally { Directory.Delete(directory, true); }
     }
+
+    [Fact]
+    public void UnitySourcePreset_ExcludesDotTestsPackagesAndTestVariants()
+    {
+        var root = Directory.CreateTempSubdirectory("gc-unity-preset-").FullName;
+        try
+        {
+            var config = BuiltInPresets.GetDefaultConfiguration();
+            var cli = new CliParser().Parse(["-u"], config).Value!;
+            var applied = SourceContextOptions.Apply(cli, config, root);
+            Assert.True(applied.IsSuccess, applied.Error);
+
+            var files = new[]
+            {
+                "src/Core/Engine.cs",
+                "Runtime/Player.cs",
+                "Editor/Inspector.cs",
+                "Packages/com.example/Runtime/Module.cs",
+                "Packages/com.example/MyPackage.Tests/UnitTest.cs",
+                "Packages/com.example/MyPackage.Tests/MyPackage.Tests.asmdef",
+                "Assets/Tests/EditMode/Sample.cs",
+                "Assets/Tests~/Hidden.cs",
+                "Assets/EditModeTests/Check.cs",
+                "Assets/PlayModeTests/Play.cs",
+                "Assets/Samples~/Demo.cs",
+                "Library/ScriptAssemblies/Temp.cs",
+                "src/My.Tests.csproj"
+            };
+
+            var filtered = new FileFilter(new ConsoleLogger()).FilterFiles(
+                files, config, cli.Paths, cli.Excludes, cli.Extensions);
+            Assert.True(filtered.IsSuccess);
+            var kept = filtered.Value!.Select(e => e.Relative).OrderBy(x => x).ToArray();
+
+            Assert.Contains("src/Core/Engine.cs", kept);
+            Assert.Contains("Runtime/Player.cs", kept);
+            Assert.Contains("Editor/Inspector.cs", kept);
+            Assert.DoesNotContain(kept, p => p.Contains("Test", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(kept, p => p.Contains("Sample", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(kept, p => p.Contains("Library", StringComparison.OrdinalIgnoreCase));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task SplitGeneration_HonorsCancellationAndExplicitOutputDirectory()
+    {
+        var root = Directory.CreateTempSubdirectory("gc-split-cancel-").FullName;
+        var outDir = Path.Combine(root, "explicit-parts");
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "a.cs"), "class A {}");
+            var config = BuiltInPresets.GetDefaultConfiguration() with
+            {
+                Discovery = new DiscoveryConfiguration { Mode = "filesystem" }
+            };
+            var logger = new ConsoleLogger();
+            var useCase = new gc.Application.UseCases.GenerateContextUseCase(
+                new FileDiscovery(logger), new FileFilter(logger), new ContentFilter(logger),
+                new MarkdownGenerator(logger), new NoClipboardStub(), logger);
+
+            var ok = await useCase.ExecuteAsync(root, config, new gc.Application.UseCases.RunOptions
+            {
+                Extensions = ["cs"],
+                Parts = new ChunkOutputOptions(4096, outDir, "custom")
+            });
+            Assert.True(ok.IsSuccess, ok.Error);
+            Assert.True(File.Exists(Path.Combine(outDir, "custom-001.md")));
+            Assert.True(File.Exists(Path.Combine(outDir, "manifest.json")));
+
+            var cancelDir = Path.Combine(root, "cancelled-parts");
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            var cancelled = await useCase.ExecuteAsync(root, config,
+                new gc.Application.UseCases.RunOptions
+                {
+                    Extensions = ["cs"],
+                    Parts = new ChunkOutputOptions(4096, cancelDir)
+                }, cts.Token);
+            Assert.False(cancelled.IsSuccess);
+            Assert.False(Directory.Exists(cancelDir));
+            Assert.Empty(Directory.GetDirectories(root, "cancelled-parts.tmp.*"));
+
+            // Target is an existing regular file -> fails cleanly without crashing
+            var fileTarget = Path.Combine(root, "not-a-dir");
+            File.WriteAllText(fileTarget, "keep");
+            var bad = await useCase.ExecuteAsync(root, config, new gc.Application.UseCases.RunOptions
+            {
+                Extensions = ["cs"],
+                Parts = new ChunkOutputOptions(4096, fileTarget)
+            });
+            Assert.False(bad.IsSuccess);
+            Assert.Equal("keep", File.ReadAllText(fileTarget));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    private sealed class NoClipboardStub : gc.Domain.Interfaces.IClipboardService
+    {
+        public Task<Result> CopyToClipboardAsync(Stream stream, CancellationToken ct) => Task.FromResult(Result.Success());
+        public Task<Result> CopyToClipboardAsync(Stream stream, LimitsConfiguration limits, bool append, CancellationToken ct) => Task.FromResult(Result.Success());
+        public Task<Result> CopyToClipboardAsync(string content, CancellationToken ct) => Task.FromResult(Result.Success());
+        public Task<Result> CopyToClipboardAsync(string content, LimitsConfiguration limits, bool append, CancellationToken ct) => Task.FromResult(Result.Success());
+    }
 }

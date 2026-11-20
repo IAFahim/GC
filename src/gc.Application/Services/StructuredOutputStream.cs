@@ -123,6 +123,19 @@ internal sealed class StructuredOutputStream : Stream, IMarkdownBoundarySink
         writer.WriteEndObject();
     }
 
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _current?.Dispose();
+            _current = null;
+            foreach (var (_, stream) in _files) stream.Dispose();
+            _files.Clear();
+        }
+
+        base.Dispose(disposing);
+    }
+
     public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
     public override void SetLength(long value) => throw new NotSupportedException();

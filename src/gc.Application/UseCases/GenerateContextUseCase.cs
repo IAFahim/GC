@@ -93,6 +93,8 @@ public sealed class GenerateContextUseCase
         if (entries.Count == 0)
         {
             _logger.Success("No files match the specified filters.");
+            if (config.Discovery?.RecurseSubmodules != true && File.Exists(Path.Combine(rootPath, ".gitmodules")))
+                _logger.Warning("Hint: This repository has submodules (.gitmodules). Re-run with -r / --submodules (or -u for Unity source) to include initialized submodules.");
             return Result.Success();
         }
 
@@ -357,6 +359,8 @@ public sealed class GenerateContextUseCase
         var format = ParseFormat(config.Output?.DefaultFormat);
         if (chunkOutput != null && format != OutputFormat.Markdown)
             return Result.Failure("Split output is Markdown only. Use --format markdown (or leave output.defaultFormat unset) with -k.");
+        if (format == OutputFormat.Json && compress)
+            return Result.Failure("JSON output cannot be combined with --compress. Use --format markdown (or omit --compress).");
 
         var sw = Stopwatch.StartNew();
 
@@ -386,7 +390,9 @@ public sealed class GenerateContextUseCase
         SqzCompressionService? sqzService = null;
         BrainCrusher? brainCrusherInstance = brainMode ? new BrainCrusher() : null;
 
-        if (brainMode)
+        // DynamicCompressor targets markdown code fences; applying it to JSON/Plain would corrupt
+        // the document envelope and path markers. BrainCrusher still minifies each file body.
+        if (brainMode && format == OutputFormat.Markdown)
         {
             transforms.Add(new DynamicCompressorAdapter());
         }
@@ -421,7 +427,7 @@ public sealed class GenerateContextUseCase
         if (hasPipeline)
         {
             await using var ms = new MemoryStream();
-            var structured = format == OutputFormat.Markdown ? null : new StructuredOutputStream(ms, format);
+            await using var structured = format == OutputFormat.Markdown ? null : new StructuredOutputStream(ms, format);
             var genResult = await _generator.GenerateMarkdownStreamingAsync(filteredList, structured != null ? structured : ms, config,
                 compiled, excludeLineIfStart, brainCrusherInstance, ct);
             profileReporter?.RecordStage("Generation", sw.ElapsedTicks);
@@ -450,7 +456,8 @@ public sealed class GenerateContextUseCase
             // Prepend legend (from dynamic compressor) and LlmContextHeader uniformly
             finalOutput = pipelineResult.Legend + finalOutput;
 
-            if (brainMode || sqzService != null)
+            if ((format == OutputFormat.Markdown && (brainMode || sqzService != null)) ||
+                (format == OutputFormat.Plain && sqzService != null))
                 finalOutput = BuildLlmContextHeader(brainMode, sqzService != null) + finalOutput;
 
             // Build logging info

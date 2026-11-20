@@ -57,6 +57,7 @@ with tempfile.TemporaryDirectory(prefix="gc context smoke ") as name:
         "Runtime/Runner.cs": "class RuntimeMarker {}\n",
         "Editor/Inspector.cs": "class EditorMarker {}\n",
         "Tests/Editor/Skip.cs": "class NeverIncludeTestMarker {}\n",
+        "Packages/MyPkg.Tests/Skip.cs": "class NeverIncludePkgTestMarker {}\n",
         "Samples~/Skip.cs": "class NeverIncludeSampleMarker {}\n",
         "Library/Skip.cs": "class NeverIncludeCacheMarker {}\n",
     }
@@ -64,6 +65,12 @@ with tempfile.TemporaryDirectory(prefix="gc context smoke ") as name:
         target = repo / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content.encode("utf-8"))
+
+    version_out = run(root, "--version")
+    assert "gc version " in version_out, version_out
+    help_out = run(root, "--help")
+    assert "-k, --split" in help_out, help_out
+
     baseline = root / "baseline.md"
     run(root, "-u", "-e", "cs", "--output", baseline, repo)
     restored, manifest = exported(root, repo, "-u", "-e", "cs", "-k")
@@ -71,6 +78,22 @@ with tempfile.TemporaryDirectory(prefix="gc context smoke ") as name:
     assert len(manifest["parts"]) > 1
     assert b"SourceMarker" in restored and b"RuntimeMarker" in restored and b"EditorMarker" in restored
     assert b"NeverInclude" not in restored
+
+    temp_single_out = run(root, "--temp", "-e", "cs", repo / "Runtime/Runner.cs")
+    temp_match = re.search(r"Exported to (.+?):", temp_single_out)
+    assert temp_match, temp_single_out
+    temp_file = Path(temp_match.group(1).strip())
+    assert temp_file.is_file() and "RuntimeMarker" in temp_file.read_text(encoding="utf-8")
+    shutil.rmtree(temp_file.parent)
+
+    json_file = root / "out.json"
+    run(root, "--format", "json", "-b", "-e", "cs", "-o", json_file, repo / "Runtime/Runner.cs")
+    parsed_json = json.loads(json_file.read_text(encoding="utf-8"))
+    assert parsed_json["fileCount"] == 1 and "RuntimeMarker" in parsed_json["files"][0]["content"]
+
+    plain_file = root / "out.txt"
+    run(root, "--format", "plain", "-e", "cs", "-o", plain_file, repo / "Runtime/Runner.cs")
+    assert "==> Runner.cs <==" in plain_file.read_text(encoding="utf-8")
 
     selected, _ = exported(root, "-e", "cs", repo / "src", "-k50")
     assert b"SourceMarker" in selected and b"RuntimeMarker" not in selected

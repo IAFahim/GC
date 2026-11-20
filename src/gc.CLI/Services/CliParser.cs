@@ -291,7 +291,8 @@ public sealed class CliParser
             if (activeMultiValue != null)
             {
                 var isExtension = activeMultiValue.Value.Tokens.Contains("--extension");
-                if (!isExtension || result.Extensions.Length == 0 || !ExistingInputPath(arg, result.RootPath))
+                if (!isExtension || result.Extensions.Length == 0 ||
+                    (!IsPathLike(arg) && !ExistingInputPath(arg, result.RootPath)))
                 {
                     activeMultiValue.Value.Apply(result, arg);
                     continue;
@@ -338,6 +339,9 @@ public sealed class CliParser
             result.Extensions = [.. result.Extensions, arg.TrimStart('.').ToLowerInvariant()];
         }
     }
+
+    private static bool IsPathLike(string value) =>
+        value.IndexOfAny(['/', '\\', '*', '?', '[']) >= 0;
 
     private static bool ExistingInputPath(string value, string? root)
     {

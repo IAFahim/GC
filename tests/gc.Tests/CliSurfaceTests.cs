@@ -157,4 +157,15 @@ public class CliSurfaceTests
 
         Assert.Equal(new[] { "src/a.cs", "src/sub/b.cs" }, result.Value!.Select(e => e.Relative).OrderBy(x => x).ToArray());
     }
+
+    [Theory]
+    [InlineData("src/**/*.cs")]
+    [InlineData("missing/sub/file.cs")]
+    public void GlobOrPathWithSeparatorAfterExtension_IsParsedAsPathNotExtension(string target)
+    {
+        var a = Parse("-e", "cs", target);
+
+        Assert.Equal(new[] { "cs" }, a.Extensions);
+        Assert.Equal(new[] { target }, a.Paths);
+    }
 }

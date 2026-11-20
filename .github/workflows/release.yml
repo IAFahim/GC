@@ -43,6 +43,11 @@ jobs:
       with:
         dotnet-version: '10.0.x'
 
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
     - name: Cache NuGet packages
       uses: actions/cache@v4
       with:
@@ -52,16 +57,29 @@ jobs:
           ${{ runner.os }}-nuget-
 
     - name: Restore dependencies
-      run: dotnet restore src/gc.CLI/gc.CLI.csproj
+      run: dotnet restore gc.sln
 
     - name: Build
-      run: dotnet build src/gc.CLI/gc.CLI.csproj --configuration Release --no-restore
+      run: dotnet build gc.sln --configuration Release --no-restore
 
     - name: Test
-      run: dotnet test gc.sln --no-restore --verbosity normal
+      run: dotnet test tests/gc.Tests/gc.Tests.csproj --configuration Release --no-restore --verbosity normal --filter "FullyQualifiedName!~ReleaseBinary"
 
     - name: Publish ${{ matrix.target }}
-      run: dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -r ${{ matrix.target }} --self-contained -p:PublishAot=true -o ./publish/${{ matrix.target }}
+      shell: bash
+      run: |
+        release_version="${GITHUB_REF_NAME#v}"
+        dotnet publish src/gc.CLI/gc.CLI.csproj -c Release -r ${{ matrix.target }} --self-contained -p:PublishAot=true -p:Version="$release_version" -o ./publish/${{ matrix.target }}
+
+    - name: Smoke test ${{ matrix.target }}
+      if: matrix.target == 'linux-x64' || matrix.target == 'linux-arm64' || matrix.target == 'win-x64' || matrix.target == 'osx-arm64'
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = Windows ]; then
+          python scripts/smoke-context.py publish/${{ matrix.target }}/gc.exe
+        else
+          python scripts/smoke-context.py publish/${{ matrix.target }}/gc
+        fi
 
     - name: Create Archive (Unix)
       if: runner.os != 'Windows'

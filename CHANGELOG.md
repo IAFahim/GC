@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `--format json` with `-b` now keeps valid JSON (minifying file bodies via `BrainCrusher` without injecting headers/dict text) and rejects `--compress`; `--format plain -b` keeps `==> path <==` headers intact (#14)
+- `-u` / `@unity-source` now excludes `*.Tests` / `*.Tests.*` package folders and projects (e.g. `MyPackage.Tests/`), and repositories with `.gitmodules` emit a hint when no files match without `-r` (#11)
+- `FileReader.ReadAsync(entry, limits)` resolves `FileInfo` against `entry.AbsolutePath` rather than `entry.Path` (#14)
+- `CliParser` treats path/glob tokens after `-e` (e.g. `gc -e cs "src/**/*.cs"`) as paths instead of extensions, and `--install-completion` reads its optional shell only from raw CLI arguments (#14)
 - Console output is UTF-8: the check mark in summary lines was printed as `?` on Windows, also when output was redirected (#14)
 - A missing file gives `File not found: ...` on every platform (it was the raw .NET message on Windows) (#14)
 - Settings that nothing read now work (#14): `filters.excludeContentPatterns` / `includeContentPatterns`, `filters.additionalExtensions` (allowed alongside an active extension filter), `discovery.useGit` (`false` is `--no-git`), `cluster.includeRootFiles`, `markdown.languageDetection` (`filename`, `content` uses the shebang of extensionless files), `output.includeStats` (`false` drops the figures from the summary line). `output.defaultFormat` now works: `markdown` (default), `plain` or `json`, also available as `--format`.

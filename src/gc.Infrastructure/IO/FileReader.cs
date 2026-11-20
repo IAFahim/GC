@@ -194,7 +194,7 @@ public sealed class FileReader : IFileReader
         {
             if (!File.Exists(entry.AbsolutePath)) return Result<FileContent>.Failure($"File not found: {entry.Path}");
 
-            var fileInfo = new FileInfo(entry.Path);
+            var fileInfo = new FileInfo(entry.AbsolutePath);
             var maxFileSize = limits.GetMaxFileSizeBytes();
             if (fileInfo.Length > maxFileSize)
                 return Result<FileContent>.Failure(

@@ -112,10 +112,38 @@ public sealed class StructuredOutputTests : IDisposable
     [Fact]
     public async Task Json_WorksWithBrainMode()
     {
+        File.WriteAllText(Path.Combine(_root, "commented.cs"), "// remove comment\nclass Minified { }\n");
         var (result, text) = await RunAsync("json", new RunOptions { Brain = true });
 
         Assert.True(result.IsSuccess, result.Error);
-        Assert.Contains("fileCount", text);
+        using var doc = JsonDocument.Parse(text);
+        Assert.Equal(3, doc.RootElement.GetProperty("fileCount").GetInt32());
+        var files = doc.RootElement.GetProperty("files").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("path").GetString()!, f => f.GetProperty("content").GetString()!);
+        Assert.DoesNotContain("remove comment", files["commented.cs"]);
+        Assert.Contains("class Minified", files["commented.cs"]);
+    }
+
+    [Fact]
+    public async Task Plain_WorksWithBrainMode()
+    {
+        File.WriteAllText(Path.Combine(_root, "commented.cs"), "// remove comment\nclass Minified { }\n");
+        var (result, text) = await RunAsync("plain", new RunOptions { Brain = true });
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Contains("==> commented.cs <==", text);
+        Assert.DoesNotContain("remove comment", text);
+        Assert.DoesNotContain("GC_DICT", text);
+        Assert.Contains("class Minified", text);
+    }
+
+    [Fact]
+    public async Task Json_RejectsCompress()
+    {
+        var (result, _) = await RunAsync("json", new RunOptions { Compress = true });
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("--compress", result.Error);
     }
 
     [Fact]

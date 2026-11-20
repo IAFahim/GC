@@ -136,9 +136,7 @@ public static class Program
 
         if (cliArgs.InstallCompletion != null)
         {
-            // `--install-completion` is a bare flag, so an explicit shell (e.g. `gc --install-completion zsh`)
-            // lands in Paths. Prefer it when present; otherwise CompletionInstaller auto-detects from $SHELL.
-            var shell = cliArgs.Paths.Length == 1 ? cliArgs.Paths[0] : null;
+            var shell = ResolveInstallCompletionShell(args);
             return CompletionInstaller.Install(logger, shell);
         }
 
@@ -546,7 +544,7 @@ WHAT TO COLLECT:
 WHERE IT GOES:
     -o, --output <file>              Write a file instead of the clipboard
     --format <name>                  markdown (default), plain (==> path <== blocks) or json; settings: output.defaultFormat
-    -k, --split [size]               Markdown parts, 50KB by default (KB=1000 bytes); the clipboard pages them
+    -k, --split [size]               Markdown parts, 50KB by default (KB=1000 bytes); saved to a temp folder
     -a, --append                     Add to what is already there
     -b, --brain                      Minify
     -c, --compress                   Structural compression using sqz (session dedup)
@@ -592,6 +590,18 @@ OTHER:
     --debug                          Debug logging
     --version                        Show version information
     -h, --help                       Show this help message");
+    }
+
+    private static string? ResolveInstallCompletionShell(string[] rawArgs)
+    {
+        for (var i = 0; i < rawArgs.Length; i++)
+        {
+            if (rawArgs[i].Equals("--install-completion", StringComparison.OrdinalIgnoreCase) &&
+                i + 1 < rawArgs.Length && !rawArgs[i + 1].StartsWith('-'))
+                return rawArgs[i + 1];
+        }
+
+        return null;
     }
 
     private static void PrintVersion()

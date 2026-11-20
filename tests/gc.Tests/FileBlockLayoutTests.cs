@@ -106,6 +106,10 @@ public class FileBlockLayoutTests : IDisposable
         var read = await new FileReader(_logger).ReadAsync(entry);
         Assert.True(read.IsSuccess, read.Error);
         Assert.Equal("class R {}", read.Value.Content);
+
+        var readWithLimits = await new FileReader(_logger).ReadAsync(entry, new LimitsConfiguration());
+        Assert.True(readWithLimits.IsSuccess, readWithLimits.Error);
+        Assert.Equal("class R {}", readWithLimits.Value.Content);
     }
 
     [Fact]

@@ -75,11 +75,16 @@ jobs:
       if: matrix.target == 'linux-x64' || matrix.target == 'linux-arm64' || matrix.target == 'win-x64' || matrix.target == 'osx-arm64'
       shell: bash
       run: |
+        release_version="${GITHUB_REF_NAME#v}"
         if [ "$RUNNER_OS" = Windows ]; then
-          python scripts/smoke-context.py publish/${{ matrix.target }}/gc.exe
+          bin="publish/${{ matrix.target }}/gc.exe"
+          python scripts/smoke-context.py "$bin"
         else
-          python scripts/smoke-context.py publish/${{ matrix.target }}/gc
+          bin="publish/${{ matrix.target }}/gc"
+          python3 scripts/smoke-context.py "$bin"
         fi
+        "$bin" --version | grep -F "gc version $release_version"
+        "$bin" --help | grep -F -- "-u, --unity"
 
     - name: Create Archive (Unix)
       if: runner.os != 'Windows'
@@ -114,13 +119,10 @@ jobs:
         sha256sum * > ../checksums.txt
 
     - name: Upload Release Asset
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          artifacts/*
-          checksums.txt
-        tag_name: ${{ github.ref_name }}
-        name: Release ${{ github.ref_name }}
-        prerelease: false
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create "${{ github.ref_name }}" artifacts/* checksums.txt \
+          --repo "${{ github.repository }}" \
+          --title "Release ${{ github.ref_name }}" \
+          --generate-notes

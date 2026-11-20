@@ -5,7 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v2.0.0] - 2026-11-21
+
+### Added
+
+- **Direct folder/file selection, `--root`, and Unity source export (#11).**
+  - Pass folders or files directly (`gc src`, `gc file.cs`, or `--root <folder>`) without changing directories.
+  - `-u` / `--unity` (also `gc @unity-source`) selects `src/`, `Runtime/`, and `Editor/` while excluding tests (`Tests`, `Tests~`, `*.Tests`, `EditModeTests`, `PlayModeTests`), samples, and cache/build directories, and enables initialized registered submodules.
+  - `-r` / `--submodules` traverses initialized mode-160000 gitlinks recursively while excluding stale `.gitmodules` entries and ignored worktrees, and warns when no files match in a repo with `.gitmodules` without `-r`.
+- **Strict size-limited Markdown parts (#11).**
+  - `-k` / `--split [size]` streams valid UTF-8 Markdown parts bounded by exact byte budget (`50KB` = 50,000 bytes by default; `KiB` explicit) into a temporary directory (or `--output-dir` / `-o`) with per-file/line-range continuations, SHA-256 integrity manifest, and transactional directory publish.
+  - `--temp` writes single-file output to an OS temporary directory without requiring clipboard access.
+- `--no-git`, `-l`, `-a`, `-e/--ext` and `--drop-lines` as the canonical spellings; `gc @name` profiles; `gc --list-profiles` lists project, user and built-in profiles (#14).
+- `--format markdown|plain|json` and `output.defaultFormat`: `plain` writes `==> path <==` blocks with each file's exact content (no fences or file listing); `json` writes `{ "fileCount", "files": [{ "path", "content" }] }`. Markdown parts (`-k`) stay Markdown-only (#14).
+- `*` and `?` wildcards in `--include-content` / `--exclude-content` (plain keywords stay literal and fast), as the docs already claimed (#14).
 
 ### Changed
 
@@ -19,12 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Two settings files, one format (#14).** `gc.json` (user config folder) and `.gc.json` (project) each hold `settings`, `defaults` (arguments always applied) and `profiles` (name to arguments). Presets are built-in profiles, used as `gc @unity-source` or `gc @web`. `gc init`, `--save`, `--save-profile` and `--init-config` write these files; `.gc` is no longer both a file and a folder. The old `config.json` layers, `.gc` arguments file, `directory_defaults.json` and `profiles.json` are **no longer read**; gc warns about each one it finds and `gc --migrate-settings` moves them into the two files (originals are renamed to `*.migrated`).
 - One `RunOptions` record is passed to `GenerateContextUseCase.ExecuteAsync` / `ExecuteClusterAsync` instead of 21 parameters (#14).
 - `schema.json` now describes the settings-file format and includes settings it was missing (`discovery.cluster`, `discovery.maxDepth`, `discovery.recurseSubmodules`, the path and content patterns); a test keeps it in sync (#14).
-
-### Added
-
-- `--no-git`, `-l`, `-a`, `-e/--ext` and `--drop-lines` as the canonical spellings; `gc @name` profiles; `gc --list-profiles` lists project, user and built-in profiles.
-- `--format markdown|plain|json` and `output.defaultFormat`: `plain` writes `==> path <==` blocks with each file's exact content (no fences or file listing); `json` writes `{ "fileCount", "files": [{ "path", "content" }] }`. Markdown parts (`-k`) stay Markdown-only (#14).
-- `*` and `?` wildcards in `--include-content` / `--exclude-content` (plain keywords stay literal and fast), as the docs already claimed (#14).
 
 ### Removed
 
